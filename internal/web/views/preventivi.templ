@@ -1,0 +1,305 @@
+package views
+
+import (
+	"adesgo/internal/service"
+	"crypto/sha1"
+	"encoding/hex"
+)
+
+func sectionID(utente string) string {
+	h := sha1.Sum([]byte(utente))
+	return "sec-" + hex.EncodeToString(h[:5])
+}
+
+func previewURL(num string) string { return "/ordini/view?" + q("n", num) }
+
+// PreventiviPage is the Ordini page (quotations, called "ordini" in the UI).
+templ PreventiviPage(search, flash string, list templ.Component) {
+	@Layout("Ordini", "ordini") {
+		if flash != "" {
+			<div id="toasts-init" hidden data-toast={ flash }></div>
+		}
+		<div class="row between">
+			<h2>Ordini</h2>
+			<div class="row">
+				<a href="/ordini/nuovo" class="btn primary">+ Crea</a>
+				<button class="btn" hx-post="/ordini/import" hx-target="#prev-list">Importa</button>
+			</div>
+		</div>
+		<input
+			type="search"
+			name="q"
+			value={ search }
+			placeholder="Cerca per Cliente, Vino"
+			hx-get="/ordini/list"
+			hx-trigger="input changed delay:300ms, search"
+			hx-target="#prev-list"
+		/>
+		<div id="prev-list">
+			@list
+		</div>
+	}
+}
+
+// PreventiviSummary: the orders as a monthly timeline (newest first, by order
+// date). It refreshes itself every 30s to pick up new WhatsApp replies;
+// hx-disinherit keeps the links inside from inheriting the refresh target
+// (otherwise a click would load the whole page inside the list).
+templ PreventiviSummary(months []service.QuotationMonth) {
+	<div hx-get="/ordini/list" hx-trigger="every 30s" hx-target="#prev-list" hx-include="[name=q]" hx-disinherit="*">
+		if len(months) == 0 {
+			@Alert("info", "Nessun ordine presente. Usa \"+ Crea\" o \"Importa\" per crearne uno.")
+		} else {
+			<div class="view-timeline timeline">
+				for _, m := range months {
+					<section class="month">
+						<header class="month-head">
+							<h3>{ monthLabel(m.Year, m.Month) }</h3>
+							<span class="muted">
+								{ plural(len(m.Rows), "ordine", "ordini") } · { itoa(m.Bottiglie) } bott. · € { money(m.Totale) }
+							</span>
+						</header>
+						<div class="month-items">
+							for _, r := range m.Rows {
+								<a class={ "dl-item", "dl-link", templ.KV("dl-empty", r.Clienti == 0) } href={ templ.URL(previewURL(r.Number)) }>
+									<span class="dl-day">{ dayMonthShort(r.Date) }</span>
+									<span class="dl-main">
+										<b class="dl-title">{ noEmoji(r.Title) }</b>
+										<span class="muted dl-group">{ r.Number }</span>
+									</span>
+									<span class="dl-stats">
+										if r.Clienti == 0 {
+											<span>nessuna selezione</span>
+										} else {
+											<span>{ plural(r.Clienti, "cliente", "clienti") }</span>
+											<span>{ itoa(r.Bottiglie) } bott.</span>
+											<b>€ { money(r.Totale) }</b>
+										}
+										if r.SavedOn != "" {
+											<span class="badge badge-ok">Confermato il { r.SavedOn }</span>
+										}
+									</span>
+								</a>
+							}
+						</div>
+					</section>
+				}
+			</div>
+		}
+	</div>
+}
+
+templ PreventiviSearch(rows []service.Selection) {
+	if len(rows) == 0 {
+		@Alert("info", "Nessun risultato.")
+	} else {
+		<table class="table clickable">
+			<thead>
+				<tr><th>Utente</th><th>Vino</th><th class="num">Qta</th><th class="num">Prezzo (€)</th><th>Ordine</th><th>Data</th></tr>
+			</thead>
+			<tbody>
+				for _, r := range rows {
+					<tr data-href={ previewURL(r.Preventivo) }>
+						<td class="title-cell">{ r.Utente }</td>
+						<td>{ noEmoji(r.Vino) }</td>
+						<td class="num">{ itoa(r.Qta) }</td>
+						<td class="num">{ money(r.Prezzo) }</td>
+						<td><a href={ templ.URL(previewURL(r.Preventivo)) }>{ r.Preventivo }</a></td>
+						<td>{ r.DataPrev }</td>
+					</tr>
+				}
+			</tbody>
+		</table>
+		<p class="muted">Clicca su una riga per aprire l'ordine.</p>
+	}
+}
+
+templ PreventivoDetail(d *service.QuotationDetail, catalog []service.CatalogEntry) {
+	@Layout("Ordine "+d.Quotation.Number, "ordini") {
+		<div class="page-head">
+			<a href="/ordini" class="btn">← Elenco</a>
+			<h2>{ d.Quotation.Number } · { d.Date }</h2>
+		</div>
+		<hr/>
+		if len(d.Sections) == 0 {
+			@Alert("info", "Nessun cliente ha ancora selezionato vini per questo ordine.")
+		}
+		@ProdottiDatalist(catalog)
+		for _, sec := range d.Sections {
+			@CustomerSection(d.Quotation.Number, sec, "", "")
+		}
+	}
+}
+
+// ProdottiDatalist: the Prodotti suggested (and filtered as you type) by the
+// "add a wine" fields of every customer section on the page.
+templ ProdottiDatalist(catalog []service.CatalogEntry) {
+	<datalist id="prodotti-list">
+		for _, e := range catalog {
+			if e.Winery != "" {
+				<option value={ e.Description }>{ e.Winery }</option>
+			} else {
+				<option value={ e.Description }></option>
+			}
+		}
+	</datalist>
+}
+
+templ CustomerSection(qnum string, sec service.CustomerSection, msg, errMsg string) {
+	<form
+		id={ sectionID(sec.Utente) }
+		class="card"
+		hx-post="/ordini/section"
+		hx-target="this"
+		hx-swap="outerHTML"
+	>
+		<input type="hidden" name="n" value={ qnum }/>
+		<input type="hidden" name="utente" value={ sec.Utente }/>
+		<div class="card-head">
+			<span><b>{ sec.Cliente }</b> — € { money(sec.Total()) }</span>
+			if sec.SavedOn != "" {
+				<span class="badge badge-ok">Confermato il { sec.SavedOn }</span>
+			}
+		</div>
+		if msg != "" {
+			@Alert("success", msg)
+		}
+		if sec.Cliente != sec.Utente {
+			<p class="muted">Nome originale rilevato: { sec.Utente }</p>
+		}
+		<label>
+			Cliente
+			<select name="cliente" hx-post="/ordini/section" hx-vals='{"op":"cliente"}' hx-trigger="change" hx-target="closest form" hx-swap="outerHTML" hx-include="closest form">
+				for _, o := range sec.Options {
+					<option value={ o } selected?={ o == sec.Cliente }>{ o }</option>
+				}
+			</select>
+		</label>
+		if len(sec.Rows) == 0 {
+			<p class="muted">Nessuna riga.</p>
+		} else {
+			<table class="table">
+				<thead>
+					<tr><th>Vino</th><th class="num">Qtà</th><th class="num">Prezzo (€)</th><th class="num">Totale (€)</th>
+						if sec.SavedOn == "" {
+							<th class="num"></th>
+						}
+					</tr>
+				</thead>
+				<tbody>
+					for i, r := range sec.Rows {
+						<tr>
+							<td class="title-cell">
+								{ noEmoji(r.Vino) }
+								<input type="hidden" name="opz" value={ r.Opzione }/>
+								<input type="hidden" name="vino" value={ r.Vino }/>
+								<input type="hidden" name="qta" value={ itoa(r.Qta) }/>
+								<input type="hidden" name="prezzo" value={ num(r.Prezzo) }/>
+							</td>
+							<td class="num">{ itoa(r.Qta) }</td>
+							<td class="num">{ money(r.Prezzo) }</td>
+							<td class="num">{ money(r.Totale()) }</td>
+							if sec.SavedOn == "" {
+								<td class="num"><button type="submit" name="op" value={ "del:" + itoa(i) } class="icon danger" title="Rimuovi riga" aria-label="Rimuovi riga">@IconX()</button></td>
+							}
+						</tr>
+					}
+				</tbody>
+			</table>
+		}
+		if sec.SavedOn == "" {
+			<fieldset class="add-panel">
+				<legend>Aggiungi un vino all'ordine</legend>
+				if errMsg != "" {
+					@Alert("error", errMsg)
+				}
+				<div class="add-row">
+					<label class="add-wine">
+						Vino (dai Prodotti)
+						<input type="text" name="new_vino" list="prodotti-list" placeholder="Scrivi per cercare tra i Prodotti…" autocomplete="off"/>
+					</label>
+					<label>
+						Quantità
+						<input type="number" name="new_qta" min="1" step="1" value="1"/>
+					</label>
+					<label>
+						Prezzo (€)
+						<input type="number" name="new_prezzo" min="0" step="0.01" placeholder="0,00"/>
+					</label>
+					<button type="submit" name="op" value="add" class="btn">＋ Aggiungi</button>
+				</div>
+			</fieldset>
+			<button type="submit" name="op" value="save" class="btn primary">Conferma ordine</button>
+		}
+	</form>
+}
+
+type NuovoPreventivoData struct {
+	Number   string
+	Date     string
+	Clients  []string
+	Cliente  string
+	Catalog  []service.CatalogEntry
+	Rows     []service.NewQuotationRow
+	Error    string
+}
+
+templ NuovoPreventivo(d NuovoPreventivoData) {
+	@Layout("Nuovo ordine", "ordini") {
+		<div class="page-head">
+			<a href="/ordini" class="btn">← Elenco</a>
+			<h2>Nuovo ordine</h2>
+		</div>
+		if d.Error != "" {
+			@Alert("error", d.Error)
+		}
+		<form method="post" action="/ordini/nuovo" class="stack" id="np-form">
+			<div class="grid3">
+				<div><b>Numero ordine:</b> <code>{ d.Number }</code></div>
+				<label>Data <input type="date" name="date" value={ d.Date } required/></label>
+			</div>
+			<label>
+				Cliente
+				<input type="text" name="cliente" list="np-clients" value={ d.Cliente } placeholder="Scrivi per cercare un cliente..." autocomplete="off" required/>
+			</label>
+			<datalist id="np-clients">
+				for _, c := range d.Clients {
+					<option value={ c }></option>
+				}
+			</datalist>
+			<hr/>
+			<h3>Prodotti</h3>
+			<datalist id="catalog">
+				for _, e := range d.Catalog {
+					<option value={ e.Label() }></option>
+				}
+			</datalist>
+			<table class="table" id="np-rows">
+				<thead><tr><th>N.</th><th>Vino</th><th>Quantità</th><th>Prezzo €</th></tr></thead>
+				<tbody>
+					for i, r := range d.Rows {
+						<tr>
+							<td><b>{ itoa(i + 1) }</b></td>
+							<td><input type="text" name="vino" list="catalog" value={ r.WineName } placeholder="Scegli o scrivi un nuovo vino..."/></td>
+							<td><input type="number" name="qta" min="1" step="1" value={ itoa(r.Quantity) }/></td>
+							<td><input type="number" name="prezzo" min="0" step="0.5" value={ money(r.Price) }/></td>
+						</tr>
+					}
+					<template>
+						<tr>
+							<td><b>__N__</b></td>
+							<td><input type="text" name="vino" list="catalog" placeholder="Scegli o scrivi un nuovo vino..."/></td>
+							<td><input type="number" name="qta" min="1" step="1" value="1"/></td>
+							<td><input type="number" name="prezzo" min="0" step="0.5" value="0.00"/></td>
+						</tr>
+					</template>
+				</tbody>
+			</table>
+			<div class="row between">
+				<button type="button" class="btn" data-add-row="#np-rows" data-max="10">＋ Aggiungi</button>
+				<button type="submit" class="btn primary">Crea</button>
+			</div>
+			<p class="muted">Sono salvate le righe con un vino e un prezzo maggiore di zero. I vini nuovi vengono aggiunti ai Prodotti.</p>
+		</form>
+	}
+}

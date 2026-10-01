@@ -1,0 +1,25 @@
+.env
+bin/
+data/*
+!data/.gitkeep
+*.db
+*.db-wal
+*.db-shm
+.DS_Store
+.idea/
+*.sqlite
+*.sqlite3
+
+# Pictures / screenshots
+*.png
+*.jpg
+*.jpeg
+*.gif
+*.webp
+*.heic
+*.bmp
+*.tiff
+
+# Claude Code
+.claude/
+CLAUDE.md

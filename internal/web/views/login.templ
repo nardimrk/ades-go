@@ -1,0 +1,25 @@
+package views
+
+templ Login(sent bool, errMsg string) {
+	@Base("Accesso") {
+		<div class="login">
+			<h1>ADES Wine Club</h1>
+			<h2>Accesso</h2>
+			if sent {
+				@Alert("success", "Link inviato! Controlla la tua email e clicca il link.")
+				<a href="/login" class="btn">Reinvia</a>
+			} else {
+				if errMsg != "" {
+					@Alert("error", errMsg)
+				}
+				<form method="post" action="/login" hx-boost="false">
+					<label>
+						Email
+						<input type="email" name="email" required autofocus/>
+					</label>
+					<button type="submit" class="btn primary">Invia link di accesso</button>
+				</form>
+			}
+		</div>
+	}
+}

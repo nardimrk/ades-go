@@ -1,0 +1,206 @@
+package views
+
+import "adesgo/internal/service"
+
+type InserzioniData struct {
+	Search   string
+	Group    string // chat id filter ("" = all groups)
+	Groups   map[string]string
+	GroupIDs []string
+	Rows     []service.CampaignRow
+	SelChat  string
+	SelKey   string
+	Selected *service.Campaign
+	Replies  []service.ReplyView
+
+	TitleJob   service.TitleStatus
+	LLMEnabled bool
+}
+
+// listQuery keeps the list filters across list ↔ conversation navigation.
+func (d InserzioniData) listQuery() string {
+	v := q("q", d.Search, "g", d.Group)
+	if v == "" {
+		return ""
+	}
+	return "?" + v
+}
+
+func convURL(d InserzioniData, r service.CampaignRow) string {
+	return "/inserzioni?" + q("chat", r.ChatID, "c", r.Key, "q", d.Search, "g", d.Group)
+}
+
+templ Inserzioni(d InserzioniData) {
+	@Layout("Inserzioni", "inserzioni") {
+		<div class="row between">
+			<h2>Inserzioni</h2>
+			<div id="title-job">
+				@TitleJobStatus(d.TitleJob, d.LLMEnabled)
+			</div>
+		</div>
+		<form class="filters" onsubmit="return false">
+			<input
+				type="search"
+				name="q"
+				value={ d.Search }
+				placeholder="Cerca per Cliente, Vino"
+				hx-get="/inserzioni/list"
+				hx-trigger="input changed delay:300ms, search"
+				hx-target="#ins-list"
+				hx-include="closest form"
+			/>
+			if len(d.GroupIDs) > 1 {
+				<select name="g" hx-get="/inserzioni/list" hx-target="#ins-list" hx-include="closest form">
+					<option value="">Tutti i gruppi</option>
+					for _, id := range d.GroupIDs {
+						<option value={ id } selected?={ id == d.Group }>{ d.Groups[id] }</option>
+					}
+				</select>
+			}
+		</form>
+		<div id="ins-list">
+			@InserzioniList(d)
+		</div>
+	}
+}
+
+// TitleJobStatus shows the LLM title button, or the progress while the job
+// runs (polling every 3s). Saved titles appear in the list once it finishes.
+templ TitleJobStatus(st service.TitleStatus, enabled bool) {
+	if st.Running {
+		<div class="job" hx-get="/inserzioni/titles" hx-trigger="every 3s" hx-target="#title-job">
+			<span class="muted">Normalizzazione titoli… { itoa(st.Done) } / { itoa(st.Total) }</span>
+		</div>
+	} else {
+		<div class="job">
+			if st.Message != "" {
+				<span class="muted">{ st.Message }</span>
+			}
+			if enabled {
+				<button
+					class="btn"
+					hx-post="/inserzioni/titles"
+					hx-target="#title-job"
+					title="Genera con l'LLM un titolo breve per le inserzioni senza titolo (quelle rinominate a mano non vengono toccate)"
+				>Normalizza titoli (AI)</button>
+			}
+		</div>
+	}
+}
+
+templ InserzioniList(d InserzioniData) {
+	if len(d.Rows) == 0 {
+		@Alert("info", "Nessuna inserzione.")
+	} else {
+		<p class="muted">{ itoa(len(d.Rows)) } campagne · clicca sul titolo per aprire la conversazione</p>
+		<table class="table clickable">
+			<thead>
+				<tr>
+					<th>Data</th>
+					<th>Inserzione</th>
+					<th>Gruppo</th>
+					<th>Ultimo agg.</th>
+					<th class="num">Risposte</th>
+					<th>Ordine</th>
+				</tr>
+			</thead>
+			<tbody>
+				for _, r := range d.Rows {
+					<tr data-href={ convURL(d, r) }>
+						<td class="nowrap">{ dateIT(r.Data) }</td>
+						<td class="title-cell"><a href={ templ.URL(convURL(d, r)) }>{ r.DisplayTitle }</a></td>
+						<td class="nowrap">
+							{ r.ChatName }
+							if r.Orphan {
+								<span class="badge badge-warn">non monitorato</span>
+							}
+						</td>
+						<td class="nowrap">{ dateIT(r.LastData) }</td>
+						<td class="num">{ itoa(r.Risposte) }</td>
+						<td>
+							if len(r.QuotationIDs) > 0 {
+								<span class="badge badge-ok">Sì</span>
+							} else {
+								—
+							}
+						</td>
+					</tr>
+				}
+			</tbody>
+		</table>
+	}
+}
+
+templ InserzioneDetail(d InserzioniData) {
+	@Layout("Inserzione", "inserzioni") {
+		<div class="page-head">
+			<a href={ templ.URL("/inserzioni" + d.listQuery()) } class="btn">← Elenco</a>
+			<h2>
+				if d.Selected != nil {
+					{ d.Selected.DisplayTitle }
+				} else {
+					Conversazione
+				}
+			</h2>
+		</div>
+		<div id="conv" class="conv">
+			@Conversation(d)
+		</div>
+	}
+}
+
+// Conversation: the listing on the left, the replies on the right.
+templ Conversation(d InserzioniData) {
+	if d.Selected == nil {
+		@Alert("info", "Inserzione non trovata.")
+	} else {
+		<div class="conv-grid">
+			<section class="conv-listing">
+				<form class="rename col-head" hx-post="/inserzioni/rename" hx-target="#conv">
+					<input type="hidden" name="chat" value={ d.SelChat }/>
+					<input type="hidden" name="c" value={ d.SelKey }/>
+					<label class="grow">
+						Titolo inserzione
+						<input type="text" name="title" value={ d.Selected.DisplayTitle }/>
+					</label>
+					<button type="submit" class="btn">Rinomina</button>
+				</form>
+				<div class="listing-box">
+					<strong>{ noEmoji(d.Selected.Venditore) }</strong> · { d.Selected.Data }
+					<div class="listing-text">{ noEmoji(d.Selected.Testo) }</div>
+				</div>
+			</section>
+			<section class="conv-replies">
+				if len(d.Replies) == 0 {
+					<p class="muted">Nessuna risposta.</p>
+				} else {
+					<div class="col-head">
+						<label class="grow">
+							{ itoa(len(d.Replies)) } risposte
+							<input type="search" placeholder="Cerca per Cliente" data-filter=".bubble-row"/>
+						</label>
+					</div>
+					<div class="bubbles">
+						for _, r := range d.Replies {
+							<div class="bubble-row" data-name={ r.Utente } id={ "reply-" + i64(r.ID) }>
+								<div class="bubble">
+									<div class="bubble-name">{ r.Utente }</div>
+									<div class="bubble-text">{ noEmoji(r.Testo) }</div>
+									<div class="bubble-time">{ r.Ora }</div>
+								</div>
+								<button
+									class="icon danger"
+									title="Elimina messaggio"
+									hx-delete={ "/replies/" + i64(r.ID) }
+									hx-target={ "#reply-" + i64(r.ID) }
+									hx-swap="outerHTML"
+									hx-confirm="Eliminare questo messaggio?"
+								>@IconX()</button>
+							</div>
+						}
+					</div>
+				}
+			</section>
+		</div>
+	}
+}

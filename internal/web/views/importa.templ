@@ -1,0 +1,127 @@
+package views
+
+import (
+	"adesgo/internal/service"
+	"strings"
+	"time"
+)
+
+type ImportaData struct {
+	OwnerDisplayName string
+	Key              string // parsed upload key ("" = no file yet)
+	FileName         string
+	Authors          []service.AuthorCount
+	Owner            string
+	Chats            []string
+	ChatNames        map[string]string
+	Chat             string
+	Total            int
+	ListingsRaw      int
+	Replies          int
+	Groups           []service.MergeGroup
+	Done             string // success message once imported
+	Error            string
+}
+
+func (d ImportaData) Merged() int { return d.ListingsRaw - len(d.Groups) }
+
+func dtLabel(t *time.Time) string {
+	if t == nil {
+		return "data sconosciuta"
+	}
+	return t.Format("02/01/2006 15:04")
+}
+
+func firstLine70(s string) string {
+	line, _, _ := strings.Cut(strings.TrimSpace(s), "\n")
+	r := []rune(line)
+	if len(r) > 70 {
+		return string(r[:70])
+	}
+	return line
+}
+
+templ ImportaPage(d ImportaData) {
+	@Layout("Importa Chat", "importa") {
+		<h2>Importa Chat WhatsApp (esportazione .txt)</h2>
+		<p class="muted">
+			Esporta la chat da WhatsApp (Info gruppo → Esporta chat → Senza media) e carica qui il file .txt.
+			I messaggi del venditore che contengono un prezzo sono trattati come inserzioni; tutti gli altri come risposte.
+			Inserzioni identiche ripubblicate a distanza di pochi giorni (es. lo stesso vino con solo la quantità cambiata)
+			vengono unite in un'unica inserzione, con le ripubblicazioni e le risposte relative collegate come risposte di
+			quella inserzione.
+		</p>
+		if d.Error != "" {
+			@Alert("error", d.Error)
+		}
+		if len(d.Chats) == 0 {
+			@Alert("warning", "Nessun CHANNEL_ID configurato — imposta la variabile d'ambiente e riavvia.")
+		} else if d.Key == "" {
+			<form method="post" action="/importa" enctype="multipart/form-data" hx-boost="false" class="stack">
+				<label>File .txt esportato <input type="file" name="file" accept=".txt,text/plain" required/></label>
+				<button type="submit" class="btn primary">Carica</button>
+			</form>
+		} else {
+			<div id="import-preview">
+				@ImportaPreview(d)
+			</div>
+		}
+	}
+}
+
+templ ImportaPreview(d ImportaData) {
+	<form class="stack" hx-get="/importa/preview" hx-target="#import-preview" hx-trigger="change from:select[name=owner]" hx-disinherit="*">
+		<input type="hidden" name="k" value={ d.Key }/>
+		<p><b>File:</b> { d.FileName } · <a href="/importa">Carica un altro file</a></p>
+		<label>
+			Autore delle inserzioni (venditore)
+			<select name="owner">
+				for _, a := range d.Authors {
+					<option value={ a.Author } selected?={ a.Author == d.Owner }>{ a.Author } ({ itoa(a.Count) } messaggi)</option>
+				}
+			</select>
+		</label>
+		<p class="muted">
+			{ itoa(d.Total) } messaggi totali · { itoa(d.ListingsRaw) } inserzioni rilevate →
+			<b>{ itoa(len(d.Groups)) } inserzioni</b> dopo l'unione
+			if d.Merged() > 0 {
+				({ itoa(d.Merged()) } ripubblicazioni unite)
+			}
+			· { itoa(d.Replies) } risposte
+		</p>
+		if d.Merged() > 0 {
+			<details class="card">
+				<summary>Dettaglio inserzioni unite ({ itoa(d.Merged()) } ripubblicazioni)</summary>
+				for _, g := range d.Groups {
+					if len(g.Duplicates) > 0 {
+						<p><b>{ dtLabel(g.Canonical.DT) } — { firstLine70(g.Canonical.Body) }</b></p>
+						for _, dup := range g.Duplicates {
+							<p class="muted">↳ unita come risposta: { dtLabel(dup.DT) } — { firstLine70(dup.Body) }</p>
+						}
+					}
+				}
+			</details>
+		}
+		<label>
+			Chat di destinazione
+			<select name="chat">
+				for _, c := range d.Chats {
+					<option value={ c } selected?={ c == d.Chat }>{ d.ChatNames[c] }</option>
+				}
+			</select>
+		</label>
+		if d.Done != "" {
+			@Alert("success", d.Done)
+		} else {
+			<button
+				type="button"
+				class="btn primary"
+				hx-post="/importa/run"
+				hx-include="closest form"
+				hx-target="#import-preview"
+				disabled?={ len(d.Groups) == 0 }
+				hx-confirm="Importare tutti i messaggi nel database?"
+			>Importa tutto nel database</button>
+		}
+	</form>
+}

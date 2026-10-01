@@ -1,0 +1,85 @@
+package views
+
+type NavItem struct {
+	Key   string
+	Label string
+	Href  string
+}
+
+var nav = []NavItem{
+	{"inserzioni", "Inserzioni", "/inserzioni"},
+	{"ordini", "Ordini", "/ordini"},
+	{"consegne", "Consegne", "/consegne"},
+	{"clienti", "Clienti", "/clienti"},
+	{"prodotti", "Prodotti", "/prodotti"},
+	{"statistiche", "Statistiche", "/statistiche"},
+	{"importa", "Importa Chat", "/importa"},
+	{"whatsapp", "WhatsApp", "/whatsapp"},
+}
+
+templ Base(title string) {
+	<!DOCTYPE html>
+	<html lang="it">
+		<head>
+			<meta charset="utf-8"/>
+			<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover"/>
+			<meta name="theme-color" content="#8b1e3f" media="(prefers-color-scheme: light)"/>
+			<meta name="theme-color" content="#111318" media="(prefers-color-scheme: dark)"/>
+			<title>{ title } · ADES Wine Club</title>
+			<link rel="icon" href="data:image/svg+xml,<svg xmlns=%22http://www.w3.org/2000/svg%22 viewBox=%220 0 32 32%22><rect width=%2232%22 height=%2232%22 rx=%227%22 fill=%22%238b1e3f%22/><text x=%2216%22 y=%2222.5%22 font-family=%22system-ui,sans-serif%22 font-size=%2218%22 font-weight=%22700%22 fill=%22white%22 text-anchor=%22middle%22>A</text></svg>"/>
+			<script>
+				// Apply the theme before the first paint (no light flash in dark mode).
+				try {
+					var t = localStorage.getItem("adesgo-theme");
+					if (!t) { t = matchMedia("(prefers-color-scheme: dark)").matches ? "dark" : "light"; }
+					document.documentElement.dataset.theme = t;
+				} catch (e) {}
+			</script>
+			<link rel="stylesheet" href="/static/app.css"/>
+			<script src="/static/htmx.min.js"></script>
+			<script src="/static/app.js" defer></script>
+		</head>
+		<body hx-boost="true">
+			{ children... }
+			<div id="toasts" aria-live="polite"></div>
+		</body>
+	</html>
+}
+
+templ Layout(title, active string) {
+	@Base(title) {
+		<div class="shell">
+			<aside class="sidebar">
+				<div class="brand">ADES Wine Club</div>
+				<nav>
+					for _, n := range nav {
+						<a href={ templ.URL(n.Href) } class={ templ.KV("active", n.Key == active) }>{ n.Label }</a>
+					}
+				</nav>
+				<div class="sidebar-foot">
+					<form method="post" action="/logout" class="logout">
+						<button type="submit" class="link">Esci</button>
+					</form>
+					<button type="button" class="theme-toggle" data-theme-toggle title="Tema chiaro / scuro" aria-label="Cambia tema chiaro / scuro">
+						<span class="sun">@IconSun()</span>
+						<span class="moon">@IconMoon()</span>
+					</button>
+				</div>
+			</aside>
+			<main class="content">
+				{ children... }
+			</main>
+		</div>
+	}
+}
+
+// Toast is returned out-of-band by htmx handlers to show a notification.
+templ Toast(kind, msg string) {
+	<div id="toasts" hx-swap-oob="beforeend">
+		<div class={ "toast", "toast-" + kind } data-autohide>{ msg }</div>
+	</div>
+}
+
+templ Alert(kind, msg string) {
+	<div class={ "alert", "alert-" + kind }>{ msg }</div>
+}

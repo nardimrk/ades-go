@@ -1,0 +1,128 @@
+package views
+
+import "adesgo/internal/wa"
+
+type WhatsAppData struct {
+	Status     wa.Status
+	QRDataURL  string
+	Channels   []string
+	ChatNames  map[string]string
+	Groups     []wa.Group
+	GroupsErr  string
+	OwnerID    string
+	LLMEnabled bool
+	Msg        string
+}
+
+templ WhatsAppPage(d WhatsAppData) {
+	@Layout("WhatsApp", "whatsapp") {
+		<h2>WhatsApp</h2>
+		<div id="wa-status">
+			@WhatsAppStatus(d)
+		</div>
+		if d.Status.LoggedIn {
+			<h3>Gruppi monitorati (CHANNEL_ID)</h3>
+			if len(d.Channels) == 0 {
+				@Alert("warning", "Nessun CHANNEL_ID configurato: vengono raccolti i messaggi di tutti i gruppi. Copia l'id del gruppo qui sotto nel file .env.")
+			} else {
+				<table class="table">
+					<thead><tr><th>Gruppo</th><th>ID</th><th class="num"></th></tr></thead>
+					<tbody>
+						for _, c := range d.Channels {
+							<tr>
+								<td class="title-cell">{ d.ChatNames[c] }</td>
+								<td class="mono">{ c }</td>
+								<td class="num">
+									<button class="btn small" hx-post="/whatsapp/history" hx-vals={ `{"chat":"` + c + `"}` } hx-target="#wa-msg">Richiedi storico</button>
+								</td>
+							</tr>
+						}
+					</tbody>
+				</table>
+				<div id="wa-msg"></div>
+				<p class="muted">
+					Lo storico arriva dal telefono in modo asincrono (deve essere online). Al primo collegamento WhatsApp invia
+					automaticamente la cronologia recente, che viene importata da sola.
+				</p>
+			}
+			<p class="muted">
+				OWNER_ID:
+				if d.OwnerID != "" {
+					<code>{ d.OwnerID }</code>
+				} else {
+					non impostato (le inserzioni sono i messaggi inviati da questo account)
+				}
+				· LLM OpenRouter:
+				if d.LLMEnabled {
+					attivo
+				} else {
+					non configurato (solo regole)
+				}
+			</p>
+			<details class="card">
+				<summary>Tutti i gruppi dell'account</summary>
+				if d.GroupsErr != "" {
+					@Alert("error", d.GroupsErr)
+				}
+				<input type="search" placeholder="Filtra…" data-filter=".group-row" class="narrow"/>
+				<table class="table">
+					<thead><tr><th>Nome</th><th>ID</th></tr></thead>
+					<tbody>
+						for _, g := range d.Groups {
+							<tr class="group-row" data-name={ g.Name + " " + g.ID }><td class="title-cell">{ noEmoji(g.Name) }</td><td class="mono">{ g.ID }</td></tr>
+						}
+					</tbody>
+				</table>
+			</details>
+			<form hx-post="/whatsapp/logout" hx-target="#wa-status" hx-confirm="Scollegare questo dispositivo da WhatsApp?">
+				<button class="btn danger">Scollega dispositivo</button>
+			</form>
+		}
+	}
+}
+
+// WhatsAppStatus polls every 3s while waiting for the QR to be scanned.
+templ WhatsAppStatus(d WhatsAppData) {
+	<div class="card" { pollAttrs(d)... }>
+		if d.Msg != "" {
+			@Alert("info", d.Msg)
+		}
+		if d.Status.LoggedIn {
+			<p>
+				<span class="badge badge-ok">Collegato</span> come <b>{ noEmoji(d.Status.PushName) }</b> <code>{ d.Status.Me }</code>
+				if d.Status.Connected {
+					<span class="ok">· online</span>
+				} else {
+					<span class="warn">· riconnessione in corso…</span>
+				}
+			</p>
+			if d.Status.Queue > 0 {
+				<p class="muted">Messaggi in elaborazione: { itoa(d.Status.Queue) } blocchi</p>
+			}
+		} else if d.QRDataURL != "" {
+			<p>Apri WhatsApp sul telefono → <b>Dispositivi collegati</b> → <b>Collega un dispositivo</b> e inquadra il codice.</p>
+			<img src={ d.QRDataURL } alt="QR code WhatsApp" class="qr"/>
+			<p class="muted">Il codice si aggiorna automaticamente.</p>
+		} else {
+			<p>Dispositivo non collegato.</p>
+			if d.Status.LastError != "" {
+				@Alert("warning", d.Status.LastError)
+			}
+			if d.Status.Pairing {
+				<p class="muted">Generazione QR in corso…</p>
+			} else {
+				<button class="btn primary" hx-post="/whatsapp/pair" hx-target="#wa-status">Genera QR code</button>
+			}
+		}
+		if d.Status.LoggedIn && d.Status.LastError != "" {
+			@Alert("warning", d.Status.LastError)
+		}
+	</div>
+}
+
+func pollAttrs(d WhatsAppData) templ.Attributes {
+	if d.Status.LoggedIn {
+		return templ.Attributes{}
+	}
+	return templ.Attributes{"hx-get": "/whatsapp/status", "hx-trigger": "every 3s", "hx-swap": "outerHTML", "hx-target": "this"}
+}
