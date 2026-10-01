@@ -177,25 +177,32 @@ templ Conversation(d InserzioniData) {
 					<div class="col-head">
 						<label class="grow">
 							{ itoa(len(d.Replies)) } risposte
-							<input type="search" placeholder="Cerca per Cliente" data-filter=".bubble-row"/>
+							if n := orderReplies(d.Replies); n > 0 {
+								· { plural(n, "ordine", "ordini") }
+							}
+							<input type="search" placeholder="Cerca per Cliente" data-filter=".reply"/>
 						</label>
 					</div>
-					<div class="bubbles">
+					<div class="replies">
 						for _, r := range d.Replies {
-							<div class="bubble-row" data-name={ r.Utente } id={ "reply-" + i64(r.ID) }>
-								<div class="bubble">
-									<div class="bubble-name">{ r.Utente }</div>
-									<div class="bubble-text">{ noEmoji(r.Testo) }</div>
-									<div class="bubble-time">{ r.Ora }</div>
+							<div class="reply" data-name={ r.Utente } id={ "reply-" + i64(r.ID) }>
+								<div class="reply-head">
+									if r.Ordine {
+										<span class="reply-ok" title="Letto come ordine" aria-label="Letto come ordine">@IconCheck()</span>
+									}
+									<b class="reply-name">{ r.Utente }</b>
+									<span class="muted reply-time">{ r.Ora }</span>
+									<button
+										class="icon danger"
+										title="Elimina messaggio"
+										aria-label="Elimina messaggio"
+										hx-delete={ "/replies/" + i64(r.ID) }
+										hx-target={ "#reply-" + i64(r.ID) }
+										hx-swap="outerHTML"
+										hx-confirm="Eliminare questo messaggio?"
+									>@IconX()</button>
 								</div>
-								<button
-									class="icon danger"
-									title="Elimina messaggio"
-									hx-delete={ "/replies/" + i64(r.ID) }
-									hx-target={ "#reply-" + i64(r.ID) }
-									hx-swap="outerHTML"
-									hx-confirm="Eliminare questo messaggio?"
-								>@IconX()</button>
+								<div class="reply-text">{ compactText(r.Testo) }</div>
 							</div>
 						}
 					</div>

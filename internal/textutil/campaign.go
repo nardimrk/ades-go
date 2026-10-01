@@ -1,6 +1,8 @@
 package textutil
 
 import (
+	"fmt"
+	"math"
 	"strconv"
 	"strings"
 	"unicode"
@@ -248,6 +250,62 @@ func ParseOptionsWithQty(body string) []Option {
 	return out
 }
 
+// "Cassa intera (12 x 375ml) sconto 15%." — a case offer for every option of
+// the listing, on a line of its own: the case size and the discount
+var caseOfferRe = pyRe(`(?im)^\s*(?:cass[ae]|carton[ei])\s+(?:intera|intere|chiusa|completa|da)?\s*\(?\s*(?:da\s+)?(\d{1,2})\s*(?:[x×]\s*\d+\s*(?:ml|cl|l)\b|bott\w*)?\s*\)?[^\n]*?sconto\s+(?:del\s+)?(\d{1,2}(?:[.,]\d+)?)\s*%`)
+
+// CaseOffer reads a listing-wide case offer with a discount ("Cassa intera
+// (12 x 375ml) sconto 15%"): the bottles per case and the discount in %.
+func CaseOffer(body string) (size int, discount float64, ok bool) {
+	m := caseOfferRe.FindStringSubmatch(body)
+	if m == nil {
+		return 0, 0, false
+	}
+	size, _ = strconv.Atoi(m[1])
+	discount, err := strconv.ParseFloat(strings.ReplaceAll(m[2], ",", "."), 64)
+	if err != nil || size < 2 || discount <= 0 || discount >= 100 {
+		return 0, 0, false
+	}
+	return size, discount, true
+}
+
+// WithCaseOptions adds a case variant ("A-CASSA") of every bottle option when
+// the listing offers discounted full cases (see CaseOffer) and has no case
+// options yet: size × bottle price, minus the discount, rounded to the cent.
+// The name carries the size ("(cassa da 12, sconto 15%)"), which
+// CaseSizeFromName reads back.
+func WithCaseOptions(body string, opts []Option) []Option {
+	size, discount, ok := CaseOffer(body)
+	if !ok {
+		return opts
+	}
+	for _, o := range opts {
+		if o.Case {
+			return opts
+		}
+	}
+	out := append([]Option(nil), opts...)
+	for _, o := range opts {
+		price := math.Round(float64(size)*o.Price*(100-discount)) / 100
+		name := fmt.Sprintf("%s (cassa da %d, sconto %s%%)", o.WineName, size, strconv.FormatFloat(discount, 'f', -1, 64))
+		out = append(out, Option{Letter: o.Letter, WineName: name, Price: price, Case: true})
+	}
+	return out
+}
+
+var caseSizeRe = pyRe(`(?i)\(cassa da (\d+)`)
+
+// CaseSizeFromName reads the bottles per case from a case option's name
+// ("Roederer Brut Rose (cassa da 6)" → 6); 0 when it isn't stated.
+func CaseSizeFromName(name string) int {
+	m := caseSizeRe.FindStringSubmatch(name)
+	if m == nil {
+		return 0
+	}
+	n, _ := strconv.Atoi(m[1])
+	return n
+}
+
 // parseOptionsNoQty reads options without a bottle count: the bottle price,
 // plus a separate case option when a "CASSA INTERA a N€" price is given.
 func parseOptionsNoQty(body string) []Option {
@@ -330,8 +388,12 @@ func ParseOrderCodes(body string) []OrderCode {
 }
 
 var (
-	// "1 cassa A", "3 casse B", "1cassa C", "una cassa A", "2 cartoni di A"
-	caseOrderRe = pyRe(`(?i)(?:^|[^\p{L}\p{N}_])(\d+|una|un)\s*(?:casse|cassa|cartoni|cartone)\s+(?:di\s+|da\s+)?([A-J])`)
+	// "1 cassa A", "3 casse B", "1cassa C", "una cassa A", "2 cartoni di A",
+	// "una cassa intera di B"; without a number only with "intera"
+	// ("Cassa intera A")
+	caseOrderRe = pyRe(`(?i)(?:^|[^\p{L}\p{N}_])(?:(\d+|una|un)\s*(?:casse|cassa|cartoni|cartone)(?:\s+intera|\s+intere)?|cassa\s+intera|cartone\s+intero)\s+(?:di\s+|da\s+)?([A-J])`)
+	// "12x375ml B", "6 x 75cl di A": bottles of a stated size
+	sizedOrderRe = pyRe(`(?i)(?:^|[^\p{L}\p{N}_])(\d{1,3})\s*[xX×]\s*\d{2,4}\s*(?:ml|cl|l)\s+(?:di\s+|del\s+)?([A-J])(?:[^\p{L}\p{N}_]|$)`)
 	// "1 cassa", "una cassa Roederer…": a case order that doesn't name the
 	// option (matched only when the order has a single option)
 	caseNoLetterRe = pyRe(`(?i)(?:^|[^\p{L}\p{N}_])(\d+|una|un)\s*(?:casse|cassa|cartoni|cartone)(?:[^\p{L}\p{N}_]|$)`)
@@ -359,18 +421,26 @@ func ParseOrders(body string) []OrderCode {
 	}
 	restText := strings.Join(rest, "\n")
 	out = append(ParseOrderCodes(restText), letterFirst...)
+	for _, m := range sizedOrderRe.FindAllStringSubmatch(restText, -1) {
+		if qty, err := strconv.Atoi(m[1]); err == nil && qty > 0 {
+			out = append(out, OrderCode{Qty: qty, Option: strings.ToUpper(m[2])})
+		}
+	}
 	var lettered [][2]int // spans of "N cassa X", so the letterless rule skips them
 	for _, loc := range caseOrderRe.FindAllStringSubmatchIndex(restText, -1) {
 		end := loc[1]
 		if r, _ := utf8.DecodeRuneInString(restText[end:]); end < len(restText) && isWord(r) {
 			continue // "1 cassa Amarone": the letter starts a word
 		}
-		qty := 1
-		if n, err := strconv.Atoi(restText[loc[2]:loc[3]]); err == nil {
-			qty = n
+		qty, start := 1, loc[0]
+		if loc[2] >= 0 {
+			start = loc[2]
+			if n, err := strconv.Atoi(restText[loc[2]:loc[3]]); err == nil {
+				qty = n
+			}
 		}
 		out = append(out, OrderCode{Qty: qty, Option: strings.ToUpper(restText[loc[4]:loc[5]]), Case: true})
-		lettered = append(lettered, [2]int{loc[2], loc[5]})
+		lettered = append(lettered, [2]int{start, loc[5]})
 	}
 	for _, loc := range caseNoLetterRe.FindAllStringSubmatchIndex(restText, -1) {
 		inside := false
@@ -401,10 +471,16 @@ func (c OrderCode) Key() string {
 	return c.Option
 }
 
+// FormatOrderCodes writes codes the way ParseOrders reads them back:
+// "3A, 1 cassa B".
 func FormatOrderCodes(codes []OrderCode) string {
 	parts := make([]string, len(codes))
 	for i, c := range codes {
-		parts[i] = strconv.Itoa(c.Qty) + c.Option
+		if c.Case {
+			parts[i] = strconv.Itoa(c.Qty) + " cassa " + c.Option
+		} else {
+			parts[i] = strconv.Itoa(c.Qty) + c.Option
+		}
 	}
 	return strings.Join(parts, ", ")
 }

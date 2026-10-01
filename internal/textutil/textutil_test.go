@@ -133,6 +133,35 @@ func TestParseOptionsWithoutQuantity(t *testing.T) {
 	}
 }
 
+func TestCaseOptions(t *testing.T) {
+	body := "Château Coutet \n\nDemi Bouteilles Disponibili:\n\nA. 21 x Château Coutet 2016 a 27,50€\n\n" +
+		"B. 9 x Château Coutet 2019 a 23,50€\n\nCassa intera (12 x 375ml) sconto 15%."
+	if size, disc, ok := CaseOffer(body); !ok || size != 12 || disc != 15 {
+		t.Fatalf("CaseOffer = %d, %v, %v", size, disc, ok)
+	}
+	want := []Option{
+		{Letter: "A", WineName: "Château Coutet", Quantity: 21, Price: 27.5},
+		{Letter: "B", WineName: "Château Coutet", Quantity: 9, Price: 23.5},
+		{Letter: "A", WineName: "Château Coutet (cassa da 12, sconto 15%)", Price: 280.5, Case: true},
+		{Letter: "B", WineName: "Château Coutet (cassa da 12, sconto 15%)", Price: 239.7, Case: true},
+	}
+	if got := WithCaseOptions(body, ParseOptions(body)); !reflect.DeepEqual(got, want) {
+		t.Errorf("WithCaseOptions =\n%+v\nwant\n%+v", got, want)
+	}
+	// no discount, or case options already in the listing: unchanged
+	for _, b := range []string{"A. 6 x Riesling 2020 a 20€\n\nCassa intera (6 x 750ml).", "È possibile condividere la cassa.\nA. 6 x Riesling 2020 a 20€"} {
+		if got := WithCaseOptions(b, ParseOptions(b)); len(got) != 1 {
+			t.Errorf("WithCaseOptions(%q) = %+v", b, got)
+		}
+	}
+	if n := CaseSizeFromName("Roederer Brut Rose (cassa da 6)"); n != 6 {
+		t.Errorf("CaseSizeFromName = %d", n)
+	}
+	if got := FormatOrderCodes(ParseOrders("3A, 1 cassa B")); got != "3A, 1 cassa B" {
+		t.Errorf("FormatOrderCodes round trip = %q", got)
+	}
+}
+
 func TestParseOrders(t *testing.T) {
 	cases := map[string][]string{
 		"1 D":                           {"1D"},
@@ -145,8 +174,14 @@ func TestParseOrders(t *testing.T) {
 		"1 cassa Amarone":               {"1-CASSA"},
 		"1 cassa grazie":                {"1-CASSA"},
 		"Una cassa Roederer Brut Rose’ 2017. Grazie": {"1-CASSA"},
-		"2 casse":  {"2-CASSA"},
-		"Di nulla": nil,
+		"2 casse":        {"2-CASSA"},
+		"Di nulla":       nil,
+		"Cassa intera A": {"1A-CASSA"},
+		"Ciao Alessandro, una cassa di B per piacere":         {"1B-CASSA"},
+		"una cassa intera di B":                               {"1B-CASSA"},
+		"12x375ml B":                                          {"12B"},
+		"6 x 75cl di A e 2B":                                  {"2B", "6A"},
+		"Tutte le bottiglie disponibili sono. state vendute.": nil,
 	}
 	for in, want := range cases {
 		var got []string

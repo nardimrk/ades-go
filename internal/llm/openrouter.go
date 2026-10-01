@@ -211,8 +211,8 @@ func (c *Client) ClassifyListing(ctx context.Context, body, candidate string) st
 const orderUpdatePrompt = `Sei un assistente che interpreta messaggi WhatsApp di clienti che hanno
 già ordinato in un'inserzione di vendita vini. L'ordine più recente del cliente in questa
 inserzione è: %s
-(il formato è NUMERO+LETTERA, es. "3A" = 3 bottiglie dell'opzione A; più codici separati da
-virgola indicano più opzioni ordinate)
+(il formato è NUMERO+LETTERA, es. "3A" = 3 bottiglie dell'opzione A; "1 cassa B" = una cassa
+intera dell'opzione B; più codici separati da virgola indicano più opzioni ordinate)
 
 Ultimi messaggi del gestore in questa inserzione, dal più recente (possono offrire bottiglie
 rimaste, es. "rimangono disponibili 4 mezze bottiglie di Coutet 2019"):
@@ -227,7 +227,8 @@ Il cliente ha appena scritto:
 
 Se questo messaggio modifica la quantità di un'opzione già ordinata sopra (es. "aggiungo una
 bottiglia", "un'altra di quella A", "metti 5 invece di 3", "annullo, ne prendo solo 2"), rispondi
-SOLO con il nuovo codice risultante, stesso formato NUMERO+LETTERA (es. "4A").
+SOLO con il nuovo codice risultante, stesso formato NUMERO+LETTERA (es. "4A"), oppure
+"N cassa LETTERA" se cambia il numero di casse intere (es. "2 cassa A").
 Se il cliente prende le bottiglie rimaste offerte dal gestore per un'opzione già ordinata
 (es. "mie!", "le prendo io", "per me"), somma la quantità offerta a quella già ordinata
 (es. ordine "2B" + gestore "rimangono 4 bottiglie di B" + "mie!" = "6B").
@@ -253,7 +254,14 @@ func (c *Client) ResolveOrderUpdate(ctx context.Context, body, priorCodes, owner
 		log.Printf("[llm] order-update resolution failed: %v", err)
 		return ""
 	}
-	m := codeRe.FindStringSubmatch(strings.ToUpper(strings.TrimSpace(text)))
+	text = strings.TrimSpace(text)
+	if strings.Contains(strings.ToUpper(text), "NONE") {
+		return ""
+	}
+	if codes := textutil.ParseOrders(text); len(codes) > 0 {
+		return textutil.FormatOrderCodes(codes[:1])
+	}
+	m := codeRe.FindStringSubmatch(strings.ToUpper(text))
 	if m == nil {
 		return ""
 	}
@@ -287,7 +295,12 @@ Regole:
 - Se il cliente indica il vino per nome o annata invece della lettera (es. "1 Coutet 2019",
   "due del 2016"), usa la lettera dell'opzione corrispondente (es. "1B").
 - Se il cliente chiede bottiglie senza numero ("una", "due"...), convertilo in cifra.
-- Rispondi SOLO con i codici NUMERO+LETTERA separati da virgola (es. "4B" oppure "1A, 2B").
+- Casse intere: se il cliente chiede una o più casse/cartoni ("una cassa di B", "cassa intera A",
+  "due casse del 2016", "un cartone di Coutet 2019"), rispondi "N cassa LETTERA" (es. "1 cassa B").
+  Se scrive un numero di bottiglie pari a casse intere secondo l'annuncio (es. annuncio "Cassa
+  intera (12 x 375ml) sconto 15%%" e cliente "12x375ml B" o "12 del 2019"), rispondi con le casse
+  (es. "1 cassa B"): lo sconto cassa si applica in automatico.
+- Rispondi SOLO con i codici separati da virgola (es. "4B" oppure "1A, 2B" oppure "1 cassa A, 2B").
 - Se il messaggio non è un ordine (domanda, saluto, ringraziamento, commento) o non si capisce
   con certezza quale opzione o quantità, rispondi SOLO con: NONE
 
@@ -308,11 +321,11 @@ func (c *Client) ResolveNewOrder(ctx context.Context, body, listing, ownerNotes 
 		log.Printf("[llm] new-order resolution failed: %v", err)
 		return ""
 	}
-	text = strings.ToUpper(strings.TrimSpace(text))
-	if strings.Contains(text, "NONE") {
+	text = strings.TrimSpace(text)
+	if strings.Contains(strings.ToUpper(text), "NONE") {
 		return ""
 	}
-	return textutil.FormatOrderCodes(textutil.ParseOrderCodes(text))
+	return textutil.FormatOrderCodes(textutil.ParseOrders(text))
 }
 
 // ── listing titles ───────────────────────────────────────────────────────────

@@ -207,11 +207,16 @@ type ReplyView struct {
 	Utente string
 	Testo  string
 	Ora    string
+	Ordine bool // read as an order (parser or LLM)
 }
 
 func (s *Service) CampaignReplies(ctx context.Context, msgIDs []string) ([]ReplyView, error) {
 	if len(msgIDs) == 0 {
 		return nil, nil
+	}
+	orders, err := s.OrderReplyIDs(ctx)
+	if err != nil {
+		return nil, err
 	}
 	ph := strings.TrimSuffix(strings.Repeat("?,", len(msgIDs)), ",")
 	args := make([]any, len(msgIDs))
@@ -237,6 +242,7 @@ func (s *Service) CampaignReplies(ctx context.Context, msgIDs []string) ([]Reply
 		}
 		r.Utente = FmtName(nullStr(name))
 		r.Ora = FmtTS(ts)
+		r.Ordine = orders[r.ID]
 		out = append(out, r)
 	}
 	return out, rows.Err()

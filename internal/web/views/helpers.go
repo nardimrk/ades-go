@@ -4,6 +4,7 @@ package views
 import (
 	"fmt"
 
+	"adesgo/internal/service"
 	"adesgo/internal/textutil"
 	"net/url"
 	"strings"
@@ -61,6 +62,29 @@ func dayMonthShort(data string) string {
 
 // noEmoji strips emoji from WhatsApp text at display time (stored data keeps them).
 func noEmoji(s string) string { return textutil.StripEmoji(s) }
+
+// orderReplies counts the replies read as an order.
+func orderReplies(rs []service.ReplyView) int {
+	n := 0
+	for _, r := range rs {
+		if r.Ordine {
+			n++
+		}
+	}
+	return n
+}
+
+// compactText drops emoji and blank lines, so a chat message takes as few
+// lines as its content needs.
+func compactText(s string) string {
+	var out []string
+	for _, l := range strings.Split(noEmoji(s), "\n") {
+		if strings.TrimSpace(l) != "" {
+			out = append(out, strings.TrimRight(l, " \t\r"))
+		}
+	}
+	return strings.Join(out, "\n")
+}
 
 // q builds a query string, skipping empty values.
 func q(kv ...string) string {

@@ -92,12 +92,12 @@ func (c *Classifier) OwnerMessage(ctx context.Context, body string, candidates [
 // messages on it, newest first: a claim of the bottles they offer ("Mie!")
 // adds them to the order, by rules when the LLM gives no answer.
 func (c *Classifier) ResolveOrderUpdate(ctx context.Context, body, listing string, ts int64, priorReplies, ownerNotes []db.Candidate) string {
-	if len(textutil.ParseOrderCodes(body)) > 0 {
+	if len(textutil.ParseOrders(body)) > 0 {
 		return ""
 	}
 	notes, offer := recentOffer(ownerNotes, ts)
 	for _, r := range priorReplies {
-		codes := textutil.ParseOrderCodes(r.Body)
+		codes := textutil.ParseOrders(r.Body)
 		if len(codes) == 0 {
 			continue
 		}
@@ -110,7 +110,7 @@ func (c *Classifier) ResolveOrderUpdate(ctx context.Context, body, listing strin
 		}
 		qty := claim[0].Qty
 		for _, p := range codes {
-			if p.Option == claim[0].Option {
+			if p.Option == claim[0].Option && !p.Case {
 				qty = p.Qty + claim[0].Qty
 			}
 		}
@@ -158,7 +158,7 @@ func (c *Classifier) ResolveNewOrder(ctx context.Context, body, listing string, 
 		return ""
 	}
 	notes, offer := recentOffer(ownerNotes, ts)
-	if offer == "" && !digitRe.MatchString(body) {
+	if offer == "" && !digitRe.MatchString(body) && !caseWordRe.MatchString(body) {
 		return ""
 	}
 	if codes := validCodes(c.LLM.ResolveNewOrder(ctx, body, listing, joinNotes(notes)), textutil.ParseOptions(listing)); codes != "" {
@@ -169,6 +169,8 @@ func (c *Classifier) ResolveNewOrder(ctx context.Context, body, listing string, 
 
 var (
 	digitRe = regexp.MustCompile(`\d`)
+	// "una cassa", "cassa intera", "un cartone": an order without digits
+	caseWordRe = regexp.MustCompile(`(?i)\b(cass[ae]|carton[ei])\b`)
 	offerRe = regexp.MustCompile(`(?i)(rimang|rest[aio]n|ancora disponibil|disponibil[ei] ancora|ultim[ei] \d)[^\d]{0,40}\d+`)
 	// the offered quantity and what follows it: "4 mezze bottiglie di Coutet 2019"
 	offerQtyRe = regexp.MustCompile(`(?i)(?:rimang\w*|rest\w*|disponibil\w*|ultim\w*)[^\d]{0,40}?(\d+)\s+([^.\n!]+)`)
@@ -224,7 +226,7 @@ func ClaimOffer(body, offer, listing string) string {
 // validCodes keeps the codes whose option exists in the listing (all of
 // them when the listing's options can't be parsed).
 func validCodes(codes string, opts []textutil.Option) string {
-	parsed := textutil.ParseOrderCodes(codes)
+	parsed := textutil.ParseOrders(codes)
 	if len(opts) == 0 {
 		return textutil.FormatOrderCodes(parsed)
 	}

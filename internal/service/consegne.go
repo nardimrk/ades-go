@@ -1,6 +1,7 @@
 package service
 
 import (
+	"adesgo/internal/textutil"
 	"bytes"
 	"context"
 	"crypto/sha1"
@@ -29,7 +30,7 @@ type ConsegneCampaign struct {
 	QuotationIDs []int64
 
 	Clienti   int
-	Bottiglie int // units ordered (bottles, or cases for "cassa" options)
+	Bottiglie int // bottles ordered (a case counts its bottles when its size is known)
 	Totale    float64
 
 	customers map[string]bool
@@ -100,7 +101,7 @@ func (s *Service) ConsegneCampaigns(ctx context.Context) ([]ConsegneCampaign, er
 		for _, q := range c.QuotationIDs {
 			for _, x := range byQuote[q] {
 				clienti[x.Utente] = true
-				cc.Bottiglie += x.Qta
+				cc.Bottiglie += x.Bottles()
 				cc.Totale += float64(x.Qta) * x.Prezzo
 			}
 		}
@@ -157,6 +158,17 @@ type DeliveryLine struct {
 }
 
 func (l DeliveryLine) Totale() float64 { return round2(float64(l.Qta) * l.Prezzo) }
+
+// Bottles is the number of bottles of the line: Qta, times the case size for
+// a case of known size ("(cassa da 12…)").
+func (l DeliveryLine) Bottles() int { return bottles(l.Vino, l.Qta) }
+
+func bottles(wine string, qty int) int {
+	if n := textutil.CaseSizeFromName(wine); n > 0 {
+		return qty * n
+	}
+	return qty
+}
 
 type CustomerDelivery struct {
 	Cliente   string
@@ -216,7 +228,7 @@ func (s *Service) Consegne(ctx context.Context, ids []string) (*Consegne, error)
 		l := DeliveryLine{Cliente: x.Utente, Inserzione: c.Title, URL: CampaignURL(c.ChatID, c.Key), Vino: wineWithVintage(x.Vino, x.Vintage), Qta: x.Qta, Prezzo: x.Prezzo}
 		lines = append(lines, l)
 		clienti[l.Cliente] = true
-		res.Bottiglie += l.Qta
+		res.Bottiglie += l.Bottles()
 		res.Totale += l.Totale()
 	}
 	res.Clienti = len(clienti)
@@ -240,7 +252,7 @@ func (s *Service) Consegne(ctx context.Context, ids []string) (*Consegne, error)
 		for _, l := range lines {
 			if l.Cliente == n {
 				cd.Lines = append(cd.Lines, l)
-				cd.Bottiglie += l.Qta
+				cd.Bottiglie += l.Bottles()
 				cd.Totale += l.Totale()
 			}
 		}

@@ -6,7 +6,6 @@
   --border: #e5e7eb;
   --accent: #8b1e3f;       /* wine */
   --accent-soft: #f6e8ed;
-  --wa-green: #34c759;
   --wa-dark: #075e54;
   --danger: #dc2626;
   --ok: #15803d;
@@ -46,7 +45,6 @@
   --border-strong: #3b4250;
   --accent: #e0708f;
   --accent-soft: #3a1f2a;
-  --wa-green: #1f8f4e;
   --wa-dark: #25d366;
   --danger: #f87171;
   --danger-soft: #3b1d1d;
@@ -227,7 +225,7 @@ input.save-error { border-color: var(--danger) !important; box-shadow: 0 0 0 2px
 /* "Aggiungi un vino all'ordine": a tinted panel, set apart from the order rows */
 .add-panel {
   margin: 0; min-width: 0; padding: .55rem .8rem .8rem;
-  border: 1px dashed var(--accent); border-radius: var(--radius); background: var(--accent-soft);
+  border: 1px solid var(--accent); border-radius: var(--radius); background: var(--accent-soft);
 }
 .add-panel legend { padding: 0 .4rem; font-weight: 600; font-size: .9rem; color: var(--accent); }
 .add-panel label { color: var(--text); font-size: .8rem; }
@@ -256,7 +254,7 @@ button.icon { display: inline-flex; align-items: center; justify-content: center
 .title-cell a:hover { text-decoration: underline; }
 .conv-grid { display: grid; grid-template-columns: minmax(0, 1fr) minmax(0, 1fr); gap: 2rem; align-items: start; }
 .conv-listing { position: sticky; top: 1rem; max-height: calc(100vh - 2rem); overflow-y: auto; }
-.conv-replies .bubbles { max-height: calc(100vh - 9rem); }
+.conv-replies .replies { max-height: calc(100vh - 9rem); }
 @media (max-width: 1000px) {
   .conv-grid { grid-template-columns: 1fr; }
   .conv-listing { position: static; max-height: none; }
@@ -271,15 +269,20 @@ button.icon { display: inline-flex; align-items: center; justify-content: center
   padding: 10px 14px; margin-bottom: 12px; font-size: 14px; line-height: 1.5;
 }
 .listing-text { white-space: pre-wrap; margin-top: .25rem; }
-.bubbles { display: flex; flex-direction: column; gap: 8px; max-height: 70vh; overflow-y: auto; padding-right: .25rem; }
-.bubble-row { display: flex; gap: .4rem; align-items: center; }
-.bubble {
-  flex: 1; background: var(--wa-green); border-radius: 18px 18px 4px 18px; padding: 10px 14px 8px;
-  word-break: break-word; box-shadow: 0 1px 2px rgba(0,0,0,.15);
+/* replies: one plain panel, a thin line between messages, name and time on
+   the same line as the delete button */
+.replies {
+  background: var(--panel); border: 1px solid var(--border); border-radius: var(--radius);
+  max-height: 70vh; overflow-y: auto;
 }
-.bubble-name { font-size: 12px; font-weight: 700; color: rgba(255,255,255,.85); margin-bottom: 2px; }
-.bubble-text { font-size: 14px; color: #fff; line-height: 1.4; white-space: pre-wrap; }
-.bubble-time { font-size: 11px; color: #fff; text-align: right; margin-top: 4px; }
+.reply { padding: .4rem .75rem .5rem; border-top: 1px solid var(--border); }
+.reply:first-child { border-top: 0; }
+.reply-head { display: flex; align-items: center; gap: .5rem; min-height: 1.75rem; }
+.reply-ok { color: var(--ok); flex: none; }
+.reply-name { font-size: 13px; min-width: 0; overflow-wrap: anywhere; }
+.reply-time { font-size: 12px; margin-right: auto; white-space: nowrap; }
+.reply-head button.icon { padding: .15rem; }
+.reply-text { font-size: 14px; line-height: 1.4; white-space: pre-wrap; overflow-wrap: anywhere; }
 
 /* ── consegne ───────────────────────────────────────────── */
 .picker {
@@ -391,7 +394,7 @@ img { max-width: 100%; height: auto; }
 
 /* tablet: detail layouts collapse to one column, page scrolls naturally */
 @media (max-width: 1000px) {
-  .conv-replies .bubbles { max-height: none; overflow: visible; }
+  .conv-replies .replies { max-height: none; overflow: visible; }
 }
 
 /* compact top navigation (tablet portrait + phone) */

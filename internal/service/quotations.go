@@ -26,7 +26,11 @@ type Selection struct {
 	Vintage     int // 0 when unknown
 	Qta         int
 	Prezzo      float64
+	ReplyID     int64 // the reply the selection was read from
 }
+
+// Bottles: Qta, times the case size for a case of known size.
+func (x Selection) Bottles() int { return bottles(x.Vino, x.Qta) }
 
 type QuotationItem struct {
 	QuotationID int64
@@ -59,8 +63,93 @@ func (s *Service) quotationItems(ctx context.Context, where string, args ...any)
 // into per-customer selections. This is the live state shown on Preventivi
 // and used by Consegne, independent of saved orders.
 func (s *Service) ComputeSelections(ctx context.Context) ([]Selection, error) {
+	sel, err := s.parseSelections(ctx)
+	if err != nil {
+		return nil, err
+	}
+
+	// Mentioning the SAME option again later (a corrected code, or a resolved
+	// natural-language change) replaces the earlier quantity: keep the last
+	// occurrence per (quotation, author, option).
+	type okey struct {
+		qid    int64
+		author string
+		opt    string
+	}
+	last := map[okey]int{}
+	for i, x := range sel {
+		last[okey{x.QuotationID, x.AuthorID, x.Opzione}] = i
+	}
+	out := make([]Selection, 0, len(last))
+	for i, x := range sel {
+		if last[okey{x.QuotationID, x.AuthorID, x.Opzione}] == i {
+			out = append(out, x)
+		}
+	}
+
+	// Whole cases ordered as bottles ("12B", "12x375ml B") get the case price
+	// when the option has a case variant of known size ("(cassa da 12…)").
+	items, err := s.quotationItems(ctx, "WHERE option LIKE '%"+textutil.CaseSuffix+"'")
+	if err != nil {
+		return nil, err
+	}
+	cases := map[string]QuotationItem{}
+	for _, it := range items {
+		if textutil.CaseSizeFromName(it.WineName) > 0 {
+			cases[strconv.FormatInt(it.QuotationID, 10)+"|"+strings.ToUpper(it.Option)] = it
+		}
+	}
+	if len(cases) == 0 {
+		return out, nil
+	}
+	conv := make([]Selection, 0, len(out))
+	for _, x := range out {
+		if ci, ok := cases[strconv.FormatInt(x.QuotationID, 10)+"|"+x.Opzione+textutil.CaseSuffix]; ok {
+			if n := textutil.CaseSizeFromName(ci.WineName); x.Qta >= n && x.Qta%n == 0 {
+				if ci.Vintage != 0 {
+					x.Vintage = ci.Vintage
+				}
+				x.Opzione, x.Vino, x.Qta, x.Prezzo = x.Opzione+textutil.CaseSuffix, ci.WineName, x.Qta/n, ci.Price
+			}
+		}
+		conv = append(conv, x)
+	}
+	// a converted order and an explicit "1 cassa B" are now the same option:
+	// the later one wins, as above
+	last = map[okey]int{}
+	for i, x := range conv {
+		last[okey{x.QuotationID, x.AuthorID, x.Opzione}] = i
+	}
+	out = out[:0]
+	for i, x := range conv {
+		if last[okey{x.QuotationID, x.AuthorID, x.Opzione}] == i {
+			out = append(out, x)
+		}
+	}
+	return out, nil
+}
+
+// OrderReplyIDs returns the replies read as an order (by the parser, or by
+// the LLM whose answer is stored after "→"): they parse into at least one
+// option of their quotation. Replies later corrected by the same customer
+// still count.
+func (s *Service) OrderReplyIDs(ctx context.Context) (map[int64]bool, error) {
+	sel, err := s.parseSelections(ctx)
+	if err != nil {
+		return nil, err
+	}
+	ids := map[int64]bool{}
+	for _, x := range sel {
+		ids[x.ReplyID] = true
+	}
+	return ids, nil
+}
+
+// parseSelections reads every order code of the quotation-linked replies, in
+// order, before later mentions replace earlier ones.
+func (s *Service) parseSelections(ctx context.Context) ([]Selection, error) {
 	rows, err := s.db().QueryContext(ctx, `
-		SELECT r.author_id, `+userNameSQL+`, COALESCE(r.msg_id,''), COALESCE(r.body,''), COALESCE(r.timestamp,0),
+		SELECT r.id, r.author_id, `+userNameSQL+`, COALESCE(r.msg_id,''), COALESCE(r.body,''), COALESCE(r.timestamp,0),
 		       q.quotation_number, q.id, COALESCE(q.quotation_date,'')
 		FROM replies r
 		LEFT JOIN users u      ON u.id     = r.author_id
@@ -72,6 +161,7 @@ func (s *Service) ComputeSelections(ctx context.Context) ([]Selection, error) {
 		return nil, err
 	}
 	type rep struct {
+		id                              int64
 		authorID, userName, msgID, body string
 		ts                              int64
 		qnum                            string
@@ -83,7 +173,7 @@ func (s *Service) ComputeSelections(ctx context.Context) ([]Selection, error) {
 	for rows.Next() {
 		var r rep
 		var author, name, qnum sql.NullString
-		if err := rows.Scan(&author, &name, &r.msgID, &r.body, &r.ts, &qnum, &r.qid, &r.qdate); err != nil {
+		if err := rows.Scan(&r.id, &author, &name, &r.msgID, &r.body, &r.ts, &qnum, &r.qid, &r.qdate); err != nil {
 			rows.Close()
 			return nil, err
 		}
@@ -175,29 +265,11 @@ func (s *Service) ComputeSelections(ctx context.Context) ([]Selection, error) {
 				Preventivo: r.qnum, QuotationID: r.qid, DataPrev: r.qdate,
 				Utente: FmtName(r.userName), AuthorID: r.authorID,
 				Opzione: k, Vino: it.WineName, Vintage: it.Vintage, Qta: c.Qty, Prezzo: it.Price,
+				ReplyID: r.id,
 			})
 		}
 	}
-
-	// Mentioning the SAME option again later (a corrected code, or a resolved
-	// natural-language change) replaces the earlier quantity: keep the last
-	// occurrence per (quotation, author, option).
-	type okey struct {
-		qid    int64
-		author string
-		opt    string
-	}
-	last := map[okey]int{}
-	for i, x := range sel {
-		last[okey{x.QuotationID, x.AuthorID, x.Opzione}] = i
-	}
-	out := make([]Selection, 0, len(last))
-	for i, x := range sel {
-		if last[okey{x.QuotationID, x.AuthorID, x.Opzione}] == i {
-			out = append(out, x)
-		}
-	}
-	return out, nil
+	return sel, nil
 }
 
 // realID reports a serialized WhatsApp id ("false_<chat>_<id>_<author>")
@@ -293,6 +365,7 @@ func (s *Service) ImportPreventivi(ctx context.Context) (created, skipped int, o
 		for i, r := range grp {
 			msgIDs[i] = r.msgID
 		}
+		opts = textutil.WithCaseOptions(grp[0].body, opts)
 		if _, err := s.CreateImportedQuotation(ctx, msgIDs, minTS, opts); err != nil {
 			return created, skipped, true, err
 		}
@@ -466,7 +539,7 @@ func (s *Service) QuotationSummaries(ctx context.Context) ([]QuotationSummary, e
 			for _, x := range qs {
 				clienti[x.Utente] = true
 				if x.Qta > 0 {
-					sum.Bottiglie += x.Qta
+					sum.Bottiglie += x.Bottles()
 					sum.Totale += float64(x.Qta) * x.Prezzo
 				}
 			}
