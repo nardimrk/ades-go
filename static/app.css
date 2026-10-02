@@ -766,11 +766,14 @@ img { max-width: 100%; height: auto; }
    over a dimmed backdrop. */
 .fab { display: none; }
 @media (max-width: 900px) {
-  .fab { display: block; }
+  /* the same gap on the right and at the bottom (no extra home-indicator
+     inset), so the round follows the curve of the iPhone's screen corner
+     (~55pt radius) once Safari's toolbar collapses */
+  .fab { display: block; --fab-edge: 24px; }
   .content { padding-bottom: 6rem; }
   .fab-btn {
     position: fixed; z-index: 41;
-    right: max(1rem, env(safe-area-inset-right)); bottom: max(1rem, env(safe-area-inset-bottom));
+    right: max(var(--fab-edge), env(safe-area-inset-right)); bottom: var(--fab-edge);
     width: 60px; height: 60px; padding: 0; border: 0; border-radius: 50%;
     display: inline-flex; align-items: center; justify-content: center;
     background: var(--accent); color: #fff; cursor: pointer;
@@ -793,7 +796,7 @@ img { max-width: 100%; height: auto; }
   .fab.open .fab-backdrop { opacity: 1; visibility: visible; }
 
   /* the items sit on the button's centre and move out along the arc */
-  .fab-menu { position: fixed; z-index: 41; right: max(1rem, env(safe-area-inset-right)); bottom: max(1rem, env(safe-area-inset-bottom)); width: 60px; height: 60px; pointer-events: none; transition: bottom .2s; }
+  .fab-menu { position: fixed; z-index: 41; right: max(var(--fab-edge), env(safe-area-inset-right)); bottom: var(--fab-edge); width: 60px; height: 60px; pointer-events: none; transition: bottom .2s; }
   body:has(.sel-bar:not(:empty)) .fab-menu { bottom: calc(max(.75rem, env(safe-area-inset-bottom)) + 5.25rem); }
   /* every round is the button's size and colour; the label sits under it */
   .fab-item {
