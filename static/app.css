@@ -896,5 +896,11 @@ body:has(.sel-bar:not(:empty)) .fab-menu { bottom: calc(max(.75rem, env(safe-are
 .tel-field { display: flex; align-items: center; gap: .35rem; min-width: 0; width: 100%; }
 .tel-field input { flex: 1 1 auto; min-width: 0; }
 /* room for a whole number ("+39 349 286 9246") next to the call button */
-@media (min-width: 721px) { .table td.col-tel { min-width: 14.5rem; } }
+@media (min-width: 721px) {
+  .table td.col-tel { min-width: 13rem; }
+  /* Clienti: long ids (old imports: "import:<full name>") are cut, the whole id is in the tooltip */
+  .table.clienti td.col-id { max-width: 12rem; overflow: hidden; text-overflow: ellipsis; }
+  /* Clienti: the delete column stays in view when the table scrolls sideways */
+  .table.clienti th.col-del, .table.clienti td.col-del { position: sticky; right: 0; z-index: 1; background: var(--panel); box-shadow: -6px 0 6px -6px var(--shadow); }
+}
 .tel-link { flex: none; color: var(--accent); }

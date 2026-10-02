@@ -217,7 +217,7 @@ templ ClientiPage(users []service.User) {
 			<span class="muted">Le modifiche si salvano da sole quando esci dal campo.</span>
 		</div>
 		<div class="table-wrap sticky-head">
-			<table class="table edit autosave">
+			<table class="table edit autosave clienti">
 				<thead>
 					<tr>
 						@filterTh("ID WhatsApp")
@@ -228,7 +228,7 @@ templ ClientiPage(users []service.User) {
 						@filterTh("Provincia")
 						@filterTh("Regione")
 						@filterTh("CAP")
-						<th class="num"></th>
+						<th class="num col-del"></th>
 					</tr>
 				</thead>
 				<tbody id="clienti-body">
@@ -241,10 +241,26 @@ templ ClientiPage(users []service.User) {
 	}
 }
 
+// deleteUserConfirm says what deleting the customer does to their messages.
+func deleteUserConfirm(u service.User) string {
+	name := u.Name
+	if name == "" {
+		name = "questo cliente"
+	}
+	if u.Replies == 0 {
+		return "Eliminare " + name + "?"
+	}
+	msgs := "Il suo messaggio resta"
+	if u.Replies > 1 {
+		msgs = "I suoi " + itoa(u.Replies) + " messaggi restano"
+	}
+	return "Eliminare " + name + "? " + msgs + " nelle inserzioni con il solo ID WhatsApp al posto del nome; se scrive di nuovo nel gruppo, il cliente ricompare."
+}
+
 // ClienteRow is one customer; focus=true for a just-created one (cursor in Nome).
 templ ClienteRow(u service.User, focus bool) {
 	<tr class="user-row" data-name={ u.Name + " " + u.ID + " " + u.Citta + " " + u.Telefono }>
-		<td class="mono title-cell">
+		<td class="mono title-cell col-id" title={ u.ID }>
 			if service.IsManualUser(u.ID) {
 				<span class="badge badge-warn">aggiunto a mano</span>
 			} else {
@@ -265,10 +281,8 @@ templ ClienteRow(u service.User, focus bool) {
 		<td>@autosaveField("/clienti/field", u.ID, "provincia", u.Provincia, "Provincia", "", false)</td>
 		<td>@autosaveField("/clienti/field", u.ID, "regione", u.Regione, "Regione", "", false)</td>
 		<td>@autosaveField("/clienti/field", u.ID, "cap", u.CAP, "CAP", "short", false)</td>
-		<td class="num">
-			if service.IsManualUser(u.ID) {
-				@deleteRowButton("/clienti/delete", u.ID, "Eliminare questo cliente?")
-			}
+		<td class="num col-del">
+			@deleteRowButton("/clienti/delete", u.ID, deleteUserConfirm(u))
 		</td>
 	</tr>
 }

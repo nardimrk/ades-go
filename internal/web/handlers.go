@@ -958,7 +958,7 @@ func (s *Server) clienteNew(w http.ResponseWriter, r *http.Request) {
 }
 
 func (s *Server) clienteDelete(w http.ResponseWriter, r *http.Request) {
-	if err := s.svc.DeleteManualUser(r.Context(), r.FormValue("id")); err != nil {
+	if err := s.svc.DeleteUser(r.Context(), r.FormValue("id")); err != nil {
 		s.fail(w, r, err)
 		return
 	}

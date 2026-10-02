@@ -24,12 +24,14 @@ type User struct {
 	Regione   string
 	CAP       string
 	Telefono  string // "+393492869246", "" = unknown
+	Replies   int    // messages written in the groups
 }
 
 func (s *Service) Users(ctx context.Context) ([]User, error) {
 	rows, err := s.db().QueryContext(ctx, `
 		SELECT id, COALESCE(name,''), COALESCE(indirizzo,''), COALESCE(città,''),
-		       COALESCE(provincia,''), COALESCE(regione,''), COALESCE(cap,''), COALESCE(telefono,'')
+		       COALESCE(provincia,''), COALESCE(regione,''), COALESCE(cap,''), COALESCE(telefono,''),
+		       (SELECT COUNT(*) FROM replies r WHERE r.author_id = users.id)
 		FROM users WHERE id NOT LIKE '%@g.us' ORDER BY name`)
 	if err != nil {
 		return nil, err
@@ -38,7 +40,7 @@ func (s *Service) Users(ctx context.Context) ([]User, error) {
 	var out []User
 	for rows.Next() {
 		var u User
-		if err := rows.Scan(&u.ID, &u.Name, &u.Indirizzo, &u.Citta, &u.Provincia, &u.Regione, &u.CAP, &u.Telefono); err != nil {
+		if err := rows.Scan(&u.ID, &u.Name, &u.Indirizzo, &u.Citta, &u.Provincia, &u.Regione, &u.CAP, &u.Telefono, &u.Replies); err != nil {
 			return nil, err
 		}
 		out = append(out, u)
@@ -50,7 +52,7 @@ func (s *Service) Users(ctx context.Context) ([]User, error) {
 // others come from WhatsApp and have their WhatsApp id).
 const ManualUserPrefix = "manual:"
 
-// IsManualUser reports a customer added by hand (deletable from the UI).
+// IsManualUser reports a customer added by hand (no WhatsApp id).
 func IsManualUser(id string) bool { return strings.HasPrefix(id, ManualUserPrefix) }
 
 // CreateManualUser adds an empty customer, to be filled in from the UI.
@@ -64,21 +66,26 @@ func (s *Service) CreateManualUser(ctx context.Context) (User, error) {
 	return u, err
 }
 
-// DeleteManualUser removes a customer added by hand, unless it has orders.
-func (s *Service) DeleteManualUser(ctx context.Context, id string) error {
-	if !IsManualUser(id) {
-		return fmt.Errorf("si possono eliminare solo i clienti aggiunti a mano")
-	}
+// DeleteUser removes a customer, unless they have confirmed orders. Their
+// messages stay in the inserzioni (shown with the WhatsApp id instead of the
+// name), and a customer who writes again in a group is created again.
+func (s *Service) DeleteUser(ctx context.Context, id string) error {
 	var n int
 	if err := s.db().QueryRowContext(ctx, `SELECT
 		(SELECT COUNT(*) FROM orders WHERE user_id = ?) + (SELECT COUNT(*) FROM quotations WHERE manual_client_id = ?)`, id, id).Scan(&n); err != nil {
 		return err
 	}
 	if n > 0 {
-		return fmt.Errorf("il cliente ha degli ordini collegati")
+		return fmt.Errorf("il cliente ha degli ordini confermati: non si può eliminare")
 	}
-	_, err := s.db().ExecContext(ctx, "DELETE FROM users WHERE id = ?", id)
-	return err
+	res, err := s.db().ExecContext(ctx, "DELETE FROM users WHERE id = ?", id)
+	if err != nil {
+		return err
+	}
+	if n, _ := res.RowsAffected(); n == 0 {
+		return fmt.Errorf("cliente non trovato")
+	}
+	return nil
 }
 
 // userColumns are the customer fields editable from the Clienti page.
