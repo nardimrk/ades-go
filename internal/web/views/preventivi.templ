@@ -133,8 +133,9 @@ templ PreventivoDetail(d *service.QuotationDetail, catalog []service.CatalogEntr
 			@Alert("info", "Nessun cliente ha ancora selezionato vini per questo ordine.")
 		}
 		@ProdottiDatalist(catalog)
+		@ClientiDatalist(d.Sections)
 		for _, sec := range d.Sections {
-			@CustomerSection(d.Quotation.Number, sec, "", "")
+			@CustomerSection(d.Quotation.Number, sec, "", "", "")
 		}
 	}
 }
@@ -153,7 +154,19 @@ templ ProdottiDatalist(catalog []service.CatalogEntry) {
 	</datalist>
 }
 
-templ CustomerSection(qnum string, sec service.CustomerSection, msg, errMsg string) {
+// ClientiDatalist: the customers offered by "Modifica cliente" in every
+// section of the page.
+templ ClientiDatalist(sections []service.CustomerSection) {
+	<datalist id="clienti-list">
+		for _, c := range clientChoices(sections) {
+			<option value={ c }></option>
+		}
+	</datalist>
+}
+
+// CustomerSection: one customer's order. clientErr reopens the "Modifica
+// cliente" modal with that error.
+templ CustomerSection(qnum string, sec service.CustomerSection, msg, errMsg, clientErr string) {
 	<form
 		id={ sectionID(sec.Utente) }
 		class="card"
@@ -163,6 +176,7 @@ templ CustomerSection(qnum string, sec service.CustomerSection, msg, errMsg stri
 	>
 		<input type="hidden" name="n" value={ qnum }/>
 		<input type="hidden" name="utente" value={ sec.Utente }/>
+		<input type="hidden" name="cliente" value={ sec.Cliente }/>
 		<div class="card-head">
 			<span><b>{ sec.Cliente }</b> — € { money(sec.Total()) }</span>
 			if sec.SavedOn != "" {
@@ -175,14 +189,12 @@ templ CustomerSection(qnum string, sec service.CustomerSection, msg, errMsg stri
 		if sec.Cliente != sec.Utente {
 			<p class="muted">Nome originale rilevato: { sec.Utente }</p>
 		}
-		<label>
-			Cliente
-			<select name="cliente" hx-post="/ordini/section" hx-vals='{"op":"cliente"}' hx-trigger="change" hx-target="closest form" hx-swap="outerHTML" hx-include="closest form">
-				for _, o := range sec.Options {
-					<option value={ o } selected?={ o == sec.Cliente }>{ o }</option>
-				}
-			</select>
-		</label>
+		<div class="client-row">
+			<span class="muted">Cliente</span>
+			<b class="client-name">{ sec.Cliente }</b>
+			<button type="button" class="btn small" data-modal-show={ sectionID(sec.Utente) + "-cliente" }>Modifica cliente</button>
+		</div>
+		@clientModal(sec, clientErr)
 		if len(sec.Rows) == 0 {
 			<p class="muted">Nessuna riga.</p>
 		} else {
@@ -240,6 +252,43 @@ templ CustomerSection(qnum string, sec service.CustomerSection, msg, errMsg stri
 			<button type="submit" name="op" value="save" class="btn primary">Conferma ordine</button>
 		}
 	</form>
+}
+
+// clientModal changes the section's customer. It sits inside the section's
+// form, so the draft rows travel with the change.
+templ clientModal(sec service.CustomerSection, errMsg string) {
+	<dialog
+		id={ sectionID(sec.Utente) + "-cliente" }
+		class="modal modal-client"
+		data-modal-keep
+		if errMsg != "" {
+			data-modal-open
+		}
+		aria-labelledby={ sectionID(sec.Utente) + "-cliente-title" }
+	>
+		<div class="modal-form">
+			<div class="modal-head">
+				<div class="modal-title">
+					<h3 id={ sectionID(sec.Utente) + "-cliente-title" }>Modifica cliente</h3>
+					<span class="muted">Attuale: { sec.Cliente }</span>
+				</div>
+				<button type="button" class="icon" data-modal-close aria-label="Chiudi">@IconX()</button>
+			</div>
+			<div class="modal-body">
+				if errMsg != "" {
+					@Alert("error", errMsg)
+				}
+				<label>
+					Nuovo cliente
+					<input type="text" name="new_cliente" list="clienti-list" placeholder="Scrivi per cercare un cliente..." autocomplete="off"/>
+				</label>
+			</div>
+			<div class="modal-foot">
+				<button type="button" class="btn" data-modal-close>Annulla</button>
+				<button type="submit" class="btn primary" name="op" value="cliente">Salva</button>
+			</div>
+		</div>
+	</dialog>
 }
 
 type NuovoPreventivoData struct {

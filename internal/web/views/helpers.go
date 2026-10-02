@@ -100,3 +100,18 @@ func q(kv ...string) string {
 
 // nowMinute is the current local time for a datetime-local input.
 func nowMinute() string { return time.Now().Format("2006-01-02T15:04") }
+
+// clientChoices: every section's customer options, once each, in order.
+func clientChoices(sections []service.CustomerSection) []string {
+	seen := map[string]bool{}
+	var out []string
+	for _, sec := range sections {
+		for _, c := range sec.Options {
+			if !seen[c] {
+				seen[c] = true
+				out = append(out, c)
+			}
+		}
+	}
+	return out
+}

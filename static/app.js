@@ -443,7 +443,7 @@
     var list = root.matches && root.matches("dialog[data-modal-open]") ? [root] : root.querySelectorAll("dialog[data-modal-open]");
     Array.prototype.forEach.call(list, function (dlg) {
       if (dlg.open || !dlg.showModal) return;
-      dlg.addEventListener("close", function () { dlg.remove(); });
+      if (!dlg.hasAttribute("data-modal-keep")) dlg.addEventListener("close", function () { dlg.remove(); });
       dlg.showModal();
       var first = dlg.querySelector("input[type=number]");
       if (first && !matchMedia("(pointer: coarse)").matches) first.focus();
@@ -453,6 +453,25 @@
     var dlg = e.target.closest("dialog.modal");
     if (!dlg) return;
     if (e.target === dlg || e.target.closest("[data-modal-close]")) dlg.close();
+  });
+
+  // Modals kept in the page (<dialog data-modal-keep>, e.g. "Modifica
+  // cliente" inside a form): opened by a [data-modal-show="<id>"] button.
+  document.addEventListener("click", function (e) {
+    var b = e.target.closest("[data-modal-show]");
+    var dlg = b && document.getElementById(b.dataset.modalShow);
+    if (!dlg || dlg.open || !dlg.showModal) return;
+    dlg.showModal();
+    var first = dlg.querySelector("input[type=text]");
+    if (first && !matchMedia("(pointer: coarse)").matches) first.focus();
+  });
+  // Enter in a modal field submits with the modal's own button, not the
+  // first submit button of the form around it (e.g. a row's delete).
+  document.addEventListener("keydown", function (e) {
+    if (e.key !== "Enter" || e.defaultPrevented || e.target.tagName !== "INPUT") return;
+    var dlg = e.target.closest("dialog.modal");
+    var sub = dlg && dlg.querySelector(".modal-foot button[type=submit]");
+    if (sub) { e.preventDefault(); sub.click(); }
   });
 
   // Clickable table rows (data-href).

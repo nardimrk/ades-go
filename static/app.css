@@ -402,6 +402,13 @@ body:has(dialog.modal[open]) { overflow: hidden; }
   padding: .5rem .75rem; font-size: 14px; line-height: 1.4; white-space: pre-wrap; overflow-wrap: anywhere;
 }
 .modal-note { margin: 0; font-size: .85rem; }
+/* "Modifica cliente": the suggestions push the content (no clipping in the
+   scrolling modal body), and the body leaves room for them */
+.modal-client .modal-body { min-height: min(22rem, 60dvh); }
+.modal-client label { display: flex; flex-direction: column; gap: .25rem; }
+.modal-client .combo-list { position: static; margin-top: .35rem; box-shadow: none; }
+.client-row { display: flex; flex-wrap: wrap; align-items: center; gap: .35rem .6rem; min-width: 0; }
+.client-name { overflow-wrap: anywhere; }
 .modal-foot {
   display: flex; justify-content: flex-end; gap: .5rem; flex-wrap: wrap; border-top: 1px solid var(--border);
   padding: .75rem 1rem; padding-bottom: max(.75rem, env(safe-area-inset-bottom));

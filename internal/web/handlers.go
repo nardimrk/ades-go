@@ -476,13 +476,29 @@ func (s *Server) preventivoSection(w http.ResponseWriter, r *http.Request) {
 	}
 	rows := parseOrderRows(r)
 	op := r.FormValue("op")
-	msg, errMsg := "", ""
+	msg, errMsg, clientErr := "", "", ""
 	switch {
 	case op == "cliente":
-		if err := s.svc.SetManualClient(ctx, num, cliente); err != nil {
+		// the new customer must be one of the choices (or the detected name)
+		next := strings.TrimSpace(r.FormValue("new_cliente"))
+		byName, _, err := s.svc.ClientOptions(ctx)
+		if err != nil {
 			s.fail(w, r, err)
 			return
 		}
+		if _, known := byName[next]; next == "" || (!known && next != utente) {
+			clientErr = "Cliente non trovato: " + next + ". Sceglilo dall'elenco."
+			if next == "" {
+				clientErr = "Scegli un cliente dall'elenco."
+			}
+			break
+		}
+		if err := s.svc.SetManualClient(ctx, num, next); err != nil {
+			s.fail(w, r, err)
+			return
+		}
+		cliente = next
+		msg = "Cliente aggiornato: " + next
 	case op == "add":
 		// the wine must be one of the Prodotti (datalist labels may carry " — winery")
 		name, _, _ := strings.Cut(strings.TrimSpace(r.FormValue("new_vino")), " — ")
@@ -528,7 +544,7 @@ func (s *Server) preventivoSection(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	s.useSavedRows(r, num, &sec)
-	render(w, r, views.CustomerSection(num, sec, msg, errMsg))
+	render(w, r, views.CustomerSection(num, sec, msg, errMsg, clientErr))
 }
 
 func parseOrderRows(r *http.Request) []service.OrderRow {
