@@ -38,7 +38,7 @@ templ ConsegnePage(months []service.ConsegneMonth, selected map[string]bool, res
 			@Alert("info", "Nessuna inserzione con un ordine collegato.")
 		} else {
 			<form id="consegne-form" hx-get="/consegne/result" hx-target="#sel-bar" hx-swap="outerHTML" hx-trigger="change" hx-disinherit="*">
-				<input type="search" placeholder="Filtra inserzioni…" data-filter=".dl-item" class="narrow"/>
+				<input type="search" placeholder="Filtra Consegne…" data-filter=".dl-item" class="narrow list-filter"/>
 				<div class="consegne view-timeline" data-view-root="consegne">
 					for _, m := range months {
 						<section class="month" data-filter-group=".dl-item">

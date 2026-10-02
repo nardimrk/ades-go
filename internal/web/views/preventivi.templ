@@ -30,7 +30,8 @@ templ PreventiviPage(search, flash string, list templ.Component) {
 			type="search"
 			name="q"
 			value={ search }
-			placeholder="Cerca per Cliente, Vino"
+			placeholder="Filtra Ordini…"
+			class="list-filter"
 			hx-get="/ordini/list"
 			hx-trigger="input changed delay:300ms, search"
 			hx-target="#prev-list"

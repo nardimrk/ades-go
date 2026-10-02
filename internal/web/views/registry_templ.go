@@ -76,7 +76,7 @@ func ConsegnePage(months []service.ConsegneMonth, selected map[string]bool, resu
 					return templ_7745c5c3_Err
 				}
 			} else {
-				templ_7745c5c3_Err = templruntime.WriteString(templ_7745c5c3_Buffer, 2, "<form id=\"consegne-form\" hx-get=\"/consegne/result\" hx-target=\"#sel-bar\" hx-swap=\"outerHTML\" hx-trigger=\"change\" hx-disinherit=\"*\"><input type=\"search\" placeholder=\"Filtra inserzioni…\" data-filter=\".dl-item\" class=\"narrow\"><div class=\"consegne view-timeline\" data-view-root=\"consegne\">")
+				templ_7745c5c3_Err = templruntime.WriteString(templ_7745c5c3_Buffer, 2, "<form id=\"consegne-form\" hx-get=\"/consegne/result\" hx-target=\"#sel-bar\" hx-swap=\"outerHTML\" hx-trigger=\"change\" hx-disinherit=\"*\"><input type=\"search\" placeholder=\"Filtra Consegne…\" data-filter=\".dl-item\" class=\"narrow list-filter\"><div class=\"consegne view-timeline\" data-view-root=\"consegne\">")
 				if templ_7745c5c3_Err != nil {
 					return templ_7745c5c3_Err
 				}

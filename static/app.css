@@ -568,6 +568,9 @@ body:has(dialog.modal[open]) { overflow: hidden; }
 .seg-btn + .seg-btn { border-left: 1px solid var(--border); }
 .seg-btn.active { background: var(--accent-soft); color: var(--accent); font-weight: 600; }
 .consegne { margin-top: .25rem; }
+/* Ordini and Consegne lists: one gap between the filter and the first month */
+input.list-filter { margin-bottom: .75rem !important; }
+.list-filter + .consegne { margin-top: 0; }
 .month { position: relative; margin-bottom: 1.25rem; }
 .month-head { display: flex; align-items: center; gap: .35rem 1rem; flex-wrap: wrap; margin-bottom: .6rem; }
 .month-head h3 { margin: 0; font-size: 1.05rem; }
