@@ -392,8 +392,10 @@ func (s *Service) ImportPreventivi(ctx context.Context) (created, skipped int, o
 			skipped++
 			continue
 		}
+		// listings since noQtyOptionsSince: every option, with or without a
+		// bottle count; older ones keep the original rule (counted only)
 		opts := textutil.ParseOptionsWithQty(grp[0].body)
-		if len(opts) == 0 && minTS >= noQtyOptionsSince.Unix() {
+		if minTS >= noQtyOptionsSince.Unix() {
 			opts = textutil.ParseOptions(grp[0].body)
 		}
 		if len(opts) == 0 {

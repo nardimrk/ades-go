@@ -3,6 +3,7 @@ package textutil
 import (
 	"fmt"
 	"math"
+	"sort"
 	"strconv"
 	"strings"
 	"unicode"
@@ -209,11 +210,27 @@ func optionWineName(text string) string {
 // explicit bottle count ("A. 6x Pinot Noir a 25€"). Listings written without
 // counts ("A. Riesling 2025 a 14,50€ (CASSA INTERA a 78€)") fall back to
 // parseOptionsNoQty, so listings that already parsed keep the same options.
+// A listing can also mix both ("A. Cassa intera X a 119€" next to "B. 20 x X
+// a 24,50€"): the options without a count are kept too, else option A would
+// be lost.
 func ParseOptions(body string) []Option {
-	if opts := ParseOptionsWithQty(body); len(opts) > 0 {
-		return opts
+	withQty := ParseOptionsWithQty(body)
+	noQty := parseOptionsNoQty(body)
+	if len(withQty) == 0 {
+		return noQty
 	}
-	return parseOptionsNoQty(body)
+	have := map[string]bool{}
+	for _, o := range withQty {
+		have[o.Letter] = true
+	}
+	out := withQty
+	for _, o := range noQty {
+		if !have[o.Letter] {
+			out = append(out, o)
+		}
+	}
+	sort.SliceStable(out, func(i, j int) bool { return out[i].Letter < out[j].Letter })
+	return out
 }
 
 // ParseOptionsWithQty is the original rule: sold-out options and options

@@ -1119,7 +1119,7 @@ func ClienteRow(u service.User, focus bool) templ.Component {
 				return templ_7745c5c3_Err
 			}
 		}
-		templ_7745c5c3_Err = templruntime.WriteString(templ_7745c5c3_Buffer, 77, "</td><td class=\"wide\">")
+		templ_7745c5c3_Err = templruntime.WriteString(templ_7745c5c3_Buffer, 77, "</td><td class=\"wide col-nome\">")
 		if templ_7745c5c3_Err != nil {
 			return templ_7745c5c3_Err
 		}

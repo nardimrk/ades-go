@@ -187,6 +187,7 @@ templ Conversation(d InserzioniData) {
 				</div>
 			</section>
 			<section class="conv-replies">
+				@OrderMismatch(d.Review)
 				if len(d.Replies) == 0 {
 					<p class="muted">Nessuna risposta.</p>
 				} else {
@@ -231,13 +232,6 @@ templ deliveryField(d InserzioniData) {
 				hx-vals={ templ.JSONString(map[string]string{"chat": d.SelChat, "c": d.SelKey}) }
 			/>
 		</label>
-		<span class="muted delivery-hint">
-			if len(d.Selected.QuotationIDs) > 0 {
-				Si salva da sola ed è riportata anche nell'ordine collegato.
-			} else {
-				Si salva da sola e passerà all'ordine quando verrà creato.
-			}
-		</span>
 	</div>
 }
 
@@ -276,6 +270,23 @@ templ AddReplyForm(d InserzioniData) {
 			</datalist>
 		</form>
 	</details>
+}
+
+// OrderMismatch warns when the campaign's order doesn't match the options of
+// the listing (an option missing, another price): confirming orders against
+// it would record the wrong wines or prices.
+templ OrderMismatch(rv *service.CampaignReview) {
+	if rv != nil && len(rv.Mismatch) > 0 {
+		<div class="alert alert-warning order-mismatch" role="alert">
+			<b>Attenzione: l'ordine { rv.QuotationNumber } non corrisponde all'inserzione.</b>
+			<ul>
+				for _, m := range rv.Mismatch {
+					<li>{ noEmoji(m) }</li>
+				}
+			</ul>
+			<span>Le risposte confermate userebbero le opzioni e i prezzi dell'ordine: non confermare finché l'ordine non è corretto.</span>
+		</div>
+	}
 }
 
 // ── "Controlla risposte" ─────────────────────────────────────────────────────
@@ -621,6 +632,7 @@ templ ReplyOrderModal(d InserzioniData, r service.ReplyView, qty map[string]int,
 			</div>
 			<div class="modal-body">
 				<div class="modal-quote">{ compactText(r.Testo) }</div>
+				@OrderMismatch(d.Review)
 				if errMsg != "" {
 					@Alert("error", errMsg)
 				}

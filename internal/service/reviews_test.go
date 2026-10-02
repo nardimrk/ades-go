@@ -185,10 +185,18 @@ func TestGuessQty(t *testing.T) {
 		want int // quantity of A, 0 = no prefill
 	}{
 		{one, "4", 4}, {one, "ne prendo 4 grazie", 4}, {one, "2 o 3", 0}, {one, "grazie", 0}, {two, "4", 0},
+		// IMP0531: the order has only A, the customer asked for B
+		{one, "3 B grazie", 0}, {one, "Ciao 3B grazie", 0}, {one, "2A", 2},
 	} {
 		if got := c.rv.GuessQty(c.body)["A"]; got != c.want {
 			t.Errorf("GuessQty(%q) = %d; want %d", c.body, got, c.want)
 		}
+	}
+	if got := two.GuessQty("3B grazie"); got["B"] != 3 || got["A"] != 0 {
+		t.Errorf("GuessQty(3B) on A+B = %v", got)
+	}
+	if got := one.GuessQty("3 B grazie"); len(got) != 0 {
+		t.Errorf("GuessQty(3 B) on A only = %v; want nothing", got)
 	}
 }
 
@@ -234,5 +242,34 @@ func TestAddManualReply(t *testing.T) {
 	}
 	if len(replies) != 2 || !replies[0].Manual || replies[1].Utente != "Alessio" || replies[1].Reading != "3A" {
 		t.Fatalf("replies = %+v", replies)
+	}
+}
+
+// IMP0531: the order holds the case as 6 bottles at 119/6 and lacks option
+// B; the review must say so.
+func TestListingMismatch(t *testing.T) {
+	ctx := context.Background()
+	store, err := db.Open(filepath.Join(t.TempDir(), "wine.db"))
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer store.Close()
+	svc := New(store, &config.Config{}, nil)
+	const chat = "1@g.us"
+	body := "Thanisch Riesling Mosella disponibili:\n\nA. CASSA intera Ürziger Würzgarten Auslese 2003 a 119€\n\nB. 20 x Ürziger Würzgarten Auslese 2003 a 24,50€ (bottiglia sfusa)"
+	if err := store.InsertListing(ctx, db.Listing{MsgID: "L1", ChatID: chat, AuthorID: "owner", Body: body, Timestamp: 1000}); err != nil {
+		t.Fatal(err)
+	}
+	opts := []OrderOption{{Key: "A", Letter: "A", Wine: "Ürziger Würzgarten Auslese 2003", Price: 19.83}}
+	got, err := svc.listingMismatch(ctx, []string{"L1"}, opts)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if len(got) != 2 || !strings.Contains(got[0], "opzione A") || !strings.Contains(got[0], "119.00") || !strings.Contains(got[1], "manca l'opzione B") {
+		t.Fatalf("mismatch = %q", got)
+	}
+	opts = []OrderOption{{Key: "A", Letter: "A", Price: 119}, {Key: "B", Letter: "B", Price: 24.5}}
+	if got, _ := svc.listingMismatch(ctx, []string{"L1"}, opts); len(got) != 0 {
+		t.Fatalf("matching order flagged: %q", got)
 	}
 }

@@ -336,6 +336,8 @@ details.card > summary { cursor: pointer; margin-bottom: .5rem; }
 @media (min-width: 721px) {
   .table.edit .col-erp { width: 8.5rem; }
   .table.edit td.mono { white-space: nowrap; }
+  /* Clienti: Nome is twice as wide as the other fields */
+  .table.edit td.col-nome input { min-width: 220px; }
 }
 /* column filters under the titles (Clienti): the typed text starts under the
    title, the box lines up with the inputs of the rows */
@@ -423,7 +425,6 @@ button.icon { display: inline-flex; align-items: center; justify-content: center
 /* Inserzioni: estimated delivery date of the campaign (autosaved) */
 .delivery label { flex: 0 1 14rem; min-width: 0; }
 .delivery input[type=date] { background: var(--fill); width: 100%; }
-.delivery-hint { flex: 1 1 12rem; font-size: .85rem; padding-bottom: .55rem; }
 .listing-box {
   background: var(--listing-bg); border-left: 4px solid var(--wa-dark); border-radius: 4px;
   padding: 10px 14px; margin-bottom: 12px; font-size: 14px; line-height: 1.5;
@@ -841,3 +842,8 @@ img { max-width: 100%; height: auto; }
 @media (max-width: 900px) and (prefers-reduced-motion: reduce) {
   .fab-btn, .fab-item, .fab-backdrop, .fab-menu { transition: none; }
 }
+
+/* the campaign's order differs from its listing */
+.order-mismatch { display: flex; flex-direction: column; gap: .35rem; margin-bottom: .75rem; }
+.order-mismatch ul { margin: 0; padding-left: 1.2rem; }
+.modal-body .order-mismatch { margin-bottom: 0; }

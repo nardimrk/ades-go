@@ -246,3 +246,13 @@ func TestParseSingleWine(t *testing.T) {
 		}
 	}
 }
+
+// A listing mixing an option without a count (the case) and one with a count
+// (IMP0531): both options must be read, else replies "1A" lose their wine.
+func TestParseOptionsMixedCounts(t *testing.T) {
+	body := "Thanisch Riesling Mosella disponibili:\n\nA. CASSA intera Ürziger Würzgarten Auslese 2003 a 119€\n\nB. 20 x Ürziger Würzgarten Auslese 2003 a 24,50€ (bottiglia sfusa)"
+	opts := ParseOptions(body)
+	if len(opts) != 2 || opts[0].Letter != "A" || opts[0].Price != 119 || opts[1].Letter != "B" || opts[1].Price != 24.5 || opts[1].Quantity != 20 {
+		t.Fatalf("options = %+v", opts)
+	}
+}

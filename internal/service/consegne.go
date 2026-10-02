@@ -199,7 +199,7 @@ type DeliveryCity struct {
 
 type Consegne struct {
 	Selected   []ConsegneCampaign
-	NoQuote    bool // selection has no linked quotation
+	NoQuote    bool               // selection has no linked quotation
 	Customers  []CustomerDelivery // ordered by provincia, città, name
 	Areas      []DeliveryArea
 	Clienti    int

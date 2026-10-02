@@ -7,6 +7,7 @@ import (
 	"errors"
 	"fmt"
 	"log"
+	"math"
 	"regexp"
 	"sort"
 	"strconv"
@@ -71,6 +72,10 @@ type CampaignReview struct {
 	// EnsureQuotation can create it from the listing)
 	Orderable bool
 	SellerIDs map[string]bool // authors of the campaign's listings: their replies aren't orders
+	// Mismatch: where the quotation differs from the options of the listing
+	// (an option missing, a different price), e.g. "manca B: Riesling a € 24.50".
+	// Orders confirmed against it would be wrong, so the page warns.
+	Mismatch []string
 }
 
 func reviewMetaKey(chatID, key string) string { return "review:" + chatID + "|" + key }
@@ -143,6 +148,9 @@ func (s *Service) CampaignReview(ctx context.Context, c *Campaign) (*CampaignRev
 		return a.Letter < b.Letter
 	})
 	rv.Orderable = len(rv.Options) > 0
+	if rv.Mismatch, err = s.listingMismatch(ctx, c.MsgIDs, rv.Options); err != nil {
+		return nil, err
+	}
 	sel, err := s.ComputeSelections(ctx)
 	if err != nil {
 		return nil, err
@@ -163,6 +171,68 @@ func (s *Service) CampaignReview(ctx context.Context, c *Campaign) (*CampaignRev
 		rv.Current[author] = textutil.FormatOrderCodes(cs)
 	}
 	return rv, nil
+}
+
+// listingMismatch compares the quotation's options with the options of the
+// campaign's posts (every repost: an option may appear in only some of them,
+// the latest price wins). A listing the rules can't read gives no warning.
+func (s *Service) listingMismatch(ctx context.Context, msgIDs []string, opts []OrderOption) ([]string, error) {
+	if len(msgIDs) == 0 {
+		return nil, nil
+	}
+	ph := strings.TrimSuffix(strings.Repeat("?,", len(msgIDs)), ",")
+	args := make([]any, len(msgIDs))
+	for i, id := range msgIDs {
+		args[i] = id
+	}
+	rows, err := s.db().QueryContext(ctx, "SELECT COALESCE(body,'') FROM listings WHERE msg_id IN ("+ph+") ORDER BY timestamp, id", args...)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+	want := map[string]textutil.Option{}
+	var keys []string
+	for rows.Next() {
+		var body string
+		if err := rows.Scan(&body); err != nil {
+			return nil, err
+		}
+		parsed := textutil.ParseOptions(body)
+		if len(parsed) == 0 {
+			parsed, _ = textutil.ParseSingleWine(body)
+		}
+		for _, o := range textutil.WithCaseOptions(body, parsed) {
+			k := o.Letter
+			if o.Case {
+				k += textutil.CaseSuffix
+			}
+			if _, seen := want[k]; !seen {
+				keys = append(keys, k)
+			}
+			want[k] = o
+		}
+	}
+	if err := rows.Err(); err != nil {
+		return nil, err
+	}
+	have := map[string]OrderOption{}
+	for _, o := range opts {
+		have[o.Key] = o
+	}
+	sort.Strings(keys)
+	var out []string
+	for _, k := range keys {
+		w := want[k]
+		label := strings.Replace(k, textutil.CaseSuffix, " (cassa)", 1)
+		h, ok := have[k]
+		switch {
+		case !ok:
+			out = append(out, fmt.Sprintf("manca l'opzione %s: %s a € %.2f", label, w.WineName, w.Price))
+		case math.Abs(h.Price-w.Price) > 0.005:
+			out = append(out, fmt.Sprintf("opzione %s: nell'ordine € %.2f, nell'inserzione € %.2f", label, h.Price, w.Price))
+		}
+	}
+	return out, nil
 }
 
 // Option returns the option an order code refers to. A case order that
@@ -196,9 +266,22 @@ func (rv *CampaignReview) ProposalQty(codes string) map[string]int {
 
 var bareQtyRe = regexp.MustCompile(`\b(\d{1,3})\b`)
 
-// GuessQty prefills the "Conferma come ordine" editor: with one bottle
-// option, the only number in the message ("4", "ne prendo 4 grazie").
+// GuessQty prefills the "Conferma come ordine" editor. A message naming
+// options ("3 B grazie") fills those options, and nothing at all when one of
+// them is not in the order: "3 B" must never become 3 of option A. Otherwise,
+// with one bottle option, the only number in the message ("4", "ne prendo 4").
 func (rv *CampaignReview) GuessQty(body string) map[string]int {
+	if codes := textutil.ParseOrders(body); len(codes) > 0 {
+		out := map[string]int{}
+		for _, c := range codes {
+			o, ok := rv.Option(c)
+			if !ok {
+				return map[string]int{}
+			}
+			out[o.Key] = c.Qty
+		}
+		return out
+	}
 	var bottles []OrderOption
 	for _, o := range rv.Options {
 		if !o.Case {

@@ -250,7 +250,7 @@ templ ClienteRow(u service.User, focus bool) {
 				{ noEmoji(u.ID) }
 			}
 		</td>
-		<td class="wide">@autosaveField("/clienti/field", u.ID, "name", u.Name, "Nome", "", focus)</td>
+		<td class="wide col-nome">@autosaveField("/clienti/field", u.ID, "name", u.Name, "Nome", "", focus)</td>
 		<td class="wide">@autosaveField("/clienti/field", u.ID, "indirizzo", u.Indirizzo, "Indirizzo", "", false)</td>
 		<td>@autosaveField("/clienti/field", u.ID, "citta", u.Citta, "Città", "", false)</td>
 		<td>@autosaveField("/clienti/field", u.ID, "provincia", u.Provincia, "Provincia", "", false)</td>
