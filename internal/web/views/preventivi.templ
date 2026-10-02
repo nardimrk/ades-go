@@ -249,6 +249,11 @@ templ CustomerSection(qnum string, sec service.CustomerSection, msg, errMsg, cli
 			</span>
 			if sec.SavedOn != "" {
 				<span class="badge badge-ok">Confermato il { sec.SavedOn }</span>
+			} else {
+				<span class="section-actions">
+					<button type="button" class="btn" data-modal-show={ sectionID(sec.Utente) + "-vino" }>＋ Aggiungi vino</button>
+					<button type="submit" name="op" value="save" class="btn primary">Conferma ordine</button>
+				</span>
 			}
 		</div>
 		if msg != "" {
@@ -292,10 +297,6 @@ templ CustomerSection(qnum string, sec service.CustomerSection, msg, errMsg, cli
 		}
 		if sec.SavedOn == "" {
 			@addWineModal(sec, errMsg)
-			<div class="section-foot">
-				<button type="button" class="btn" data-modal-show={ sectionID(sec.Utente) + "-vino" }>＋ Aggiungi vino</button>
-				<button type="submit" name="op" value="save" class="btn primary">Conferma ordine</button>
-			</div>
 		}
 	</form>
 }
