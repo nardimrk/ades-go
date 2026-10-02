@@ -134,6 +134,12 @@ templ PreventivoDetail(d *service.QuotationDetail, catalog []service.CatalogEntr
 		}
 		@ProdottiDatalist(catalog)
 		@ClientiDatalist(d.Sections)
+		if len(d.Sections) > 1 {
+			<div class="filters sections-filter">
+				<input type="search" placeholder="Filtra per cliente, città o provincia" data-filter=".cust-section" aria-label="Filtra per cliente, città o provincia"/>
+				<span class="muted" data-filter-count=".cust-section" data-noun="clienti">{ itoa(len(d.Sections)) } clienti</span>
+			</div>
+		}
 		for _, sec := range d.Sections {
 			@CustomerSection(d.Quotation.Number, sec, "", "", "")
 		}
@@ -169,7 +175,8 @@ templ ClientiDatalist(sections []service.CustomerSection) {
 templ CustomerSection(qnum string, sec service.CustomerSection, msg, errMsg, clientErr string) {
 	<form
 		id={ sectionID(sec.Utente) }
-		class="card"
+		class="card cust-section"
+		data-name={ sec.Cliente + " " + sec.Utente + " " + sec.Citta + " " + sec.Provincia }
 		hx-post="/ordini/section"
 		hx-target="this"
 		hx-swap="outerHTML"
@@ -180,6 +187,9 @@ templ CustomerSection(qnum string, sec service.CustomerSection, msg, errMsg, cli
 		<div class="card-head">
 			<span class="client-row">
 				<b class="client-name">{ sec.Cliente }</b>
+				if p := sec.Place(); p != "" {
+					<span class="muted client-place">{ p }</span>
+				}
 				<button type="button" class="btn small" data-modal-show={ sectionID(sec.Utente) + "-cliente" }>Cambia</button>
 				<span class="nowrap">€ { money(sec.Total()) }</span>
 			</span>

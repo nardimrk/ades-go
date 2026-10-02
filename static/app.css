@@ -863,3 +863,9 @@ body:has(.sel-bar:not(:empty)) .fab-menu { bottom: calc(max(.75rem, env(safe-are
 .order-mismatch { display: flex; flex-direction: column; gap: .35rem; margin-bottom: .75rem; }
 .order-mismatch ul { margin: 0; padding-left: 1.2rem; }
 .modal-body .order-mismatch { margin-bottom: 0; }
+
+/* order page: filter the customer sections, the place next to each name */
+.sections-filter { align-items: center; }
+.sections-filter input[type=search] { margin-bottom: 0; }
+.sections-filter { margin-bottom: .75rem; }
+.client-place { font-size: .9rem; }

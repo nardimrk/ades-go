@@ -771,6 +771,20 @@ type CustomerSection struct {
 	Options []string
 	Rows    []OrderRow
 	SavedOn string
+	// the customer's place in Clienti ("" = not set), shown and filtered on
+	Citta     string
+	Provincia string
+}
+
+// Place is "Arzignano (Vicenza)", "Arzignano", "Vicenza" or "".
+func (c CustomerSection) Place() string {
+	switch {
+	case c.Citta != "" && c.Provincia != "" && !strings.EqualFold(c.Citta, c.Provincia):
+		return c.Citta + " (" + c.Provincia + ")"
+	case c.Citta != "":
+		return c.Citta
+	}
+	return c.Provincia
 }
 
 func (c CustomerSection) Total() float64 {
@@ -909,6 +923,15 @@ func (s *Service) BuildSection(ctx context.Context, q *Quotation, utente, client
 		}
 	}
 	sec.SavedOn = s.SavedOrderDate(ctx, q.Number, cliente, byName[cliente])
+	locs, err := s.customerLocations(ctx)
+	if err != nil {
+		return CustomerSection{}, err
+	}
+	loc, ok := locs.byID[byName[cliente]]
+	if !ok {
+		loc = locs.byName[cliente]
+	}
+	sec.Citta, sec.Provincia = loc.citta, loc.provincia
 	return sec, nil
 }
 

@@ -259,6 +259,7 @@
     restoreViews();
     syncFlagView();
     openModals(root);
+    if (root !== document) runFilters(document.querySelector("main") || document);
     root.querySelectorAll("[data-proposal]").forEach(proposalTotal);
     // a toast from the server is itself the htmx:load root
     var toasts = root.matches && root.matches("[data-autohide]") ? [root] : root.querySelectorAll("[data-autohide]");
@@ -340,9 +341,10 @@
 
   function runFilters(scope) {
     scope.querySelectorAll("[data-filter]").forEach(function (box) {
-      var q = box.value.trim().toLowerCase();
+      // case and accents don't matter ("citta" finds "Città")
+      var q = fold(box.value.trim());
       scope.querySelectorAll(box.dataset.filter).forEach(function (row) {
-        var name = (row.dataset.name || row.textContent).toLowerCase();
+        var name = fold(row.dataset.name || row.textContent);
         row.hidden = (q !== "" && name.indexOf(q) === -1) || !matchesColumns(row);
       });
     });
