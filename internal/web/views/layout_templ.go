@@ -228,7 +228,7 @@ func Layout(title, active string) templ.Component {
 	})
 }
 
-// fabNav: the sections offered by the floating button (phones and tablets).
+// fabNav: the sections offered by the floating button.
 var fabNav = nav[:3] // Inserzioni, Ordini, Consegne
 
 func fabIcon(key string) templ.Component {
@@ -273,7 +273,7 @@ func fabIcon(key string) templ.Component {
 	})
 }
 
-// SectionFab: a floating button (bottom right, phones and tablets only) that
+// SectionFab: a floating button (bottom right, on every screen size) that
 // fans out the main sections over a dimmed backdrop.
 func SectionFab(active string) templ.Component {
 	return templruntime.GeneratedTemplate(func(templ_7745c5c3_Input templruntime.GeneratedComponentInput) (templ_7745c5c3_Err error) {

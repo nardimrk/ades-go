@@ -525,7 +525,26 @@ type QuotationSummary struct {
 	Clienti   int
 	Bottiglie int
 	Totale    float64
-	SavedOn   string // order_date of a saved order, "" = none
+	SavedOn   string // when every customer's order is confirmed: the latest order_date; "" otherwise
+}
+
+// sectionCustomers lists the customers that get a section on the order page
+// (QuotationDetail), in order of first appearance: everyone with a quantity,
+// plus the manual client of a manual order when it has lines.
+func sectionCustomers(q Quotation, qsel []Selection, hasItems bool) []string {
+	var out []string
+	seen := map[string]bool{}
+	for _, x := range qsel {
+		if strings.TrimSpace(x.Utente) == "" || x.Qta <= 0 || seen[x.Utente] {
+			continue
+		}
+		seen[x.Utente] = true
+		out = append(out, x.Utente)
+	}
+	if m := q.ManualClientName; m != "" && !seen[m] && hasItems {
+		out = append(out, m)
+	}
+	return out
 }
 
 func (s *Service) QuotationSummaries(ctx context.Context) ([]QuotationSummary, error) {
@@ -541,20 +560,52 @@ func (s *Service) QuotationSummaries(ctx context.Context) ([]QuotationSummary, e
 	if err != nil {
 		return nil, err
 	}
-	saved := map[string]string{}
-	rows, err := s.db().QueryContext(ctx, "SELECT COALESCE(quotation_number,''), COALESCE(order_date,'') FROM orders ORDER BY id")
+	// saved orders per quotation, by customer id and by name (as SavedOrderDate)
+	type savedKey struct{ num, who string }
+	savedUID, savedName := map[savedKey]string{}, map[savedKey]string{}
+	rows, err := s.db().QueryContext(ctx, "SELECT COALESCE(quotation_number,''), COALESCE(user_id,''), COALESCE(user_name,''), COALESCE(order_date,'') FROM orders ORDER BY id")
 	if err != nil {
 		return nil, err
 	}
 	for rows.Next() {
-		var n, d string
-		if rows.Scan(&n, &d) == nil {
-			if _, ok := saved[n]; !ok {
-				saved[n] = d
+		var n, uid, name, d string
+		if rows.Scan(&n, &uid, &name, &d) == nil {
+			if _, ok := savedUID[savedKey{n, uid}]; !ok && uid != "" {
+				savedUID[savedKey{n, uid}] = d
+			}
+			if _, ok := savedName[savedKey{n, name}]; !ok {
+				savedName[savedKey{n, name}] = d
 			}
 		}
 	}
 	rows.Close()
+	byName, _, err := s.ClientOptions(ctx)
+	if err != nil {
+		return nil, err
+	}
+	// allSaved: the latest confirmation date when every customer section of
+	// the order page is confirmed, "" when one is not (or there is none)
+	allSaved := func(q Quotation, qsel []Selection, hasItems bool) string {
+		customers := sectionCustomers(q, qsel, hasItems)
+		latest := ""
+		for _, utente := range customers {
+			cliente := s.DefaultCliente(&q, utente, len(customers) == 1)
+			var d string
+			var ok bool
+			if uid := byName[cliente]; uid != "" {
+				d, ok = savedUID[savedKey{q.Number, uid}]
+			} else {
+				d, ok = savedName[savedKey{q.Number, cliente}]
+			}
+			if !ok {
+				return ""
+			}
+			if d > latest {
+				latest = d
+			}
+		}
+		return latest
+	}
 
 	// title of the listing (campaign) each quotation was created from
 	titles := map[int64]string{}
@@ -579,7 +630,8 @@ func (s *Service) QuotationSummaries(ctx context.Context) ([]QuotationSummary, e
 
 	var out []QuotationSummary
 	for _, q := range quots {
-		sum := QuotationSummary{ID: q.ID, Number: q.Number, Date: q.Date, SavedOn: saved[q.Number], Title: titles[q.ID]}
+		sum := QuotationSummary{ID: q.ID, Number: q.Number, Date: q.Date, Title: titles[q.ID],
+			SavedOn: allSaved(q, selBy[q.Number], len(itemsBy[q.ID]) > 0)}
 		if sum.Title == "" {
 			sum.Manual = true
 			sum.Title = textutil.StripEmoji(q.ManualClientName)

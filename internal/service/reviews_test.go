@@ -273,3 +273,58 @@ func TestListingMismatch(t *testing.T) {
 		t.Fatalf("matching order flagged: %q", got)
 	}
 }
+
+// Ordini list: "Confermato il …" only once every customer's order is saved.
+func TestSummarySavedOnAllCustomers(t *testing.T) {
+	ctx := context.Background()
+	store, err := db.Open(filepath.Join(t.TempDir(), "wine.db"))
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer store.Close()
+	svc := New(store, &config.Config{}, nil)
+	const chat = "1@g.us"
+	if err := store.InsertListing(ctx, db.Listing{MsgID: "L1", ChatID: chat, AuthorID: "owner", Body: "Barolo\nA. 6x Barolo 2019 a 40€", Timestamp: 1000}); err != nil {
+		t.Fatal(err)
+	}
+	lid := "L1"
+	for i, u := range []string{"u1", "u2"} {
+		if err := store.UpsertUser(ctx, u, "Cliente "+u); err != nil {
+			t.Fatal(err)
+		}
+		if err := store.InsertReply(ctx, db.Reply{MsgID: "R" + itoa(i), ListingMsgID: &lid, ChatID: chat, AuthorID: u, Body: "2A", Timestamp: int64(1100 + i)}); err != nil {
+			t.Fatal(err)
+		}
+	}
+	if _, _, _, err := svc.ImportPreventivi(ctx); err != nil {
+		t.Fatal(err)
+	}
+	savedOn := func() string {
+		t.Helper()
+		sums, err := svc.QuotationSummaries(ctx)
+		if err != nil || len(sums) != 1 {
+			t.Fatalf("summaries = %v, %v", sums, err)
+		}
+		return sums[0].SavedOn
+	}
+	num := ""
+	if sums, _ := svc.QuotationSummaries(ctx); len(sums) == 1 {
+		num = sums[0].Number
+	}
+	rows := []OrderRow{{Opzione: "A", Vino: "Barolo", Qta: 2, Prezzo: 40}}
+	if got := savedOn(); got != "" {
+		t.Fatalf("nothing saved: SavedOn = %q", got)
+	}
+	if err := svc.SaveOrder(ctx, num, "Cliente u1", rows); err != nil {
+		t.Fatal(err)
+	}
+	if got := savedOn(); got != "" {
+		t.Fatalf("1 of 2 saved: SavedOn = %q, want none", got)
+	}
+	if err := svc.SaveOrder(ctx, num, "Cliente u2", rows); err != nil {
+		t.Fatal(err)
+	}
+	if got := savedOn(); got == "" {
+		t.Fatal("2 of 2 saved: no SavedOn")
+	}
+}

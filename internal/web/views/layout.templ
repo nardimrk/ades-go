@@ -81,7 +81,7 @@ templ Layout(title, active string) {
 	}
 }
 
-// fabNav: the sections offered by the floating button (phones and tablets).
+// fabNav: the sections offered by the floating button.
 var fabNav = nav[:3] // Inserzioni, Ordini, Consegne
 
 templ fabIcon(key string) {
@@ -95,7 +95,7 @@ templ fabIcon(key string) {
 	}
 }
 
-// SectionFab: a floating button (bottom right, phones and tablets only) that
+// SectionFab: a floating button (bottom right, on every screen size) that
 // fans out the main sections over a dimmed backdrop.
 templ SectionFab(active string) {
 	<div class="fab" data-fab>
