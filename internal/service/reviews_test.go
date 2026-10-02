@@ -116,3 +116,78 @@ func TestReplyOrderOverride(t *testing.T) {
 }
 
 func itoa(i int) string { return string(rune('0' + i)) }
+
+// A listing with one wine and no letters ("30 x Langoa Barton a 47,50€",
+// replies "4" and "2"): the check creates its order with option A.
+func TestSingleWineReview(t *testing.T) {
+	ctx := context.Background()
+	store, err := db.Open(filepath.Join(t.TempDir(), "wine.db"))
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer store.Close()
+	svc := New(store, &config.Config{}, nil)
+	const chat = "1@g.us"
+	if err := store.InsertListing(ctx, db.Listing{MsgID: "L1", ChatID: chat, AuthorID: "owner",
+		Body: "Disponibili:\n\n30 x Château Langoa Barton 2022 a 47,50€", Timestamp: 1000}); err != nil {
+		t.Fatal(err)
+	}
+	lid := "L1"
+	for i, body := range []string{"4", "2"} {
+		if err := store.InsertReply(ctx, db.Reply{MsgID: "R" + itoa(i), ListingMsgID: &lid, ChatID: chat,
+			AuthorID: "u" + itoa(i), Body: body, Timestamp: int64(1100 + i)}); err != nil {
+			t.Fatal(err)
+		}
+	}
+	if _, _, _, err := svc.ImportPreventivi(ctx); err != nil {
+		t.Fatal(err)
+	}
+	rows, _ := svc.InserzioniList(ctx, "", "")
+	camp := &rows[0].Campaign
+	if len(camp.QuotationIDs) != 0 {
+		t.Fatal("the automatic import must leave single-wine listings out")
+	}
+	if ok, err := svc.EnsureSingleWineQuotation(ctx, camp); !ok || err != nil {
+		t.Fatalf("EnsureSingleWineQuotation = %v, %v", ok, err)
+	}
+	camp, _ = svc.FindCampaign(ctx, chat, camp.Key)
+	if ok, _ := svc.EnsureSingleWineQuotation(ctx, camp); ok {
+		t.Error("created twice")
+	}
+	rv, err := svc.CampaignReview(ctx, camp)
+	if err != nil || len(rv.Options) != 1 || rv.Options[0].Wine != "Château Langoa Barton 2022" {
+		t.Fatalf("options = %+v, %v", rv.Options, err)
+	}
+	replies, _ := svc.CampaignReplies(ctx, camp.MsgIDs)
+	if p := reviewPrompt(camp, rv, replies, replies, 0); !strings.Contains(p, "UNA SOLA opzione (A)") {
+		t.Errorf("prompt lacks the single-option rule:\n%s", p)
+	}
+	if n, err := svc.saveChecks(ctx, rv, replies, 0, []reviewFinding{{N: 1, Tipo: "dubbia", Proposta: "4A"}, {N: 2, Tipo: "dubbia", Proposta: "2"}}); n != 2 || err != nil {
+		t.Errorf("saveChecks = %d, %v; want 2", n, err)
+	}
+	if replies, _ = svc.CampaignReplies(ctx, camp.MsgIDs); replies[1].Check == nil || replies[1].Check.Proposal != "2A" {
+		t.Errorf("a bare \"2\" from the model should become 2A: %+v", replies[1].Check)
+	}
+	if err := svc.SetReplyOrder(ctx, replies[0].ID, "4A"); err != nil {
+		t.Fatal(err)
+	}
+	if rv, _ = svc.CampaignReview(ctx, camp); rv.Current["u0"] != "4A" {
+		t.Errorf("current = %v", rv.Current)
+	}
+}
+
+func TestGuessQty(t *testing.T) {
+	one := &CampaignReview{Options: []OrderOption{{Key: "A", Letter: "A"}, {Key: "A-CASSA", Letter: "A", Case: true}}}
+	two := &CampaignReview{Options: []OrderOption{{Key: "A", Letter: "A"}, {Key: "B", Letter: "B"}}}
+	for _, c := range []struct {
+		rv   *CampaignReview
+		body string
+		want int // quantity of A, 0 = no prefill
+	}{
+		{one, "4", 4}, {one, "ne prendo 4 grazie", 4}, {one, "2 o 3", 0}, {one, "grazie", 0}, {two, "4", 0},
+	} {
+		if got := c.rv.GuessQty(c.body)["A"]; got != c.want {
+			t.Errorf("GuessQty(%q) = %d; want %d", c.body, got, c.want)
+		}
+	}
+}

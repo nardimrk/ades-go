@@ -338,6 +338,62 @@ func parseOptionsNoQty(body string) []Option {
 	return out
 }
 
+// ParseSingleWine reads a listing that offers one wine without option
+// letters ("Disponibili:\n30 x Château Langoa Barton 2022 a 47,50€"): the
+// wine becomes option A (plus A-CASSA for a "(CASSA INTERA a N€)" price).
+// ok is false when the listing has lettered options or more than one priced
+// line. The vintage stays in the name: there is no letter to tell wines apart.
+func ParseSingleWine(body string) (opts []Option, ok bool) {
+	if HasOptions(body) {
+		return nil, false
+	}
+	var found string
+	for _, line := range strings.Split(StripEmoji(body), "\n") {
+		line = strings.TrimSpace(availPrefixRe.ReplaceAllString(strings.TrimSpace(line), ""))
+		if line == "" || caseOfferRe.MatchString(line) || !optPriceRe.MatchString(line) {
+			continue
+		}
+		if found != "" || vendutoRe.MatchString(line) {
+			return nil, false
+		}
+		found = line
+	}
+	if found == "" {
+		return nil, false
+	}
+	text := found
+	var casePrice float64
+	hasCase := false
+	if m := optCaseRe.FindStringSubmatch(text); m != nil {
+		if v, err := strconv.ParseFloat(strings.ReplaceAll(m[1], ",", "."), 64); err == nil {
+			casePrice, hasCase = v, true
+		}
+		text = strings.TrimSpace(optCaseRe.ReplaceAllString(text, " "))
+	}
+	price, okPrice := lastPrice(text)
+	if !okPrice {
+		return nil, false
+	}
+	qty := 0
+	if m := optQtyRe.FindStringSubmatchIndex(text); m != nil {
+		if n, _ := strconv.Atoi(text[m[2]:m[3]]); n < 1900 {
+			qty, text = n, text[m[1]:]
+		}
+	}
+	wine := strings.Trim(strings.TrimSpace(optPriceTail.ReplaceAllString(text, "")), " -–—:.,;*")
+	if wine == "" || len([]rune(wine)) > 90 {
+		return nil, false
+	}
+	opts = []Option{{Letter: "A", WineName: wine, Quantity: qty, Price: price}}
+	if hasCase {
+		opts = append(opts, Option{Letter: "A", WineName: wine + " (cassa intera)", Price: casePrice, Case: true})
+	}
+	return WithCaseOptions(body, opts), true
+}
+
+// "Disponibili:" in front of the wine line
+var availPrefixRe = pyRe(`(?i)^disponib\w*\s*:?\s*`)
+
 // ── order codes in replies ("3A, 2b") ────────────────────────────────────────
 
 type OrderCode struct {

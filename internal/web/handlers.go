@@ -1,6 +1,7 @@
 package web
 
 import (
+	"errors"
 	"fmt"
 	"net/http"
 	"net/url"
@@ -176,11 +177,23 @@ func (s *Server) replyOrder(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	who := reply.Utente
+	modal := r.FormValue("modal") == "1"
 	var msg string
 	switch r.FormValue("op") {
 	case "apply":
 		codes, err := proposalCodes(r, d.Review)
 		if err != nil {
+			if modal {
+				// the error shows inside the modal, which stays open
+				w.Header().Set("HX-Retarget", "#modal")
+				w.Header().Set("HX-Reswap", "innerHTML")
+				msg := err.Error()
+				if errors.Is(err, errNoQuantity) {
+					msg = "Indica la quantità di almeno un vino."
+				}
+				render(w, r, views.ReplyOrderModal(d, *reply, formQty(r, d.Review), msg))
+				return
+			}
 			s.fail(w, r, err)
 			return
 		}
@@ -214,8 +227,60 @@ func (s *Server) replyOrder(w http.ResponseWriter, r *http.Request) {
 	}
 	render(w, r, views.ReplyCounts(d, true))
 	render(w, r, views.ReviewFilter(d, true))
+	if modal {
+		render(w, r, views.ModalSlot(true))
+	}
 	toast(w, r, "success", msg)
 }
+
+// replyOrderForm opens the "Conferma come ordine" modal of a reply the rules
+// didn't read as an order. A campaign without a quotation gets it first.
+func (s *Server) replyOrderForm(w http.ResponseWriter, r *http.Request) {
+	id, err := strconv.ParseInt(r.PathValue("id"), 10, 64)
+	if err != nil {
+		http.Error(w, "bad id", http.StatusBadRequest)
+		return
+	}
+	qs := r.URL.Query()
+	d := views.InserzioniData{SelChat: qs.Get("chat"), SelKey: qs.Get("c")}
+	if err := s.loadSelection(r, &d); err != nil {
+		s.fail(w, r, err)
+		return
+	}
+	if d.Selected != nil && d.Review != nil && d.Review.QuotationID == 0 && d.Review.Orderable {
+		if _, err := s.svc.EnsureQuotation(r.Context(), d.Selected); err != nil {
+			s.fail(w, r, err)
+			return
+		}
+		if err := s.loadSelection(r, &d); err != nil {
+			s.fail(w, r, err)
+			return
+		}
+	}
+	for _, x := range d.Replies {
+		if x.ID == id {
+			render(w, r, views.ReplyOrderModal(d, x, d.Review.GuessQty(x.Testo), ""))
+			return
+		}
+	}
+	s.fail(w, r, fmt.Errorf("messaggio non trovato in questa inserzione"))
+}
+
+// formQty reads back the quantities typed in the editor (to redraw it).
+func formQty(r *http.Request, rv *service.CampaignReview) map[string]int {
+	out := map[string]int{}
+	if rv == nil {
+		return out
+	}
+	for _, o := range rv.Options {
+		if n, err := strconv.Atoi(strings.TrimSpace(r.FormValue("qty_" + o.Key))); err == nil {
+			out[o.Key] = n
+		}
+	}
+	return out
+}
+
+var errNoQuantity = errors.New(`indica almeno una quantità, oppure scegli "Non è un ordine"`)
 
 // proposalCodes reads the quantities of the proposal editor (qty_<option>):
 // empty = option not touched, 0 = cancelled.
@@ -236,7 +301,7 @@ func proposalCodes(r *http.Request, rv *service.CampaignReview) (string, error) 
 		codes = append(codes, o.Code(n))
 	}
 	if len(codes) == 0 {
-		return "", fmt.Errorf("indica almeno una quantità, oppure scegli \"Non è un ordine\"")
+		return "", errNoQuantity
 	}
 	return textutil.FormatOrderCodes(codes), nil
 }

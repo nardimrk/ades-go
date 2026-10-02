@@ -7,6 +7,7 @@ import (
 	"errors"
 	"fmt"
 	"log"
+	"regexp"
 	"sort"
 	"strconv"
 	"strings"
@@ -66,6 +67,10 @@ type CampaignReview struct {
 	Options         []OrderOption
 	Current         map[string]string // author id → current order in this quotation ("3A, 2B")
 	LastRun         string            // "02/10/2026 14:32", "" = never checked
+	// Orderable: replies can be confirmed as orders (the quotation exists, or
+	// EnsureQuotation can create it from the listing)
+	Orderable bool
+	SellerIDs map[string]bool // authors of the campaign's listings: their replies aren't orders
 }
 
 func reviewMetaKey(chatID, key string) string { return "review:" + chatID + "|" + key }
@@ -79,13 +84,33 @@ func selectionCode(x Selection) textutil.OrderCode {
 // CampaignReview loads the options and current orders of the campaign's
 // quotation (none when the campaign has no quotation).
 func (s *Service) CampaignReview(ctx context.Context, c *Campaign) (*CampaignReview, error) {
-	rv := &CampaignReview{Current: map[string]string{}}
+	rv := &CampaignReview{Current: map[string]string{}, SellerIDs: map[string]bool{}}
+	if len(c.MsgIDs) > 0 {
+		ph := strings.TrimSuffix(strings.Repeat("?,", len(c.MsgIDs)), ",")
+		args := make([]any, len(c.MsgIDs))
+		for i, id := range c.MsgIDs {
+			args[i] = id
+		}
+		rows, err := s.db().QueryContext(ctx, "SELECT DISTINCT COALESCE(author_id,'') FROM listings WHERE msg_id IN ("+ph+")", args...)
+		if err != nil {
+			return nil, err
+		}
+		for rows.Next() {
+			var id string
+			if rows.Scan(&id) == nil && id != "" {
+				rv.SellerIDs[id] = true
+			}
+		}
+		rows.Close()
+	}
 	if ts := s.Store.Meta(ctx, reviewMetaKey(c.ChatID, c.Key)); ts != "" {
 		if v, err := strconv.ParseInt(ts, 10, 64); err == nil {
 			rv.LastRun = FmtTS(v)
 		}
 	}
 	if len(c.QuotationIDs) == 0 {
+		_, single := textutil.ParseSingleWine(c.Testo)
+		rv.Orderable = single || len(textutil.ParseOptions(c.Testo)) > 0
 		return rv, nil
 	}
 	rv.QuotationID = c.QuotationIDs[0]
@@ -117,6 +142,7 @@ func (s *Service) CampaignReview(ctx context.Context, c *Campaign) (*CampaignRev
 		}
 		return a.Letter < b.Letter
 	})
+	rv.Orderable = len(rv.Options) > 0
 	sel, err := s.ComputeSelections(ctx)
 	if err != nil {
 		return nil, err
@@ -168,8 +194,43 @@ func (rv *CampaignReview) ProposalQty(codes string) map[string]int {
 	return out
 }
 
+var bareQtyRe = regexp.MustCompile(`\b(\d{1,3})\b`)
+
+// GuessQty prefills the "Conferma come ordine" editor: with one bottle
+// option, the only number in the message ("4", "ne prendo 4 grazie").
+func (rv *CampaignReview) GuessQty(body string) map[string]int {
+	var bottles []OrderOption
+	for _, o := range rv.Options {
+		if !o.Case {
+			bottles = append(bottles, o)
+		}
+	}
+	nums := bareQtyRe.FindAllString(body, -1)
+	if len(bottles) != 1 || len(nums) != 1 {
+		return map[string]int{}
+	}
+	n, _ := strconv.Atoi(nums[0])
+	if n < 1 {
+		return map[string]int{}
+	}
+	return map[string]int{bottles[0].Key: n}
+}
+
 // cleanProposal keeps the codes of existing options, in canonical form.
 func (rv *CampaignReview) cleanProposal(codes string) string {
+	// with one bottle option a bare quantity ("4") is an order of it
+	if n, err := strconv.Atoi(strings.TrimSpace(codes)); err == nil {
+		var bottles []OrderOption
+		for _, o := range rv.Options {
+			if !o.Case {
+				bottles = append(bottles, o)
+			}
+		}
+		if len(bottles) == 1 && n >= 0 && n <= 999 {
+			return textutil.FormatOrderCodes([]textutil.OrderCode{bottles[0].Code(n)})
+		}
+		return ""
+	}
 	var out []textutil.OrderCode
 	seen := map[string]int{}
 	for _, c := range textutil.ParseOrders(codes) {
@@ -185,6 +246,54 @@ func (rv *CampaignReview) cleanProposal(codes string) string {
 		out = append(out, o.Code(c.Qty))
 	}
 	return textutil.FormatOrderCodes(out)
+}
+
+// EnsureQuotation creates the campaign's quotation when it has none: from
+// lettered options (the automatic import, as on Ordini), else from a single
+// wine. Returns whether one was created.
+func (s *Service) EnsureQuotation(ctx context.Context, c *Campaign) (bool, error) {
+	if len(c.QuotationIDs) > 0 {
+		return false, nil
+	}
+	created, _, _, err := s.ImportPreventivi(ctx)
+	if err != nil {
+		return false, err
+	}
+	if created > 0 {
+		if fresh, err := s.FindCampaign(ctx, c.ChatID, c.Key); err == nil && fresh != nil && len(fresh.QuotationIDs) > 0 {
+			return true, nil
+		}
+	}
+	return s.EnsureSingleWineQuotation(ctx, c)
+}
+
+// EnsureSingleWineQuotation creates the quotation of a campaign that offers
+// a single wine without option letters (see textutil.ParseSingleWine), if it
+// has none. Only "Controlla risposte" calls it, so such listings get an order
+// only when the user asks: the automatic import leaves them out.
+func (s *Service) EnsureSingleWineQuotation(ctx context.Context, c *Campaign) (bool, error) {
+	if len(c.QuotationIDs) > 0 || len(c.MsgIDs) == 0 {
+		return false, nil
+	}
+	opts, ok := textutil.ParseSingleWine(c.Testo)
+	if !ok {
+		return false, nil
+	}
+	ph := strings.TrimSuffix(strings.Repeat("?,", len(c.MsgIDs)), ",")
+	args := make([]any, len(c.MsgIDs))
+	for i, id := range c.MsgIDs {
+		args[i] = id
+	}
+	var ts int64
+	if err := s.db().QueryRowContext(ctx, "SELECT COALESCE(MIN(timestamp),0) FROM listings WHERE msg_id IN ("+ph+")", args...).Scan(&ts); err != nil {
+		return false, err
+	}
+	num, err := s.CreateImportedQuotation(ctx, c.MsgIDs, ts, opts)
+	if err != nil {
+		return false, err
+	}
+	log.Printf("[review] %q: single-wine quotation %s created", c.Key, num)
+	return true, nil
 }
 
 // ── actions on a reply ───────────────────────────────────────────────────────
@@ -308,6 +417,17 @@ func (j *ReviewJob) run(ctx context.Context, chatID, key string) {
 	if err != nil || camp == nil {
 		finish("Inserzione non trovata.", true)
 		return
+	}
+	// one wine without letters: its quotation (option A) is created now, so
+	// replies like "4" can be added to it
+	if created, err := j.svc.EnsureSingleWineQuotation(ctx, camp); err != nil {
+		finish("Errore: "+err.Error(), true)
+		return
+	} else if created {
+		if camp, err = j.svc.FindCampaign(ctx, chatID, key); err != nil || camp == nil {
+			finish("Inserzione non trovata.", true)
+			return
+		}
 	}
 	replies, err := j.svc.CampaignReplies(ctx, camp.MsgIDs)
 	if err != nil {
@@ -467,6 +587,7 @@ Segnala SOLO i messaggi che richiedono il controllo di una persona:
 - "ambigua": il messaggio sembra un ordine ma non si capisce con certezza quale opzione o quantità
   ("ne prendo 2", "anche per me", "come sopra", "una cassa" con più opzioni).
 NON segnalare: saluti, ringraziamenti, domande generiche, messaggi del venditore, ordini letti correttamente.
+%s
 
 Per ogni messaggio segnalato scrivi "proposta": i codici che quel messaggio dovrebbe dare, stesso formato
 (es. "3A" oppure "3A, 1 cassa B"), con la quantità risultante per ogni opzione che il messaggio tocca
@@ -476,6 +597,24 @@ Lascia "proposta" vuota se il messaggio non è un ordine o se non si può dedurr
 
 Rispondi SOLO con un array JSON, vuoto [] se non c'è nulla da segnalare. Nessun altro testo:
 [{"n": 3, "tipo": "dubbia", "motivo": "...", "proposta": "3A"}]`
+
+// singleOptionRule: with one wine on offer, a bare quantity is an order.
+func singleOptionRule(rv *CampaignReview) string {
+	letters := map[string]bool{}
+	for _, o := range rv.Options {
+		letters[o.Letter] = true
+	}
+	if len(letters) != 1 {
+		return ""
+	}
+	l := rv.Options[0].Letter
+	return `
+C'è UNA SOLA opzione (` + l + `): i clienti spesso scrivono solo la quantità. Un messaggio che indica solo
+un numero di bottiglie ("4", "2 grazie", "ne prendo due", "per me 3", "6 bottiglie") è un ordine di ` + l + `:
+se la lettura è "nessuna" segnalalo come "dubbia" e proponi la quantità con la lettera (es. "4` + l + `").
+Una cassa ("una cassa", "1 cassa") è "1 cassa ` + l + `" se l'opzione cassa esiste, altrimenti chiedi conferma ("ambigua").
+`
+}
 
 // reviewPrompt asks about batch (replies[offset:offset+len(batch)]); the
 // messages keep their number in the whole conversation.
@@ -527,5 +666,5 @@ func reviewPrompt(camp *Campaign, rv *CampaignReview, all, batch []ReplyView, of
 		fmt.Fprintf(&msgs, "[%d] %s, %s: %s\n    lettura: %s\n", offset+i+1, r.Utente, r.Ora,
 			strings.ReplaceAll(string(body), "\n", " / "), reading)
 	}
-	return fmt.Sprintf(reviewPromptHead, string(listing), opts.String(), cur.String(), msgs.String())
+	return fmt.Sprintf(reviewPromptHead, string(listing), opts.String(), cur.String(), msgs.String(), singleOptionRule(rv))
 }

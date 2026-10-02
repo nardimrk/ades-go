@@ -224,3 +224,25 @@ func TestIsMediaBlob(t *testing.T) {
 		}
 	}
 }
+
+func TestParseSingleWine(t *testing.T) {
+	cases := []struct {
+		body string
+		want []Option
+	}{
+		{"Disponibili:\n\n30 x Château Langoa Barton 2022 a 47,50€", []Option{{Letter: "A", WineName: "Château Langoa Barton 2022", Quantity: 30, Price: 47.5}}},
+		{"Riesling Secco\nDisponibili: Riesling 2025 a 14,50€ (CASSA INTERA a 78€)", []Option{
+			{Letter: "A", WineName: "Riesling 2025", Price: 14.5},
+			{Letter: "A", WineName: "Riesling 2025 (cassa intera)", Price: 78, Case: true}}},
+		{"A. 6x Barolo a 40€", nil},                                // lettered: the usual rules
+		{"12 x Barolo 2019 a 40€\n6 x Barbaresco 2018 a 30€", nil}, // two wines
+		{"Venduto 12 x Barolo a 40€", nil},
+		{"Buongiorno a tutti!", nil},
+	}
+	for _, c := range cases {
+		got, ok := ParseSingleWine(c.body)
+		if ok != (c.want != nil) || !reflect.DeepEqual(got, c.want) {
+			t.Errorf("ParseSingleWine(%q) = %+v, %v; want %+v", c.body, got, ok, c.want)
+		}
+	}
+}

@@ -373,6 +373,32 @@ button.icon { display: inline-flex; align-items: center; justify-content: center
 .review-actions { display: flex; gap: .5rem; flex-wrap: wrap; }
 .reply-fixed { display: flex; align-items: center; gap: .5rem; flex-wrap: wrap; margin-top: .35rem; font-size: .9rem; }
 
+.reply-actions { margin-top: .35rem; }
+/* "Conferma come ordine": a centred dialog; on phones a sheet from the bottom */
+dialog.modal {
+  width: min(560px, calc(100vw - 2rem)); max-width: none; max-height: calc(100dvh - 2rem); padding: 0;
+  border: 1px solid var(--border); border-radius: var(--radius); background: var(--panel); color: var(--text);
+  box-shadow: 0 12px 40px var(--shadow);
+}
+dialog.modal::backdrop { background: rgba(0, 0, 0, .5); }
+body:has(dialog.modal[open]) { overflow: hidden; }
+.modal-form { display: flex; flex-direction: column; max-height: inherit; }
+.modal-head { display: flex; align-items: flex-start; justify-content: space-between; gap: .75rem; padding: 1rem 1rem .5rem; }
+.modal-title { display: flex; flex-direction: column; gap: .15rem; min-width: 0; overflow-wrap: anywhere; }
+.modal-title h3 { margin: 0; }
+.modal-head button.icon:hover { background: var(--bg); }
+.modal-body { display: flex; flex-direction: column; gap: .75rem; padding: .25rem 1rem 1rem; overflow-y: auto; min-height: 0; }
+.modal-body .alert { margin: 0; }
+.modal-quote {
+  background: var(--listing-bg); border-left: 4px solid var(--wa-dark); border-radius: 4px;
+  padding: .5rem .75rem; font-size: 14px; line-height: 1.4; white-space: pre-wrap; overflow-wrap: anywhere;
+}
+.modal-note { margin: 0; font-size: .85rem; }
+.modal-foot {
+  display: flex; justify-content: flex-end; gap: .5rem; flex-wrap: wrap; border-top: 1px solid var(--border);
+  padding: .75rem 1rem; padding-bottom: max(.75rem, env(safe-area-inset-bottom));
+}
+
 /* ── consegne ───────────────────────────────────────────── */
 .picker {
   max-height: min(320px, 50vh); overflow-y: auto; border: 1px solid var(--border); border-radius: 8px;
@@ -551,6 +577,8 @@ img { max-width: 100%; height: auto; }
   .review-filter .seg-btn { flex: 1; }
   .review-actions .btn { flex: 1 1 auto; }
   .review-actions .btn.primary { flex-basis: 100%; }
+  dialog.modal { width: 100%; max-height: 92dvh; margin: auto 0 0; border-radius: 16px 16px 0 0; border-bottom: 0; }
+  .modal-foot .btn { flex: 1; }
   .metric b { font-size: 1.35rem; }
   .login { margin: 4vh .75rem; padding: 1.25rem; }
   #toasts { left: .75rem; right: .75rem; bottom: max(.75rem, env(safe-area-inset-bottom)); }

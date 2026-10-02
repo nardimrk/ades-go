@@ -238,6 +238,7 @@
     checkSelBar();
     restoreViews();
     syncFlagView();
+    openModals(root);
     root.querySelectorAll("[data-proposal]").forEach(proposalTotal);
     root.querySelectorAll("[data-autohide]").forEach(function (el) {
       if (!el.dataset.bound) { el.dataset.bound = "1"; autohide(el); }
@@ -433,6 +434,25 @@
     if (!b || !root) return;
     root.dataset.show = b.dataset.flagView;
     syncFlagView();
+  });
+
+  // Modals (<dialog data-modal-open>, e.g. "Conferma come ordine"): opened
+  // as soon as htmx inserts them, removed when closed (Esc, Annulla, X,
+  // tap outside). The server empties #modal once the action succeeds.
+  function openModals(root) {
+    var list = root.matches && root.matches("dialog[data-modal-open]") ? [root] : root.querySelectorAll("dialog[data-modal-open]");
+    Array.prototype.forEach.call(list, function (dlg) {
+      if (dlg.open || !dlg.showModal) return;
+      dlg.addEventListener("close", function () { dlg.remove(); });
+      dlg.showModal();
+      var first = dlg.querySelector("input[type=number]");
+      if (first && !matchMedia("(pointer: coarse)").matches) first.focus();
+    });
+  }
+  document.addEventListener("click", function (e) {
+    var dlg = e.target.closest("dialog.modal");
+    if (!dlg) return;
+    if (e.target === dlg || e.target.closest("[data-modal-close]")) dlg.close();
   });
 
   // Clickable table rows (data-href).

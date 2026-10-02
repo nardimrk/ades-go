@@ -60,6 +60,7 @@ func (s *Server) Handler(static fs.FS) http.Handler {
 	mux.HandleFunc("GET /inserzioni/review", s.reviewStatus)
 	mux.HandleFunc("POST /inserzioni/review", s.reviewStart)
 	mux.HandleFunc("DELETE /replies/{id}", s.deleteReply)
+	mux.HandleFunc("GET /replies/{id}/order", s.replyOrderForm)
 	mux.HandleFunc("POST /replies/{id}/order", s.replyOrder)
 
 	mux.HandleFunc("GET /ordini", s.preventivi)

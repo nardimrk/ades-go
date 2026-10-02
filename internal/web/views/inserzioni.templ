@@ -86,7 +86,10 @@ templ TitleJobStatus(st service.TitleStatus, enabled bool) {
 					hx-post="/inserzioni/titles"
 					hx-target="#title-job"
 					title="Genera con l'LLM un titolo breve per le inserzioni senza titolo (quelle rinominate a mano non vengono toccate)"
-				>Normalizza titoli (AI)</button>
+				>
+					Normalizza titoli
+					@IconSparkles()
+				</button>
 			}
 		</div>
 	}
@@ -154,6 +157,7 @@ templ InserzioneDetail(d InserzioniData) {
 		<div id="conv" class="conv">
 			@Conversation(d)
 		</div>
+		@ModalSlot(false)
 	}
 }
 
@@ -338,10 +342,11 @@ templ ReviewBar(d InserzioniData) {
 				hx-swap="outerHTML"
 			>
 				if d.Review != nil && d.Review.LastRun != "" {
-					Ricontrolla risposte (AI)
+					Ricontrolla risposte
 				} else {
-					Controlla risposte (AI)
+					Controlla risposte
 				}
+				@IconSparkles()
 			</button>
 		</div>
 	}
@@ -397,6 +402,16 @@ templ ReplyItem(d InserzioniData, r service.ReplyView, oob bool) {
 			</form>
 		} else if r.Check.Open() && d.Review != nil {
 			@ReviewPanel(d, r)
+		} else if !r.Ordine && d.Review != nil && d.Review.Orderable && !d.Review.SellerIDs[r.AuthorID] {
+			<div class="reply-actions">
+				<button
+					type="button"
+					class="btn small"
+					hx-get={ "/replies/" + i64(r.ID) + "/order?" + reviewVals(d) }
+					hx-target="#modal"
+					hx-swap="innerHTML"
+				>Conferma come ordine</button>
+			</div>
 		}
 	</div>
 }
@@ -447,7 +462,7 @@ templ ReviewPanel(d InserzioniData, r service.ReplyView) {
 				{{ shown, more := proposalRows(d.Review, qty) }}
 				<div class="prop-rows">
 					for _, o := range shown {
-						@proposalRow(r, o, qty)
+						@proposalRow("q", r, o, qty)
 					}
 				</div>
 				if len(more) > 0 {
@@ -455,7 +470,7 @@ templ ReviewPanel(d InserzioniData, r service.ReplyView) {
 						<summary>Altre opzioni ({ itoa(len(more)) })</summary>
 						<div class="prop-rows">
 							for _, o := range more {
-								@proposalRow(r, o, qty)
+								@proposalRow("q", r, o, qty)
 							}
 						</div>
 					</details>
@@ -474,9 +489,11 @@ templ ReviewPanel(d InserzioniData, r service.ReplyView) {
 	</form>
 }
 
-templ proposalRow(r service.ReplyView, o service.OrderOption, qty map[string]int) {
+// proposalRow: one option with its quantity stepper; prefix keeps the ids
+// of the inline panel ("q") and of the modal ("m") apart.
+templ proposalRow(prefix string, r service.ReplyView, o service.OrderOption, qty map[string]int) {
 	<div class="prop-row">
-		<label class="prop-opt" for={ "q-" + i64(r.ID) + "-" + o.Key }>
+		<label class="prop-opt" for={ prefix + "-" + i64(r.ID) + "-" + o.Key }>
 			<b>{ o.Label() }</b>
 		</label>
 		<span class="prop-wine">
@@ -487,7 +504,7 @@ templ proposalRow(r service.ReplyView, o service.OrderOption, qty map[string]int
 			<button type="button" class="btn step" data-step="-1" aria-label={ "Meno " + o.Label() }>&minus;</button>
 			<input
 				type="number"
-				id={ "q-" + i64(r.ID) + "-" + o.Key }
+				id={ prefix + "-" + i64(r.ID) + "-" + o.Key }
 				name={ "qty_" + o.Key }
 				value={ qtyValue(qty, o.Key) }
 				min="0"
@@ -501,4 +518,65 @@ templ proposalRow(r service.ReplyView, o service.OrderOption, qty map[string]int
 			<button type="button" class="btn step" data-step="1" aria-label={ "Più " + o.Label() }>+</button>
 		</span>
 	</div>
+}
+
+// ModalSlot holds the open modal; emptied out-of-band once it is done.
+templ ModalSlot(oob bool) {
+	<div id="modal" { oobAttrs(oob)... }></div>
+}
+
+// ReplyOrderModal: confirm by hand a reply the rules didn't read as an
+// order. The lines go to the order (quotation) of the inserzione, next to
+// those read automatically.
+templ ReplyOrderModal(d InserzioniData, r service.ReplyView, qty map[string]int, errMsg string) {
+	<dialog class="modal" data-modal-open aria-labelledby={ "modal-title-" + i64(r.ID) }>
+		<form class="modal-form" hx-post={ "/replies/" + i64(r.ID) + "/order" } hx-swap="none">
+			<input type="hidden" name="chat" value={ d.SelChat }/>
+			<input type="hidden" name="c" value={ d.SelKey }/>
+			<input type="hidden" name="modal" value="1"/>
+			<div class="modal-head">
+				<div class="modal-title">
+					<h3 id={ "modal-title-" + i64(r.ID) }>Conferma ordine</h3>
+					<span class="muted">
+						{ r.Utente } · { r.Ora }
+						if d.Review != nil && d.Review.QuotationNumber != "" {
+							· ordine { d.Review.QuotationNumber }
+						}
+					</span>
+				</div>
+				<button type="button" class="icon" data-modal-close aria-label="Chiudi">@IconX()</button>
+			</div>
+			<div class="modal-body">
+				<div class="modal-quote">{ compactText(r.Testo) }</div>
+				if errMsg != "" {
+					@Alert("error", errMsg)
+				}
+				if d.Review == nil || len(d.Review.Options) == 0 {
+					@Alert("info", "Questa inserzione non ha vini con prezzo da cui creare l'ordine.")
+				} else {
+					if cur := d.Review.Current[r.AuthorID]; cur != "" {
+						<p class="muted modal-note">Ordine attuale di { r.Utente }: <b>{ cur }</b>. Le quantità indicate qui sostituiscono quelle della stessa opzione.</p>
+					}
+					<fieldset class="add-panel proposal" data-proposal>
+						<legend>Vino e quantità</legend>
+						<div class="prop-rows">
+							for _, o := range d.Review.Options {
+								@proposalRow("m", r, o, qty)
+							}
+						</div>
+						<div class="prop-foot">
+							<span class="muted">Vuoto = opzione non toccata · 0 = annullata</span>
+							<b class="prop-total" data-prop-total></b>
+						</div>
+					</fieldset>
+				}
+			</div>
+			<div class="modal-foot">
+				<button type="button" class="btn" data-modal-close>Annulla</button>
+				if d.Review != nil && len(d.Review.Options) > 0 {
+					<button type="submit" class="btn primary" name="op" value="apply">Conferma ordine</button>
+				}
+			</div>
+		</form>
+	</dialog>
 }
