@@ -178,7 +178,11 @@ templ CustomerSection(qnum string, sec service.CustomerSection, msg, errMsg, cli
 		<input type="hidden" name="utente" value={ sec.Utente }/>
 		<input type="hidden" name="cliente" value={ sec.Cliente }/>
 		<div class="card-head">
-			<span><b>{ sec.Cliente }</b> — € { money(sec.Total()) }</span>
+			<span class="client-row">
+				<b class="client-name">{ sec.Cliente }</b>
+				<button type="button" class="btn small" data-modal-show={ sectionID(sec.Utente) + "-cliente" }>Cambia</button>
+				<span class="nowrap">€ { money(sec.Total()) }</span>
+			</span>
 			if sec.SavedOn != "" {
 				<span class="badge badge-ok">Confermato il { sec.SavedOn }</span>
 			}
@@ -189,11 +193,6 @@ templ CustomerSection(qnum string, sec service.CustomerSection, msg, errMsg, cli
 		if sec.Cliente != sec.Utente {
 			<p class="muted">Nome originale rilevato: { sec.Utente }</p>
 		}
-		<div class="client-row">
-			<span class="muted">Cliente</span>
-			<b class="client-name">{ sec.Cliente }</b>
-			<button type="button" class="btn small" data-modal-show={ sectionID(sec.Utente) + "-cliente" }>Modifica cliente</button>
-		</div>
 		@clientModal(sec, clientErr)
 		if len(sec.Rows) == 0 {
 			<p class="muted">Nessuna riga.</p>
