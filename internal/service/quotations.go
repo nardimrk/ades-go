@@ -129,22 +129,6 @@ func (s *Service) ComputeSelections(ctx context.Context) ([]Selection, error) {
 	return out, nil
 }
 
-// OrderReplyIDs returns the replies read as an order (by the parser, or by
-// the LLM whose answer is stored after "→"): they parse into at least one
-// option of their quotation. Replies later corrected by the same customer
-// still count.
-func (s *Service) OrderReplyIDs(ctx context.Context) (map[int64]bool, error) {
-	sel, err := s.parseSelections(ctx)
-	if err != nil {
-		return nil, err
-	}
-	ids := map[int64]bool{}
-	for _, x := range sel {
-		ids[x.ReplyID] = true
-	}
-	return ids, nil
-}
-
 // parsedBody is what the order parser reads from one reply body.
 type parsedBody struct {
 	codes          []textutil.OrderCode
@@ -190,7 +174,7 @@ func (s *Service) loadSelections(ctx context.Context) ([]Selection, error) {
 	}
 
 	rows, err := s.db().QueryContext(ctx, `
-		SELECT r.id, r.author_id, `+userNameSQL+`, COALESCE(r.msg_id,''), COALESCE(r.body,''), COALESCE(r.timestamp,0),
+		SELECT r.id, r.author_id, `+userNameSQL+`, COALESCE(r.msg_id,''), COALESCE(r.body,''), COALESCE(r.order_override,''), COALESCE(r.timestamp,0),
 		       q.quotation_number, q.id, COALESCE(q.quotation_date,'')
 		FROM replies r
 		LEFT JOIN users u      ON u.id     = r.author_id
@@ -209,17 +193,26 @@ func (s *Service) loadSelections(ctx context.Context) ([]Selection, error) {
 		qid                             int64
 		qdate                           string
 		parsed                          parsedBody
+		override                        bool // codes set by hand
 	}
 	var reps []rep
 	for rows.Next() {
 		var r rep
 		var author, name, qnum sql.NullString
-		if err := rows.Scan(&r.id, &author, &name, &r.msgID, &r.body, &r.ts, &qnum, &r.qid, &r.qdate); err != nil {
+		var override string
+		if err := rows.Scan(&r.id, &author, &name, &r.msgID, &r.body, &override, &r.ts, &qnum, &r.qid, &r.qdate); err != nil {
 			rows.Close()
 			return nil, err
 		}
 		r.authorID, r.userName, r.qnum = nullStr(author), nullStr(name), nullStr(qnum)
-		r.parsed = parse(r.body)
+		r.override = override != ""
+		if r.override {
+			// codes set by hand replace what the rules read in the body
+			// ("-" = not an order: parses into nothing)
+			r.parsed = parsedBody{codes: textutil.ParseOrders(override)}
+		} else {
+			r.parsed = parse(r.body)
+		}
 		reps = append(reps, r)
 	}
 	rows.Close()
@@ -230,9 +223,10 @@ func (s *Service) loadSelections(ctx context.Context) ([]Selection, error) {
 	// The same physical message can be stored twice (real id + synthetic id,
 	// possibly with slightly re-formatted text after a WhatsApp edit). Two
 	// distinct messages from one customer in the same second are effectively
-	// impossible, so keep one per (quotation, author, second): the version that
-	// parses into the most option codes, and on a tie the one stored under its
-	// real WhatsApp id (the synthetic one is the early, possibly pre-edit copy).
+	// impossible, so keep one per (quotation, author, second): the copy
+	// corrected by hand, else the version that parses into the most option
+	// codes, and on a tie the one stored under its real WhatsApp id (the
+	// synthetic one is the early, possibly pre-edit copy).
 	type key struct {
 		qid    int64
 		author string
@@ -242,8 +236,10 @@ func (s *Service) loadSelections(ctx context.Context) ([]Selection, error) {
 	for i, r := range reps {
 		k := key{r.qid, r.authorID, r.ts}
 		n := len(r.parsed.codes)
-		if j, ok := best[k]; !ok || n > len(reps[j].parsed.codes) ||
-			(n == len(reps[j].parsed.codes) && realID(r.msgID) && !realID(reps[j].msgID)) {
+		// a copy corrected by hand always wins
+		if j, ok := best[k]; !ok || (r.override && !reps[j].override) ||
+			(r.override == reps[j].override && (n > len(reps[j].parsed.codes) ||
+				(n == len(reps[j].parsed.codes) && realID(r.msgID) && !realID(reps[j].msgID)))) {
 			best[k] = i
 		}
 	}

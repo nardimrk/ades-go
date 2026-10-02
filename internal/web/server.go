@@ -28,14 +28,15 @@ type Server struct {
 	wa     *wa.Manager
 	mail   *mail.Mailgun
 	llm    *llm.Client
-	titles *service.TitleJob
+	titles  *service.TitleJob
+	reviews *service.ReviewJob
 
 	uploadsMu sync.Mutex
 	uploads   map[string]*upload
 }
 
-func New(cfg *config.Config, store *db.Store, svc *service.Service, waMgr *wa.Manager, mailer *mail.Mailgun, llmClient *llm.Client, titles *service.TitleJob) *Server {
-	return &Server{cfg: cfg, store: store, svc: svc, wa: waMgr, mail: mailer, llm: llmClient, titles: titles, uploads: map[string]*upload{}}
+func New(cfg *config.Config, store *db.Store, svc *service.Service, waMgr *wa.Manager, mailer *mail.Mailgun, llmClient *llm.Client, titles *service.TitleJob, reviews *service.ReviewJob) *Server {
+	return &Server{cfg: cfg, store: store, svc: svc, wa: waMgr, mail: mailer, llm: llmClient, titles: titles, reviews: reviews, uploads: map[string]*upload{}}
 }
 
 func (s *Server) Handler(static fs.FS) http.Handler {
@@ -56,7 +57,10 @@ func (s *Server) Handler(static fs.FS) http.Handler {
 	mux.HandleFunc("POST /inserzioni/rename", s.inserzioniRename)
 	mux.HandleFunc("GET /inserzioni/titles", s.titleJobStatus)
 	mux.HandleFunc("POST /inserzioni/titles", s.titleJobStart)
+	mux.HandleFunc("GET /inserzioni/review", s.reviewStatus)
+	mux.HandleFunc("POST /inserzioni/review", s.reviewStart)
 	mux.HandleFunc("DELETE /replies/{id}", s.deleteReply)
+	mux.HandleFunc("POST /replies/{id}/order", s.replyOrder)
 
 	mux.HandleFunc("GET /ordini", s.preventivi)
 	mux.HandleFunc("GET /ordini/list", s.preventiviList)

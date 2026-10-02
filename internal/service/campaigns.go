@@ -240,20 +240,28 @@ func (s *Service) FindCampaign(ctx context.Context, chatID, key string) (*Campai
 }
 
 type ReplyView struct {
-	ID     int64
-	Utente string
-	Testo  string
-	Ora    string
-	Ordine bool // read as an order (parser or LLM)
+	ID       int64
+	AuthorID string
+	Utente   string
+	Testo    string
+	Ora      string
+	Ordine   bool   // read as an order (parser, LLM or by hand)
+	Reading  string // the order codes read from it ("3A, 1 cassa B"), "" = none
+	Override string // codes set by hand ("-" = not an order), "" = none
+	Check    *ReplyCheck
 }
 
 func (s *Service) CampaignReplies(ctx context.Context, msgIDs []string) ([]ReplyView, error) {
 	if len(msgIDs) == 0 {
 		return nil, nil
 	}
-	orders, err := s.OrderReplyIDs(ctx)
+	sel, err := s.parseSelections(ctx)
 	if err != nil {
 		return nil, err
+	}
+	readings := map[int64][]textutil.OrderCode{}
+	for _, x := range sel {
+		readings[x.ReplyID] = append(readings[x.ReplyID], selectionCode(x))
 	}
 	ph := strings.TrimSuffix(strings.Repeat("?,", len(msgIDs)), ",")
 	args := make([]any, len(msgIDs))
@@ -261,8 +269,10 @@ func (s *Service) CampaignReplies(ctx context.Context, msgIDs []string) ([]Reply
 		args[i] = id
 	}
 	rows, err := s.db().QueryContext(ctx, `
-		SELECT r.id, `+userNameSQL+`, COALESCE(r.body,''), COALESCE(r.timestamp,0)
+		SELECT r.id, COALESCE(r.author_id,''), `+userNameSQL+`, COALESCE(r.body,''), COALESCE(r.timestamp,0), COALESCE(r.order_override,''),
+		       c.kind, c.reason, c.proposal, c.body, c.status
 		FROM replies r LEFT JOIN users u ON u.id = r.author_id
+		LEFT JOIN reply_checks c ON c.reply_id = r.id
 		WHERE r.listing_msg_id IN (`+ph+`)
 		ORDER BY r.timestamp, r.id`, args...)
 	if err != nil {
@@ -272,14 +282,19 @@ func (s *Service) CampaignReplies(ctx context.Context, msgIDs []string) ([]Reply
 	var out []ReplyView
 	for rows.Next() {
 		var r ReplyView
-		var name sql.NullString
+		var name, kind, reason, proposal, checkedBody, status sql.NullString
 		var ts int64
-		if err := rows.Scan(&r.ID, &name, &r.Testo, &ts); err != nil {
+		if err := rows.Scan(&r.ID, &r.AuthorID, &name, &r.Testo, &ts, &r.Override, &kind, &reason, &proposal, &checkedBody, &status); err != nil {
 			return nil, err
 		}
 		r.Utente = FmtName(nullStr(name))
 		r.Ora = FmtTS(ts)
-		r.Ordine = orders[r.ID]
+		r.Reading = textutil.FormatOrderCodes(readings[r.ID])
+		r.Ordine = r.Reading != ""
+		if kind.Valid {
+			r.Check = &ReplyCheck{ReplyID: r.ID, Kind: kind.String, Reason: reason.String, Proposal: proposal.String,
+				Status: status.String, Stale: checkedBody.String != r.Testo}
+		}
 		out = append(out, r)
 	}
 	return out, rows.Err()
@@ -303,6 +318,9 @@ func (s *Service) RenameCampaign(ctx context.Context, msgIDs []string, title str
 }
 
 func (s *Service) DeleteReply(ctx context.Context, id int64) error {
+	if _, err := s.db().ExecContext(ctx, "DELETE FROM reply_checks WHERE reply_id = ?", id); err != nil {
+		return err
+	}
 	_, err := s.db().ExecContext(ctx, "DELETE FROM replies WHERE id = ?", id)
 	return err
 }

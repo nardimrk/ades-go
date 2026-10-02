@@ -325,6 +325,54 @@ button.icon { display: inline-flex; align-items: center; justify-content: center
 .reply-head button.icon { padding: .15rem; }
 .reply-text { font-size: 14px; line-height: 1.4; white-space: pre-wrap; overflow-wrap: anywhere; }
 
+/* "Controlla risposte" (AI): the check bar, the filter, flagged replies
+   (amber bar = dubbia, blue = ambigua) and the proposed-order editor */
+.review-bar {
+  display: flex; align-items: center; gap: .5rem .75rem; flex-wrap: wrap; margin-bottom: .6rem;
+  padding: .55rem .75rem; background: var(--panel); border: 1px solid var(--border); border-radius: var(--radius);
+}
+.review-bar.running { border-color: var(--accent); background: var(--accent-soft); }
+.review-msg { flex: 1 1 14rem; min-width: 0; display: flex; flex-direction: column; gap: .1rem; font-size: .9rem; }
+.review-error { color: var(--danger); }
+.spinner {
+  width: 18px; height: 18px; flex: none; border-radius: 50%;
+  border: 2px solid var(--accent); border-right-color: transparent; animation: spin .8s linear infinite;
+}
+@keyframes spin { to { transform: rotate(360deg); } }
+@media (prefers-reduced-motion: reduce) { .spinner { animation-duration: 3s; } }
+.review-filter { margin-bottom: .6rem; }
+.review-filter:empty { display: none; }
+.badge-info { color: var(--info-text); background: var(--info-bg); border-color: var(--info-border); }
+/* the reading may wrap (several cases); the name never breaks letter by letter */
+.reply-reading { font-size: 12px; font-weight: 600; color: var(--ok); min-width: 0; }
+.reply-head:has(.reply-reading) .reply-name { flex: none; max-width: 55%; }
+.reply.flagged { background: var(--warning-bg); box-shadow: inset 4px 0 0 var(--warn); padding-left: 1rem; }
+.reply.flagged.flag-ambigua { background: var(--info-bg); box-shadow: inset 4px 0 0 var(--info-border); }
+.replies[data-show=open] .reply:not(.flagged) { display: none; }
+.flag-empty { display: none; margin: 0; padding: .75rem; }
+.replies[data-show=open]:not(:has(.reply.flagged)) .flag-empty { display: block; }
+.review-panel { display: flex; flex-direction: column; gap: .5rem; margin: .5rem 0 .25rem; }
+.review-why { display: flex; gap: .4rem; align-items: baseline; flex-wrap: wrap; font-size: .9rem; }
+.review-facts { margin: 0; font-size: .85rem; }
+.review-panel .alert { margin: 0; }
+.proposal { background: var(--panel); }
+/* option | wine + price | stepper: one grid, so the columns line up */
+.prop-rows { display: grid; grid-template-columns: auto minmax(0, 1fr) auto; gap: .4rem .6rem; align-items: center; }
+.prop-row { display: contents; }
+.add-panel .prop-opt { color: var(--accent); font-size: .95rem; white-space: nowrap; }
+.prop-wine { font-size: .9rem; line-height: 1.3; overflow-wrap: anywhere; }
+.stepper { display: inline-flex; }
+.stepper .step { width: var(--ctl-h); padding: 0; font-size: 1.15rem; font-weight: 600; }
+.stepper .step:first-child { border-radius: 8px 0 0 8px; }
+.stepper .step:last-child { border-radius: 0 8px 8px 0; }
+.add-panel .stepper input { width: 3.25rem; text-align: center; border-radius: 0; border-left: 0; border-right: 0; -moz-appearance: textfield; appearance: textfield; }
+.stepper input::-webkit-inner-spin-button, .stepper input::-webkit-outer-spin-button { -webkit-appearance: none; margin: 0; }
+.prop-more > summary { margin: .55rem 0 .4rem; font-size: .9rem; color: var(--accent); }
+.prop-foot { display: flex; justify-content: space-between; align-items: baseline; gap: .25rem 1rem; flex-wrap: wrap; margin-top: .55rem; font-size: .85rem; }
+.prop-total { font-size: .95rem; }
+.review-actions { display: flex; gap: .5rem; flex-wrap: wrap; }
+.reply-fixed { display: flex; align-items: center; gap: .5rem; flex-wrap: wrap; margin-top: .35rem; font-size: .9rem; }
+
 /* ── consegne ───────────────────────────────────────────── */
 .picker {
   max-height: min(320px, 50vh); overflow-y: auto; border: 1px solid var(--border); border-radius: 8px;
@@ -433,6 +481,7 @@ img { max-width: 100%; height: auto; }
   .btn, input:not([type=checkbox]):not([type=radio]), select { min-height: 44px; }
   button.icon { min-width: 40px; min-height: 40px; }
   .btn.icon-btn { width: 44px; height: 44px; }
+  .stepper .step { width: 44px; }
   input[type=checkbox] { width: 22px; height: 22px; }
   .pick { padding: .55rem .5rem; }
 }
@@ -497,6 +546,11 @@ img { max-width: 100%; height: auto; }
   .add-row > .add-wine { grid-column: 1 / -1; }
   .add-row > .btn { grid-column: 1 / -1; }
   .rename .btn { width: 100%; }
+  .review-bar > .btn { width: 100%; }
+  .review-filter .seg { display: flex; }
+  .review-filter .seg-btn { flex: 1; }
+  .review-actions .btn { flex: 1 1 auto; }
+  .review-actions .btn.primary { flex-basis: 100%; }
   .metric b { font-size: 1.35rem; }
   .login { margin: 4vh .75rem; padding: 1.25rem; }
   #toasts { left: .75rem; right: .75rem; bottom: max(.75rem, env(safe-area-inset-bottom)); }

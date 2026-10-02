@@ -15,6 +15,10 @@ type InserzioniData struct {
 
 	TitleJob   service.TitleStatus
 	LLMEnabled bool
+
+	// "Controlla risposte" (conversation page)
+	Review    *service.CampaignReview
+	ReviewJob service.ReviewStatus
 }
 
 // listQuery keeps the list filters across list ↔ conversation navigation.
@@ -180,38 +184,321 @@ templ Conversation(d InserzioniData) {
 				} else {
 					<div class="col-head">
 						<label class="grow">
-							{ itoa(len(d.Replies)) } risposte
-							if n := orderReplies(d.Replies); n > 0 {
-								· { plural(n, "ordine", "ordini") }
-							}
+							@ReplyCounts(d, false)
 							<input type="search" placeholder="Cerca per Cliente" data-filter=".reply"/>
 						</label>
 					</div>
-					<div class="replies">
+					if d.LLMEnabled {
+						@ReviewBar(d)
+					}
+					@ReviewFilter(d, false)
+					<div class="replies" data-replies>
 						for _, r := range d.Replies {
-							<div class="reply" data-name={ r.Utente } id={ "reply-" + i64(r.ID) }>
-								<div class="reply-head">
-									if r.Ordine {
-										<span class="reply-ok" title="Letto come ordine" aria-label="Letto come ordine">@IconCheck()</span>
-									}
-									<b class="reply-name">{ r.Utente }</b>
-									<span class="muted reply-time">{ r.Ora }</span>
-									<button
-										class="icon danger"
-										title="Elimina messaggio"
-										aria-label="Elimina messaggio"
-										hx-delete={ "/replies/" + i64(r.ID) }
-										hx-target={ "#reply-" + i64(r.ID) }
-										hx-swap="outerHTML"
-										hx-confirm="Eliminare questo messaggio?"
-									>@IconX()</button>
-								</div>
-								<div class="reply-text">{ compactText(r.Testo) }</div>
-							</div>
+							@ReplyItem(d, r, false)
 						}
+						<p class="muted flag-empty">Nessuna risposta da verificare.</p>
 					</div>
 				}
 			</section>
 		</div>
 	}
+}
+
+// ── "Controlla risposte" ─────────────────────────────────────────────────────
+
+func reviewVals(d InserzioniData) string {
+	return q("chat", d.SelChat, "c", d.SelKey)
+}
+
+func openChecks(rs []service.ReplyView) int {
+	n := 0
+	for _, r := range rs {
+		if r.Check.Open() {
+			n++
+		}
+	}
+	return n
+}
+
+// reviewed: some reply has been checked (the filter stays, even at 0 to check).
+func reviewed(rs []service.ReplyView) bool {
+	for _, r := range rs {
+		if r.Check != nil {
+			return true
+		}
+	}
+	return false
+}
+
+func kindLabel(kind string) string {
+	if kind == "ambigua" {
+		return "Ambigua"
+	}
+	return "Dubbia"
+}
+
+// proposalRows splits the options into those shown at once and those behind
+// "Altre opzioni": with many options, only the proposed ones are open.
+func proposalRows(rv *service.CampaignReview, qty map[string]int) (shown, more []service.OrderOption) {
+	if len(qty) == 0 || len(rv.Options) <= 4 {
+		return rv.Options, nil
+	}
+	for _, o := range rv.Options {
+		if _, ok := qty[o.Key]; ok {
+			shown = append(shown, o)
+		} else {
+			more = append(more, o)
+		}
+	}
+	return shown, more
+}
+
+// proposalQty prefills the editor: the LLM's proposal, else what the rules
+// read from the reply.
+func proposalQty(rv *service.CampaignReview, r service.ReplyView) map[string]int {
+	if r.Check != nil && r.Check.Proposal != "" {
+		return rv.ProposalQty(r.Check.Proposal)
+	}
+	return rv.ProposalQty(r.Reading)
+}
+
+func qtyValue(qty map[string]int, key string) string {
+	if v, ok := qty[key]; ok {
+		return itoa(v)
+	}
+	return ""
+}
+
+func overrideLabel(o string) string {
+	if o == "-" {
+		return "Non è un ordine"
+	}
+	return "Ordine: " + o
+}
+
+// ReplyCounts: "64 risposte · 12 ordini" (refreshed out-of-band after a correction).
+templ ReplyCounts(d InserzioniData, oob bool) {
+	<span id="reply-counts" { oobAttrs(oob)... }>
+		{ itoa(len(d.Replies)) } risposte
+		if n := orderReplies(d.Replies); n > 0 {
+			· { plural(n, "ordine", "ordini") }
+		}
+	</span>
+}
+
+// ReviewBar: the LLM check button, its progress (polling while it runs) and
+// the outcome of the last run.
+templ ReviewBar(d InserzioniData) {
+	if st := d.ReviewJob; st.Running {
+		<div
+			id="review-bar"
+			class="review-bar running"
+			hx-get={ "/inserzioni/review?" + reviewVals(d) }
+			hx-trigger="every 2s"
+			hx-swap="outerHTML"
+			role="status"
+		>
+			<span class="spinner" aria-hidden="true"></span>
+			<span class="review-msg">
+				if st.For(d.SelChat, d.SelKey) {
+					<b>Controllo delle risposte in corso…</b>
+					<span class="muted">
+						if st.Total > 0 {
+							blocco { itoa(min(st.Done+1, st.Total)) } di { itoa(st.Total) }
+						} else {
+							preparazione
+						}
+						if st.Flagged > 0 {
+							· { plural(st.Flagged, "da verificare", "da verificare") } finora
+						}
+					</span>
+				} else {
+					<b>È in corso il controllo di un'altra inserzione.</b>
+					<span class="muted">Al termine potrai avviare questo.</span>
+				}
+			</span>
+		</div>
+	} else {
+		<div id="review-bar" class="review-bar">
+			<span class="review-msg">
+				if st.For(d.SelChat, d.SelKey) && st.Message != "" {
+					<span class={ templ.KV("review-error", st.Error) }>{ st.Message }</span>
+				} else if d.Review != nil && d.Review.LastRun != "" {
+					<span class="muted">Ultimo controllo: { d.Review.LastRun }</span>
+				} else {
+					<span class="muted">L'AI segnala le risposte dubbie o ambigue e propone l'ordine da aggiungere.</span>
+				}
+			</span>
+			<button
+				type="button"
+				class="btn primary"
+				hx-post="/inserzioni/review"
+				hx-vals={ templ.JSONString(map[string]string{"chat": d.SelChat, "c": d.SelKey}) }
+				hx-target="#review-bar"
+				hx-swap="outerHTML"
+			>
+				if d.Review != nil && d.Review.LastRun != "" {
+					Ricontrolla risposte (AI)
+				} else {
+					Controlla risposte (AI)
+				}
+			</button>
+		</div>
+	}
+}
+
+// ReviewFilter: all replies / only those to check. The choice is applied by
+// app.js on [data-replies] and survives the out-of-band refreshes.
+templ ReviewFilter(d InserzioniData, oob bool) {
+	<div id="review-filter" class="review-filter" { oobAttrs(oob)... }>
+		if n := openChecks(d.Replies); n > 0 || reviewed(d.Replies) {
+			<div class="seg" role="group" aria-label="Mostra">
+				<button type="button" class="seg-btn active" data-flag-view="all" aria-pressed="true">Tutte ({ itoa(len(d.Replies)) })</button>
+				<button type="button" class="seg-btn" data-flag-view="open" aria-pressed="false">Da verificare ({ itoa(n) })</button>
+			</div>
+		}
+	</div>
+}
+
+templ ReplyItem(d InserzioniData, r service.ReplyView, oob bool) {
+	<div
+		class={ "reply", templ.KV("flagged", r.Check.Open()), templ.KV("flag-ambigua", r.Check.Open() && r.Check.Kind == "ambigua") }
+		data-name={ r.Utente }
+		id={ "reply-" + i64(r.ID) }
+		{ oobAttrs(oob)... }
+	>
+		<div class="reply-head">
+			if r.Ordine {
+				<span class="reply-ok" title="Letto come ordine" aria-label="Letto come ordine">@IconCheck()</span>
+			}
+			<b class="reply-name">{ r.Utente }</b>
+			if r.Reading != "" {
+				<span class="reply-reading">{ r.Reading }</span>
+			}
+			<span class="muted reply-time">{ r.Ora }</span>
+			<button
+				class="icon danger"
+				title="Elimina messaggio"
+				aria-label="Elimina messaggio"
+				hx-delete={ "/replies/" + i64(r.ID) }
+				hx-target={ "#reply-" + i64(r.ID) }
+				hx-swap="outerHTML"
+				hx-confirm="Eliminare questo messaggio?"
+			>@IconX()</button>
+		</div>
+		<div class="reply-text">{ compactText(r.Testo) }</div>
+		if r.Override != "" {
+			<form class="reply-fixed" hx-post={ "/replies/" + i64(r.ID) + "/order" } hx-swap="none">
+				<input type="hidden" name="chat" value={ d.SelChat }/>
+				<input type="hidden" name="c" value={ d.SelKey }/>
+				<span class="badge badge-ok">Corretta a mano</span>
+				<span>{ overrideLabel(r.Override) }</span>
+				<button type="submit" class="btn small" name="op" value="reset">Annulla correzione</button>
+			</form>
+		} else if r.Check.Open() && d.Review != nil {
+			@ReviewPanel(d, r)
+		}
+	</div>
+}
+
+// ReviewPanel: why the reply was flagged and the proposed order, editable.
+templ ReviewPanel(d InserzioniData, r service.ReplyView) {
+	<form class="review-panel" hx-post={ "/replies/" + i64(r.ID) + "/order" } hx-swap="none">
+		<input type="hidden" name="chat" value={ d.SelChat }/>
+		<input type="hidden" name="c" value={ d.SelKey }/>
+		<div class="review-why">
+			<span class={ "badge", templ.KV("badge-warn", r.Check.Kind != "ambigua"), templ.KV("badge-info", r.Check.Kind == "ambigua") }>{ kindLabel(r.Check.Kind) }</span>
+			if r.Check.Reason != "" {
+				<span>{ r.Check.Reason }</span>
+			}
+		</div>
+		<p class="review-facts muted">
+			Letto ora:
+			if r.Reading != "" {
+				<b>{ r.Reading }</b>
+			} else {
+				nessun ordine
+			}
+			if cur := d.Review.Current[r.AuthorID]; cur != "" && cur != r.Reading {
+				· ordine attuale di { r.Utente }: <b>{ cur }</b>
+			}
+			if r.Check.Stale {
+				· il messaggio è cambiato dopo il controllo
+			}
+		</p>
+		if len(d.Review.Options) == 0 {
+			@Alert("info", "Questa inserzione non ha opzioni con lettera (A, B…): non c'è un ordine a cui aggiungere la risposta.")
+			<div class="review-actions">
+				<button type="submit" class="btn" name="op" value="dismiss">Ignora</button>
+			</div>
+		} else {
+			<fieldset class="add-panel proposal" data-proposal>
+				<legend>
+					if r.Check.Proposal != "" {
+						Ordine proposto
+					} else {
+						Indica l'ordine
+					}
+					if d.Review.QuotationNumber != "" {
+						· { d.Review.QuotationNumber }
+					}
+				</legend>
+				{{ qty := proposalQty(d.Review, r) }}
+				{{ shown, more := proposalRows(d.Review, qty) }}
+				<div class="prop-rows">
+					for _, o := range shown {
+						@proposalRow(r, o, qty)
+					}
+				</div>
+				if len(more) > 0 {
+					<details class="prop-more">
+						<summary>Altre opzioni ({ itoa(len(more)) })</summary>
+						<div class="prop-rows">
+							for _, o := range more {
+								@proposalRow(r, o, qty)
+							}
+						</div>
+					</details>
+				}
+				<div class="prop-foot">
+					<span class="muted">Vuoto = opzione non toccata · 0 = annullata</span>
+					<b class="prop-total" data-prop-total></b>
+				</div>
+			</fieldset>
+			<div class="review-actions">
+				<button type="submit" class="btn primary" name="op" value="apply">Aggiungi all'ordine</button>
+				<button type="submit" class="btn" name="op" value="notorder">Non è un ordine</button>
+				<button type="submit" class="btn" name="op" value="dismiss" title="La lettura automatica va bene così">Ignora</button>
+			</div>
+		}
+	</form>
+}
+
+templ proposalRow(r service.ReplyView, o service.OrderOption, qty map[string]int) {
+	<div class="prop-row">
+		<label class="prop-opt" for={ "q-" + i64(r.ID) + "-" + o.Key }>
+			<b>{ o.Label() }</b>
+		</label>
+		<span class="prop-wine">
+			{ noEmoji(o.Wine) }
+			<span class="muted nowrap">€ { money(o.Price) }</span>
+		</span>
+		<span class="stepper">
+			<button type="button" class="btn step" data-step="-1" aria-label={ "Meno " + o.Label() }>&minus;</button>
+			<input
+				type="number"
+				id={ "q-" + i64(r.ID) + "-" + o.Key }
+				name={ "qty_" + o.Key }
+				value={ qtyValue(qty, o.Key) }
+				min="0"
+				max="999"
+				step="1"
+				inputmode="numeric"
+				placeholder="–"
+				data-price={ money(o.Price) }
+				aria-label={ "Quantità " + o.Label() }
+			/>
+			<button type="button" class="btn step" data-step="1" aria-label={ "Più " + o.Label() }>+</button>
+		</span>
+	</div>
 }

@@ -237,6 +237,8 @@
     fitStickyTables();
     checkSelBar();
     restoreViews();
+    syncFlagView();
+    root.querySelectorAll("[data-proposal]").forEach(proposalTotal);
     root.querySelectorAll("[data-autohide]").forEach(function (el) {
       if (!el.dataset.bound) { el.dataset.bound = "1"; autohide(el); }
     });
@@ -386,6 +388,51 @@
     boxes.forEach(function (x) { x.checked = !allOn; });
     b.textContent = allOn ? "Seleziona mese" : "Deseleziona mese";
     boxes[0].dispatchEvent(new Event("change", { bubbles: true }));
+  });
+
+  // "Controlla risposte": the proposed-order editor. The -/+ buttons change
+  // the quantity (empty = option not touched); the total follows.
+  function proposalTotal(box) {
+    var tot = 0, any = false;
+    box.querySelectorAll("input[data-price]").forEach(function (inp) {
+      var n = parseInt(inp.value, 10);
+      if (!isNaN(n) && n > 0) { tot += n * parseFloat(inp.dataset.price); any = true; }
+    });
+    var out = box.querySelector("[data-prop-total]");
+    if (out) out.textContent = any ? "Totale € " + tot.toFixed(2) : "";
+  }
+  document.addEventListener("click", function (e) {
+    var b = e.target.closest("[data-step]");
+    if (!b) return;
+    var inp = b.parentElement.querySelector("input");
+    var n = parseInt(inp.value, 10);
+    var step = Number(b.dataset.step);
+    if (isNaN(n)) { if (step < 0) return; n = 0; }
+    inp.value = String(Math.min(999, Math.max(0, n + step)));
+    proposalTotal(b.closest("[data-proposal]"));
+  });
+  document.addEventListener("input", function (e) {
+    var box = e.target.closest && e.target.closest("[data-proposal]");
+    if (box) proposalTotal(box);
+  });
+
+  // All replies / only the ones to check. The choice lives on [data-replies],
+  // so it survives the out-of-band refresh of the filter buttons.
+  function syncFlagView() {
+    var root = document.querySelector("[data-replies]");
+    if (!root) return;
+    var v = root.dataset.show || "all";
+    document.querySelectorAll("[data-flag-view]").forEach(function (b) {
+      b.classList.toggle("active", b.dataset.flagView === v);
+      b.setAttribute("aria-pressed", b.dataset.flagView === v ? "true" : "false");
+    });
+  }
+  document.addEventListener("click", function (e) {
+    var b = e.target.closest("[data-flag-view]");
+    var root = document.querySelector("[data-replies]");
+    if (!b || !root) return;
+    root.dataset.show = b.dataset.flagView;
+    syncFlagView();
   });
 
   // Clickable table rows (data-href).

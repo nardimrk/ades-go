@@ -12,6 +12,7 @@ import (
 	"github.com/a-h/templ"
 
 	"adesgo/internal/service"
+	"adesgo/internal/textutil"
 	"adesgo/internal/web/views"
 )
 
@@ -33,7 +34,12 @@ func (s *Server) loadSelection(r *http.Request, d *views.InserzioniData) error {
 		return err
 	}
 	d.Selected = camp
-	d.Replies, err = s.svc.CampaignReplies(r.Context(), camp.MsgIDs)
+	if d.Replies, err = s.svc.CampaignReplies(r.Context(), camp.MsgIDs); err != nil {
+		return err
+	}
+	d.LLMEnabled = s.reviews.Enabled()
+	d.ReviewJob = s.reviews.Status()
+	d.Review, err = s.svc.CampaignReview(r.Context(), camp)
 	return err
 }
 
@@ -111,6 +117,128 @@ func (s *Server) deleteReply(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	toast(w, r, "success", "Messaggio eliminato.")
+}
+
+// reviewStart launches the LLM check of a campaign's replies.
+func (s *Server) reviewStart(w http.ResponseWriter, r *http.Request) {
+	d := views.InserzioniData{SelChat: r.FormValue("chat"), SelKey: r.FormValue("c")}
+	if !s.reviews.Start(r.Context(), d.SelChat, d.SelKey) {
+		toast(w, r, "warning", "È già in corso un controllo: attendi che finisca.")
+	}
+	if err := s.loadSelection(r, &d); err != nil {
+		s.fail(w, r, err)
+		return
+	}
+	render(w, r, views.ReviewBar(d))
+}
+
+// reviewStatus is polled while a check runs; when it is over, the whole
+// conversation is redrawn with the flagged replies.
+func (s *Server) reviewStatus(w http.ResponseWriter, r *http.Request) {
+	qs := r.URL.Query()
+	d := views.InserzioniData{SelChat: qs.Get("chat"), SelKey: qs.Get("c")}
+	if err := s.loadSelection(r, &d); err != nil {
+		s.fail(w, r, err)
+		return
+	}
+	if d.ReviewJob.Running {
+		render(w, r, views.ReviewBar(d))
+		return
+	}
+	w.Header().Set("HX-Retarget", "#conv")
+	w.Header().Set("HX-Reswap", "innerHTML")
+	render(w, r, views.Conversation(d))
+}
+
+// replyOrder acts on a reply's check: apply the (edited) proposed order,
+// mark it as not an order, dismiss the check, or undo a correction. The
+// customer's replies, the counters and the filter are refreshed out-of-band.
+func (s *Server) replyOrder(w http.ResponseWriter, r *http.Request) {
+	id, err := strconv.ParseInt(r.PathValue("id"), 10, 64)
+	if err != nil {
+		http.Error(w, "bad id", http.StatusBadRequest)
+		return
+	}
+	ctx := r.Context()
+	d := views.InserzioniData{SelChat: r.FormValue("chat"), SelKey: r.FormValue("c")}
+	if err := s.loadSelection(r, &d); err != nil {
+		s.fail(w, r, err)
+		return
+	}
+	var reply *service.ReplyView
+	for i := range d.Replies {
+		if d.Replies[i].ID == id {
+			reply = &d.Replies[i]
+		}
+	}
+	if d.Selected == nil || reply == nil {
+		s.fail(w, r, fmt.Errorf("messaggio non trovato in questa inserzione"))
+		return
+	}
+	who := reply.Utente
+	var msg string
+	switch r.FormValue("op") {
+	case "apply":
+		codes, err := proposalCodes(r, d.Review)
+		if err != nil {
+			s.fail(w, r, err)
+			return
+		}
+		err = s.svc.SetReplyOrder(ctx, id, codes)
+		msg = "Ordine aggiornato: " + who + " · " + codes
+	case "notorder":
+		err = s.svc.SetReplyOrder(ctx, id, "-")
+		msg = "Non è un ordine: " + who
+	case "dismiss":
+		err = s.svc.DismissReplyCheck(ctx, id)
+		msg = "Segnalazione ignorata: " + who
+	case "reset":
+		err = s.svc.ResetReplyOrder(ctx, id)
+		msg = "Correzione annullata: " + who
+	default:
+		err = fmt.Errorf("azione sconosciuta")
+	}
+	if err != nil {
+		s.fail(w, r, err)
+		return
+	}
+	if err := s.loadSelection(r, &d); err != nil {
+		s.fail(w, r, err)
+		return
+	}
+	// the customer's current order shows in each of their flagged replies
+	for _, x := range d.Replies {
+		if x.ID == id || (x.AuthorID == reply.AuthorID && x.Check.Open()) {
+			render(w, r, views.ReplyItem(d, x, true))
+		}
+	}
+	render(w, r, views.ReplyCounts(d, true))
+	render(w, r, views.ReviewFilter(d, true))
+	toast(w, r, "success", msg)
+}
+
+// proposalCodes reads the quantities of the proposal editor (qty_<option>):
+// empty = option not touched, 0 = cancelled.
+func proposalCodes(r *http.Request, rv *service.CampaignReview) (string, error) {
+	if rv == nil || len(rv.Options) == 0 {
+		return "", fmt.Errorf("l'inserzione non ha opzioni ordinabili")
+	}
+	var codes []textutil.OrderCode
+	for _, o := range rv.Options {
+		v := strings.TrimSpace(r.FormValue("qty_" + o.Key))
+		if v == "" {
+			continue
+		}
+		n, err := strconv.Atoi(v)
+		if err != nil || n < 0 || n > 999 {
+			return "", fmt.Errorf("quantità non valida per %s: %q", o.Label(), v)
+		}
+		codes = append(codes, o.Code(n))
+	}
+	if len(codes) == 0 {
+		return "", fmt.Errorf("indica almeno una quantità, oppure scegli \"Non è un ordine\"")
+	}
+	return textutil.FormatOrderCodes(codes), nil
 }
 
 // ── Preventivi ───────────────────────────────────────────────────────────────

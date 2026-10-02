@@ -66,7 +66,8 @@ func main() {
 	svc := service.New(store, cfg, waMgr)
 	titles := service.NewTitleJob(svc, llmClient)
 	go titles.Loop(ctx, 30*time.Minute) // new listings get an LLM title too
-	srv := web.New(cfg, store, svc, waMgr, mailer, llmClient, titles)
+	reviews := service.NewReviewJob(svc, llmClient)
+	srv := web.New(cfg, store, svc, waMgr, mailer, llmClient, titles, reviews)
 	go srv.CleanupLoop(ctx)
 
 	httpSrv := &http.Server{

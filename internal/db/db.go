@@ -144,6 +144,18 @@ CREATE TABLE IF NOT EXISTS items (
     deleted_at    TEXT,
     itemCodeAlias TEXT
 );
+-- LLM review of a reply (Inserzioni, "Controlla risposte"): kind is
+-- 'dubbia' or 'ambigua'; status 'open', 'applied' or 'dismissed'. body is the
+-- reply text the check was made on, so an edited reply is checked again.
+CREATE TABLE IF NOT EXISTS reply_checks (
+    reply_id   INTEGER PRIMARY KEY,
+    kind       TEXT NOT NULL,
+    reason     TEXT NOT NULL DEFAULT '',
+    proposal   TEXT NOT NULL DEFAULT '',
+    body       TEXT NOT NULL DEFAULT '',
+    status     TEXT NOT NULL DEFAULT 'open',
+    checked_at TEXT DEFAULT (datetime('now'))
+);
 CREATE TABLE IF NOT EXISTS app_meta (
     key   TEXT PRIMARY KEY,
     value TEXT
@@ -169,6 +181,9 @@ var addColumns = []string{
 	"ALTER TABLE users ADD COLUMN provincia TEXT",
 	"ALTER TABLE users ADD COLUMN regione TEXT",
 	"ALTER TABLE users ADD COLUMN cap TEXT",
+	// order codes set by hand on a reply ("3A, 1 cassa B"; "-" = not an
+	// order): read instead of the body by the order parser
+	"ALTER TABLE replies ADD COLUMN order_override TEXT",
 }
 
 func (s *Store) migrate(ctx context.Context) error {

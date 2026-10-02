@@ -156,10 +156,14 @@ func (s *Store) RecentOwnListings(ctx context.Context, chatID, authorID string, 
 		ORDER BY timestamp DESC`, chatID, authorID, cutoff, beforeTS)
 }
 
+// replyBodySQL: a reply's body as the order rules see it, with the codes set
+// by hand (Inserzioni, "Controlla risposte") appended like the LLM's "→ 3A".
+const replyBodySQL = `COALESCE(body,'') || CASE WHEN COALESCE(order_override,'') NOT IN ('','-') THEN ' → ' || order_override ELSE '' END`
+
 // RecentOwnReplies: this author's earlier replies to one listing, newest first.
 func (s *Store) RecentOwnReplies(ctx context.Context, listingMsgID, authorID string, beforeTS int64) ([]Candidate, error) {
 	return s.candidates(ctx, `
-		SELECT COALESCE(msg_id,''), COALESCE(body,''), timestamp, COALESCE(listing_msg_id,'') FROM replies
+		SELECT COALESCE(msg_id,''), `+replyBodySQL+`, timestamp, COALESCE(listing_msg_id,'') FROM replies
 		WHERE listing_msg_id = ? AND author_id = ? AND timestamp <= ?
 		ORDER BY timestamp DESC`, listingMsgID, authorID, beforeTS)
 }
@@ -183,7 +187,7 @@ func (s *Store) ListingOwnerNotes(ctx context.Context, listingMsgID string, befo
 // RecentRepliesByAuthor: this author's replies anywhere in the chat, newest first.
 func (s *Store) RecentRepliesByAuthor(ctx context.Context, chatID, authorID string, beforeTS int64) ([]Candidate, error) {
 	return s.candidates(ctx, `
-		SELECT COALESCE(msg_id,''), COALESCE(body,''), timestamp, COALESCE(listing_msg_id,'') FROM replies
+		SELECT COALESCE(msg_id,''), `+replyBodySQL+`, timestamp, COALESCE(listing_msg_id,'') FROM replies
 		WHERE chat_id = ? AND author_id = ? AND timestamp <= ?
 		ORDER BY timestamp DESC`, chatID, authorID, beforeTS)
 }
