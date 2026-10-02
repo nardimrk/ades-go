@@ -154,6 +154,7 @@ CREATE TABLE IF NOT EXISTS app_meta (
 // here (ignoring "duplicate column") so an older database is brought up to date.
 var addColumns = []string{
 	"ALTER TABLE quotation_items ADD COLUMN option TEXT NOT NULL DEFAULT ''",
+	"ALTER TABLE quotation_items ADD COLUMN vintage INTEGER",
 	"ALTER TABLE orders ADD COLUMN user_name TEXT",
 	"ALTER TABLE orders ADD COLUMN user_id TEXT",
 	"ALTER TABLE listings ADD COLUMN quotation_id INTEGER REFERENCES quotations(id)",
