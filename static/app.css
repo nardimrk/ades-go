@@ -904,3 +904,21 @@ body:has(.sel-bar:not(:empty)) .fab-menu { bottom: calc(max(.75rem, env(safe-are
   .table.clienti th.col-del, .table.clienti td.col-del { position: sticky; right: 0; z-index: 1; background: var(--panel); box-shadow: -6px 0 6px -6px var(--shadow); }
 }
 .tel-link { flex: none; color: var(--accent); }
+
+/* Consegne: the customer's name opens their delivery address */
+.client-pill {
+  display: inline-flex; align-items: center; font: inherit; font-weight: 600; cursor: pointer;
+  padding: .15rem .7rem; border: 1px solid var(--accent); border-radius: 999px;
+  background: var(--accent); color: #fff; min-height: 0;
+}
+:root[data-theme="dark"] .client-pill { color: #1a0d12; }
+.client-pill:hover, .client-pill:focus-visible { filter: brightness(1.1); outline: none; }
+@media (pointer: coarse) { .client-pill { min-height: 36px; } }
+.address-fields { display: grid; grid-template-columns: minmax(0, 1fr) minmax(0, 1fr); gap: .6rem; }
+.address-fields label { display: flex; flex-direction: column; gap: .25rem; font-size: .85rem; color: var(--muted); min-width: 0; }
+.address-fields .span2 { grid-column: 1 / -1; }
+.address-fields input { background: var(--fill); color: var(--text); font-size: 1rem; }
+
+/* Consegne header rows: "Vicenza · 3 clienti · 14 bott." with room around each dot */
+.dl-meta > span { white-space: nowrap; }
+.dl-meta > span::before { content: "·"; margin: 0 .55rem; }

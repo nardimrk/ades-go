@@ -304,7 +304,15 @@
       return;
     }
     showToast("Salvato: " + autosaveLabel(el));
+    var dlg = el.closest("dialog[data-reload-on-save]");
+    if (dlg) dlg.dataset.saved = "1";
   });
+  // a dialog whose fields change how the page is grouped (Consegne: the
+  // address) reloads the page when it closes after a save
+  document.addEventListener("close", function (e) {
+    var dlg = e.target;
+    if (dlg.matches && dlg.matches("dialog[data-reload-on-save][data-saved]")) location.reload();
+  }, true);
 
   // "Città · Mario Rossi": the field's label and the row's name (Nome or
   // Descrizione, or the row title when that is empty).
@@ -312,6 +320,8 @@
     var label = el.getAttribute("aria-label") || "campo";
     var row = el.closest("tr");
     var who = "";
+    var box = el.closest("[data-autosave-who]");
+    if (box) return label + " · " + box.dataset.autosaveWho;
     if (row) {
       // the row's name: Nome (Clienti) or Descrizione (Prodotti)
       var name = row.querySelector("input[aria-label=Nome], input[aria-label=Descrizione]");

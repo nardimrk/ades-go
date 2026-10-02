@@ -144,7 +144,7 @@ templ ConsegneResult(r *service.Consegne, ids []string) {
 				<div class="metric"><span>Totale (€)</span><b>{ money(r.Totale) }</b></div>
 			</div>
 			if n := clientsWithoutProvincia(r); n > 0 {
-				@Alert("info", plural(n, "cliente non ha", "clienti non hanno")+" la provincia: completala in Clienti per raggrupparli per zona.")
+				@Alert("info", plural(n, "cliente non ha", "clienti non hanno")+" la provincia: clicca sul nome del cliente per inserirla.")
 			}
 			<div class="table-wrap">
 				<table class="table deliveries">
@@ -154,14 +154,14 @@ templ ConsegneResult(r *service.Consegne, ids []string) {
 							<tr class="area-row">
 								<td class="title-cell" colspan="5" data-label="">
 									{ placeOr(a.Provincia, "Provincia non indicata") }
-									<span class="muted">· { plural(a.Clienti, "cliente", "clienti") } · { itoa(a.Bottiglie) } bott. · € { money(a.Totale) }</span>
+									<span class="muted dl-meta"><span>{ plural(a.Clienti, "cliente", "clienti") }</span><span>{ itoa(a.Bottiglie) } bott.</span><span>€ { money(a.Totale) }</span></span>
 								</td>
 							</tr>
 							for _, city := range a.Cities {
 								<tr class="city-row">
 									<td class="title-cell" colspan="5" data-label="">
 										{ placeOr(city.Citta, "Città non indicata") }
-										<span class="muted">· { plural(len(city.Customers), "cliente", "clienti") } · { itoa(city.Bottiglie) } bott.</span>
+										<span class="muted dl-meta"><span>{ plural(len(city.Customers), "cliente", "clienti") }</span><span>{ itoa(city.Bottiglie) } bott.</span></span>
 									</td>
 								</tr>
 								for _, c := range city.Customers {
@@ -175,11 +175,62 @@ templ ConsegneResult(r *service.Consegne, ids []string) {
 	}
 }
 
+// deliveryAddressModal: the customer's delivery address, editable in place;
+// every field saves by itself on leaving it, as in Clienti. Closing it after
+// a change reloads the page, so the customer moves to their new area.
+templ deliveryAddressModal(c service.CustomerDelivery) {
+	<dialog
+		id={ "dlv-" + sectionID(c.UserID) }
+		class="modal modal-address"
+		data-modal-keep
+		data-reload-on-save
+		data-autosave-who={ c.Cliente }
+		aria-labelledby={ "dlv-" + sectionID(c.UserID) + "-title" }
+	>
+		<div class="modal-form">
+			<div class="modal-head">
+				<div class="modal-title">
+					<h3 id={ "dlv-" + sectionID(c.UserID) + "-title" }>{ c.Cliente }</h3>
+					<span class="muted">Indirizzo di consegna · si salva da solo quando esci dal campo</span>
+				</div>
+				<button type="button" class="icon" data-modal-close aria-label="Chiudi">@IconX()</button>
+			</div>
+			<div class="modal-body address-fields">
+				<label class="span2">
+					Indirizzo
+					@autosaveField("/clienti/field", c.UserID, "indirizzo", c.Indirizzo, "Indirizzo", "", false)
+				</label>
+				<label>
+					Città
+					@autosaveField("/clienti/field", c.UserID, "citta", c.Citta, "Città", "", false)
+				</label>
+				<label>
+					Provincia
+					@autosaveField("/clienti/field", c.UserID, "provincia", c.Provincia, "Provincia", "", false)
+				</label>
+				<label>
+					CAP
+					@autosaveField("/clienti/field", c.UserID, "cap", c.CAP, "CAP", "", false)
+				</label>
+			</div>
+			<div class="modal-foot">
+				<button type="button" class="btn primary" data-modal-close>Fatto</button>
+			</div>
+		</div>
+	</dialog>
+}
+
 // deliveryCustomer: a customer's header row and their lines.
 templ deliveryCustomer(c service.CustomerDelivery) {
 							<tr class="group-row">
 								<td class="title-cell" colspan="5" data-label="">
-									{ c.Cliente } <span class="muted">· { itoa(c.Bottiglie) } bott. · € { money(c.Totale) }</span>
+									if c.UserID != "" {
+										<button type="button" class="client-pill" data-modal-show={ "dlv-" + sectionID(c.UserID) } title="Indirizzo di consegna">{ c.Cliente }</button>
+										@deliveryAddressModal(c)
+									} else {
+										{ c.Cliente }
+									}
+									<span class="muted dl-meta"><span>{ itoa(c.Bottiglie) } bott.</span><span>€ { money(c.Totale) }</span></span>
 								</td>
 							</tr>
 							for _, l := range c.Lines {

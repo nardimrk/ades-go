@@ -174,6 +174,9 @@ func bottles(wine string, qty int) int {
 
 type CustomerDelivery struct {
 	Cliente   string
+	UserID    string // the customer in Clienti, "" = none (name only)
+	Indirizzo string
+	CAP       string
 	Provincia string // from Clienti, "" = not set
 	Citta     string
 	Bottiglie int
@@ -296,7 +299,7 @@ func (s *Service) Consegne(ctx context.Context, ids []string) (*Consegne, error)
 	})
 	for _, n := range names {
 		loc := clienti[n]
-		cd := CustomerDelivery{Cliente: n, Provincia: loc.provincia, Citta: loc.citta}
+		cd := CustomerDelivery{Cliente: n, UserID: loc.id, Provincia: loc.provincia, Citta: loc.citta, Indirizzo: loc.indirizzo, CAP: loc.cap}
 		for _, l := range lines {
 			if l.Cliente == n {
 				cd.Lines = append(cd.Lines, l)
@@ -310,7 +313,8 @@ func (s *Service) Consegne(ctx context.Context, ids []string) (*Consegne, error)
 	return res, nil
 }
 
-type location struct{ provincia, citta string }
+// location is a customer's record in Clienti as the deliveries need it.
+type location struct{ id, provincia, citta, indirizzo, cap string }
 
 type customerLocs struct {
 	byID   map[string]location
@@ -320,7 +324,8 @@ type customerLocs struct {
 // customerLocations reads provincia and città of every customer (Clienti).
 func (s *Service) customerLocations(ctx context.Context) (customerLocs, error) {
 	out := customerLocs{byID: map[string]location{}, byName: map[string]location{}}
-	rows, err := s.db().QueryContext(ctx, `SELECT id, COALESCE(name,''), COALESCE(provincia,''), COALESCE("città",'') FROM users`)
+	rows, err := s.db().QueryContext(ctx, `SELECT id, COALESCE(name,''), COALESCE(provincia,''), COALESCE("città",''),
+		COALESCE(indirizzo,''), COALESCE(cap,'') FROM users`)
 	if err != nil {
 		return out, err
 	}
@@ -328,9 +333,10 @@ func (s *Service) customerLocations(ctx context.Context) (customerLocs, error) {
 	for rows.Next() {
 		var id, name string
 		var loc location
-		if err := rows.Scan(&id, &name, &loc.provincia, &loc.citta); err != nil {
+		if err := rows.Scan(&id, &name, &loc.provincia, &loc.citta, &loc.indirizzo, &loc.cap); err != nil {
 			return out, err
 		}
+		loc.id = id
 		loc.provincia, loc.citta = cleanPlace(loc.provincia), cleanPlace(loc.citta)
 		out.byID[id] = loc
 		if n := FmtName(name); n != "" {
