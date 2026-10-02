@@ -219,6 +219,13 @@ func (m *Manager) onEvent(evt any) {
 		if msg := m.convert(e, "live"); msg != nil {
 			m.enqueue([]*collector.Message{msg})
 		}
+	case *events.UndecryptableMessage:
+		// whatsmeow already asked the sender's phone to resend it; if that
+		// fails too the message is lost, and only this line says so
+		if m.cfg.IsChannel(e.Info.Chat.String()) {
+			log.Printf("[wa] undecryptable message in %s from %s (%s) at %s (unavailable=%t): add it by hand if it was an order",
+				e.Info.Chat, e.Info.Sender, e.Info.PushName, e.Info.Timestamp.Format("2006-01-02 15:04:05"), e.IsUnavailable)
+		}
 	case *events.HistorySync:
 		go m.handleHistorySync(e)
 	case *events.Connected:
@@ -338,7 +345,11 @@ func (m *Manager) convert(e *events.Message, source string) *collector.Message {
 	if !info.IsGroup || !m.cfg.IsChannel(info.Chat.String()) {
 		return nil
 	}
-	if e.IsEdit || e.Message == nil || e.Message.GetProtocolMessage() != nil || e.Message.GetReactionMessage() != nil {
+	if e.IsEdit {
+		log.Printf("[SKIP]    edited message ignored (%s, %s): %q", info.PushName, info.Timestamp.Format("2006-01-02 15:04:05"), extractEdit(e.Message))
+		return nil
+	}
+	if e.Message == nil || e.Message.GetProtocolMessage() != nil || e.Message.GetReactionMessage() != nil {
 		return nil
 	}
 	body, ctxInfo := extractText(e.Message)
@@ -365,6 +376,16 @@ func (m *Manager) convert(e *events.Message, source string) *collector.Message {
 		msg.QuotedID = ctxInfo.GetStanzaID()
 	}
 	return msg
+}
+
+// extractEdit returns the new text of an edit, for the log.
+func extractEdit(msg *waE2E.Message) string {
+	if pm := msg.GetProtocolMessage(); pm != nil && pm.GetEditedMessage() != nil {
+		body, _ := extractText(pm.GetEditedMessage())
+		return body
+	}
+	body, _ := extractText(msg)
+	return body
 }
 
 func extractText(msg *waE2E.Message) (string, *waE2E.ContextInfo) {

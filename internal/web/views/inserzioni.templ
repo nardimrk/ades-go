@@ -12,6 +12,7 @@ type InserzioniData struct {
 	SelKey   string
 	Selected *service.Campaign
 	Replies  []service.ReplyView
+	Clients  []string // customer names for "Aggiungi risposta"
 
 	TitleJob   service.TitleStatus
 	LLMEnabled bool
@@ -203,9 +204,47 @@ templ Conversation(d InserzioniData) {
 						<p class="muted flag-empty">Nessuna risposta da verificare.</p>
 					</div>
 				}
+				@AddReplyForm(d)
 			</section>
 		</div>
 	}
+}
+
+// AddReplyForm: a reply typed in by hand, for a message WhatsApp never
+// delivered to the app. Collapsed until needed.
+templ AddReplyForm(d InserzioniData) {
+	<details class="add-reply">
+		<summary class="btn">＋ Aggiungi risposta</summary>
+		<form hx-post="/inserzioni/reply" hx-target="#conv" hx-swap="innerHTML">
+			<input type="hidden" name="chat" value={ d.SelChat }/>
+			<input type="hidden" name="c" value={ d.SelKey }/>
+			<fieldset class="add-panel stack">
+				<legend>Risposta non arrivata da WhatsApp</legend>
+				<div class="add-reply-row">
+					<label>
+						Cliente
+						<input type="text" name="cliente" list="reply-clients" placeholder="Scrivi per cercare un cliente..." autocomplete="off" required/>
+					</label>
+					<label>
+						Data e ora
+						<input type="datetime-local" name="ora" value={ nowMinute() } required/>
+					</label>
+				</div>
+				<label>
+					Messaggio
+					<textarea name="testo" rows="2" placeholder="Es. 2 grazie" required></textarea>
+				</label>
+				<div class="form-end">
+					<button type="submit" class="btn primary">Aggiungi risposta</button>
+				</div>
+			</fieldset>
+			<datalist id="reply-clients">
+				for _, c := range d.Clients {
+					<option value={ c }></option>
+				}
+			</datalist>
+		</form>
+	</details>
 }
 
 // ── "Controlla risposte" ─────────────────────────────────────────────────────
@@ -381,6 +420,9 @@ templ ReplyItem(d InserzioniData, r service.ReplyView, oob bool) {
 				<span class="reply-reading">{ r.Reading }</span>
 			}
 			<span class="muted reply-time">{ r.Ora }</span>
+			if r.Manual {
+				<span class="badge badge-info">Aggiunta a mano</span>
+			}
 			<button
 				class="icon danger"
 				title="Elimina messaggio"

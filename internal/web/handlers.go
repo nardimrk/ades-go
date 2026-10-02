@@ -38,6 +38,9 @@ func (s *Server) loadSelection(r *http.Request, d *views.InserzioniData) error {
 	if d.Replies, err = s.svc.CampaignReplies(r.Context(), camp.MsgIDs); err != nil {
 		return err
 	}
+	if _, d.Clients, err = s.svc.ClientOptions(r.Context()); err != nil {
+		return err
+	}
 	d.LLMEnabled = s.reviews.Enabled()
 	d.ReviewJob = s.reviews.Status()
 	d.Review, err = s.svc.CampaignReview(r.Context(), camp)
@@ -118,6 +121,59 @@ func (s *Server) deleteReply(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	toast(w, r, "success", "Messaggio eliminato.")
+}
+
+// addReply stores a reply typed in by hand (a message WhatsApp never
+// delivered to the app) and redraws the conversation.
+func (s *Server) addReply(w http.ResponseWriter, r *http.Request) {
+	ctx := r.Context()
+	d := views.InserzioniData{SelChat: r.FormValue("chat"), SelKey: r.FormValue("c")}
+	if err := s.loadSelection(r, &d); err != nil {
+		s.fail(w, r, err)
+		return
+	}
+	if d.Selected == nil {
+		s.fail(w, r, fmt.Errorf("inserzione non trovata"))
+		return
+	}
+	byName, _, err := s.svc.ClientOptions(ctx)
+	if err != nil {
+		s.fail(w, r, err)
+		return
+	}
+	name := strings.TrimSpace(r.FormValue("cliente"))
+	authorID, known := byName[name]
+	body := strings.TrimSpace(r.FormValue("testo"))
+	at, timeErr := time.ParseInLocation("2006-01-02T15:04", r.FormValue("ora"), time.Local)
+	warn := ""
+	switch {
+	case !known:
+		warn = "Cliente non trovato: " + name + ". Sceglilo dall'elenco (un cliente nuovo si aggiunge da Clienti)."
+	case timeErr != nil:
+		warn = "Data e ora non valide."
+	case body == "":
+		warn = "Scrivi il testo del messaggio."
+	}
+	if warn == "" {
+		if err := s.svc.AddManualReply(ctx, d.Selected, authorID, body, at.Unix()); errors.Is(err, service.ErrDuplicateReply) {
+			warn = "Questo messaggio di " + name + " c'è già."
+		} else if err != nil {
+			s.fail(w, r, err)
+			return
+		}
+	}
+	if warn != "" {
+		// the form keeps what was typed
+		w.Header().Set("HX-Reswap", "none")
+		toast(w, r, "warning", warn)
+		return
+	}
+	if err := s.loadSelection(r, &d); err != nil {
+		s.fail(w, r, err)
+		return
+	}
+	render(w, r, views.Conversation(d))
+	toast(w, r, "success", "Risposta aggiunta: "+name+" · "+at.Format("02/01/2006 15:04"))
 }
 
 // reviewStart launches the LLM check of a campaign's replies.

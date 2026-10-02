@@ -256,9 +256,17 @@ input.save-error { border-color: var(--danger) !important; box-shadow: 0 0 0 2px
 }
 .add-panel legend { padding: 0 .4rem; font-weight: 600; font-size: .9rem; color: var(--accent); }
 .add-panel label { color: var(--text); font-size: .8rem; }
-.add-panel input { background: var(--panel); border-color: var(--accent); }
-.add-panel input::placeholder { color: var(--muted); }
+.add-panel input, .add-panel textarea { background: var(--panel); border-color: var(--accent); }
+.add-panel input::placeholder, .add-panel textarea::placeholder { color: var(--muted); }
 .add-panel .alert { margin-top: 0; }
+/* "Aggiungi risposta" under the replies: a reply WhatsApp never delivered */
+.add-reply { margin-top: .9rem; }
+.add-reply > summary { list-style: none; }
+.add-reply > summary::-webkit-details-marker { display: none; }
+.add-reply[open] > summary { margin-bottom: .6rem; }
+.add-reply label { display: flex; flex-direction: column; gap: .25rem; min-width: 0; }
+.add-reply-row { display: grid; grid-template-columns: minmax(0, 2fr) minmax(0, 1fr); gap: .5rem; }
+@media (max-width: 720px) { .add-reply-row { grid-template-columns: minmax(0, 1fr); } }
 /* suggestions under an <input list> (app.js draws them: the native datalist popup fails on phones) */
 .combo-host { position: relative; }
 .combo-list {

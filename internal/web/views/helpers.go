@@ -8,6 +8,7 @@ import (
 	"adesgo/internal/textutil"
 	"net/url"
 	"strings"
+	"time"
 )
 
 func money(v float64) string { return fmt.Sprintf("%.2f", v) }
@@ -96,3 +97,6 @@ func q(kv ...string) string {
 	}
 	return v.Encode()
 }
+
+// nowMinute is the current local time for a datetime-local input.
+func nowMinute() string { return time.Now().Format("2006-01-02T15:04") }

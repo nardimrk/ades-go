@@ -191,3 +191,48 @@ func TestGuessQty(t *testing.T) {
 		}
 	}
 }
+
+func TestAddManualReply(t *testing.T) {
+	ctx := context.Background()
+	store, err := db.Open(filepath.Join(t.TempDir(), "wine.db"))
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer store.Close()
+	svc := New(store, &config.Config{}, nil)
+
+	const chat = "1@g.us"
+	listing := "Barolo\nA. 6x Barolo 2019 a 40€"
+	if err := store.InsertListing(ctx, db.Listing{MsgID: "L1", ChatID: chat, AuthorID: "owner", Body: listing, Timestamp: 1000}); err != nil {
+		t.Fatal(err)
+	}
+	if err := store.UpsertUser(ctx, "u1", "Alessio"); err != nil {
+		t.Fatal(err)
+	}
+	if _, _, _, err := svc.ImportPreventivi(ctx); err != nil {
+		t.Fatal(err)
+	}
+	rows, err := svc.InserzioniList(ctx, "", "")
+	if err != nil || len(rows) != 1 {
+		t.Fatalf("campaigns = %v, %v", rows, err)
+	}
+	camp := &rows[0].Campaign
+
+	if err := svc.AddManualReply(ctx, camp, "u1", "3A", 1200); err != nil {
+		t.Fatal(err)
+	}
+	if err := svc.AddManualReply(ctx, camp, "u1", "3A", 1200); err != ErrDuplicateReply {
+		t.Fatalf("second insert: %v, want ErrDuplicateReply", err)
+	}
+	// a time before the listing (wrong clock, typo) still files it under the campaign
+	if err := svc.AddManualReply(ctx, camp, "u1", "e 1A", 900); err != nil {
+		t.Fatal(err)
+	}
+	replies, err := svc.CampaignReplies(ctx, camp.MsgIDs)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if len(replies) != 2 || !replies[0].Manual || replies[1].Utente != "Alessio" || replies[1].Reading != "3A" {
+		t.Fatalf("replies = %+v", replies)
+	}
+}

@@ -2,7 +2,11 @@ package service
 
 import (
 	"context"
+	"crypto/rand"
 	"database/sql"
+	"encoding/hex"
+	"errors"
+	"fmt"
 	"sort"
 	"strings"
 	"time"
@@ -248,6 +252,7 @@ type ReplyView struct {
 	Ordine   bool   // read as an order (parser, LLM or by hand)
 	Reading  string // the order codes read from it ("3A, 1 cassa B"), "" = none
 	Override string // codes set by hand ("-" = not an order), "" = none
+	Manual   bool   // added by hand (a message the app never received)
 	Check    *ReplyCheck
 }
 
@@ -270,6 +275,7 @@ func (s *Service) CampaignReplies(ctx context.Context, msgIDs []string) ([]Reply
 	}
 	rows, err := s.db().QueryContext(ctx, `
 		SELECT r.id, COALESCE(r.author_id,''), `+userNameSQL+`, COALESCE(r.body,''), COALESCE(r.timestamp,0), COALESCE(r.order_override,''),
+		       COALESCE(r.msg_id,'') LIKE '`+ManualReplyPrefix+`%',
 		       c.kind, c.reason, c.proposal, c.body, c.status
 		FROM replies r LEFT JOIN users u ON u.id = r.author_id
 		LEFT JOIN reply_checks c ON c.reply_id = r.id
@@ -284,7 +290,7 @@ func (s *Service) CampaignReplies(ctx context.Context, msgIDs []string) ([]Reply
 		var r ReplyView
 		var name, kind, reason, proposal, checkedBody, status sql.NullString
 		var ts int64
-		if err := rows.Scan(&r.ID, &r.AuthorID, &name, &r.Testo, &ts, &r.Override, &kind, &reason, &proposal, &checkedBody, &status); err != nil {
+		if err := rows.Scan(&r.ID, &r.AuthorID, &name, &r.Testo, &ts, &r.Override, &r.Manual, &kind, &reason, &proposal, &checkedBody, &status); err != nil {
 			return nil, err
 		}
 		r.Utente = FmtName(nullStr(name))
@@ -315,6 +321,49 @@ func (s *Service) RenameCampaign(ctx context.Context, msgIDs []string, title str
 	}
 	_, err := s.db().ExecContext(ctx, "UPDATE listings SET title = ? WHERE msg_id IN ("+ph+")", args...)
 	return err
+}
+
+// ManualReplyPrefix marks the msg_id of replies added by hand.
+const ManualReplyPrefix = "manual_"
+
+// ErrDuplicateReply: the customer already has this message at this time.
+var ErrDuplicateReply = errors.New("questo messaggio c'è già")
+
+// AddManualReply stores a reply WhatsApp never delivered to the app, typed in
+// by hand. It goes under the campaign's latest post sent before it (or the
+// first post), like the collector would have filed it.
+func (s *Service) AddManualReply(ctx context.Context, c *Campaign, authorID, body string, ts int64) error {
+	if c == nil || len(c.MsgIDs) == 0 {
+		return errors.New("inserzione non trovata")
+	}
+	ph := strings.TrimSuffix(strings.Repeat("?,", len(c.MsgIDs)), ",")
+	args := make([]any, 0, len(c.MsgIDs)+2)
+	for _, id := range c.MsgIDs {
+		args = append(args, id)
+	}
+	args = append(args, ts, ts)
+	var listing string
+	if err := s.db().QueryRowContext(ctx, `
+		SELECT msg_id FROM listings WHERE msg_id IN (`+ph+`)
+		ORDER BY timestamp <= ? DESC, CASE WHEN timestamp <= ? THEN -timestamp ELSE timestamp END
+		LIMIT 1`, args...).Scan(&listing); err != nil {
+		return err
+	}
+	rnd := make([]byte, 4)
+	rand.Read(rnd)
+	msgID := fmt.Sprintf("%s%s_%d_%s", ManualReplyPrefix, c.ChatID, ts, hex.EncodeToString(rnd))
+	res, err := s.db().ExecContext(ctx, `INSERT INTO replies
+		(msg_id, listing_msg_id, chat_id, author_id, body, timestamp, created_at)
+		VALUES (?, ?, ?, ?, ?, ?, datetime(?, 'unixepoch'))
+		ON CONFLICT DO NOTHING`,
+		msgID, listing, c.ChatID, authorID, body, ts, ts)
+	if err != nil {
+		return err
+	}
+	if n, _ := res.RowsAffected(); n == 0 {
+		return ErrDuplicateReply
+	}
+	return nil
 }
 
 func (s *Service) DeleteReply(ctx context.Context, id int64) error {
