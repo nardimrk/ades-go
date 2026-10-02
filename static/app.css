@@ -877,3 +877,17 @@ body:has(.sel-bar:not(:empty)) .fab-menu { bottom: calc(max(.75rem, env(safe-are
 .modal-wine label { display: flex; flex-direction: column; gap: .25rem; min-width: 0; }
 .add-wine-nums { display: grid; grid-template-columns: minmax(0, 1fr) minmax(0, 1fr); gap: .5rem; }
 .modal-wine .modal-body { min-height: min(20rem, 60dvh); }
+
+/* "Sposta in un'altra inserzione": the list of inserzioni to pick from */
+.modal-move .modal-body { min-height: min(28rem, 70dvh); }
+.modal-move input[type=search] { margin-bottom: 0; }
+.move-list { display: flex; flex-direction: column; gap: .35rem; overflow-y: auto; min-height: 0; }
+.move-item {
+  display: flex; align-items: center; gap: .75rem; width: 100%; text-align: left; font: inherit; color: var(--text);
+  padding: .55rem .7rem; border: 1px solid var(--border); border-radius: var(--radius); background: var(--panel); cursor: pointer; min-height: 44px;
+}
+.move-item:hover, .move-item:focus-visible { border-color: var(--accent); outline: none; }
+.move-item:hover .dl-title { color: var(--accent); }
+.move-item .dl-title, .move-item .dl-group { white-space: nowrap; overflow: hidden; text-overflow: ellipsis; display: block; }
+.reply-head .reply-move { color: var(--muted); }
+.reply-head .reply-move:hover { color: var(--accent); background: var(--accent-soft); }

@@ -197,6 +197,58 @@ func (s *Server) addReply(w http.ResponseWriter, r *http.Request) {
 	toast(w, r, "success", "Risposta aggiunta: "+name+" · "+at.Format("02/01/2006 15:04"))
 }
 
+// moveReplyForm opens the "Sposta in un'altra inserzione" modal.
+func (s *Server) moveReplyForm(w http.ResponseWriter, r *http.Request) {
+	id, err := strconv.ParseInt(r.PathValue("id"), 10, 64)
+	if err != nil {
+		http.Error(w, "bad id", http.StatusBadRequest)
+		return
+	}
+	qs := r.URL.Query()
+	d := views.InserzioniData{SelChat: qs.Get("chat"), SelKey: qs.Get("c")}
+	if err := s.loadSelection(r, &d); err != nil {
+		s.fail(w, r, err)
+		return
+	}
+	rows, err := s.svc.InserzioniList(r.Context(), "", "")
+	if err != nil {
+		s.fail(w, r, err)
+		return
+	}
+	for _, x := range d.Replies {
+		if x.ID == id {
+			render(w, r, views.MoveReplyModal(d, x, rows))
+			return
+		}
+	}
+	s.fail(w, r, fmt.Errorf("messaggio non trovato in questa inserzione"))
+}
+
+// moveReply files the reply under the chosen campaign and opens it there.
+func (s *Server) moveReply(w http.ResponseWriter, r *http.Request) {
+	id, err := strconv.ParseInt(r.PathValue("id"), 10, 64)
+	if err != nil {
+		http.Error(w, "bad id", http.StatusBadRequest)
+		return
+	}
+	to, err := url.ParseQuery(r.FormValue("to"))
+	if err != nil || to.Get("chat") == "" {
+		s.fail(w, r, fmt.Errorf("scegli un'inserzione"))
+		return
+	}
+	camp, err := s.svc.FindCampaign(r.Context(), to.Get("chat"), to.Get("c"))
+	if err != nil || camp == nil {
+		s.fail(w, r, fmt.Errorf("inserzione non trovata"))
+		return
+	}
+	if err := s.svc.MoveReply(r.Context(), id, camp); err != nil {
+		s.fail(w, r, err)
+		return
+	}
+	target := "/inserzioni?" + url.Values{"chat": {camp.ChatID}, "c": {camp.Key}}.Encode()
+	w.Header().Set("HX-Redirect", target+"#reply-"+strconv.FormatInt(id, 10))
+}
+
 // reviewStart launches the LLM check of a campaign's replies.
 func (s *Server) reviewStart(w http.ResponseWriter, r *http.Request) {
 	d := views.InserzioniData{SelChat: r.FormValue("chat"), SelKey: r.FormValue("c")}

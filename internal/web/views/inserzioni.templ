@@ -507,6 +507,14 @@ templ ReplyItem(d InserzioniData, r service.ReplyView, oob bool) {
 				<span class="badge badge-info">Aggiunta a mano</span>
 			}
 			<button
+				class="icon reply-move"
+				title="Sposta in un'altra inserzione"
+				aria-label="Sposta in un'altra inserzione"
+				hx-get={ "/replies/" + i64(r.ID) + "/move?" + reviewVals(d) }
+				hx-target="#modal"
+				hx-swap="innerHTML"
+			>@IconMove()</button>
+			<button
 				class="icon danger"
 				title="Elimina messaggio"
 				aria-label="Elimina messaggio"
@@ -643,6 +651,56 @@ templ proposalRow(prefix string, r service.ReplyView, o service.OrderOption, qty
 			<button type="button" class="btn step" data-step="1" aria-label={ "Più " + o.Label() }>+</button>
 		</span>
 	</div>
+}
+
+// moveTarget encodes a campaign for the "Sposta" form (chat + key).
+func moveTarget(r service.CampaignRow) string { return q("chat", r.ChatID, "c", r.Key) }
+
+// MoveReplyModal lists the other inserzioni (most recent first, searchable):
+// picking one moves the reply there and opens it.
+templ MoveReplyModal(d InserzioniData, r service.ReplyView, rows []service.CampaignRow) {
+	<dialog class="modal modal-move" data-modal-open aria-labelledby={ "move-title-" + i64(r.ID) }>
+		<form class="modal-form" hx-post={ "/replies/" + i64(r.ID) + "/move" } hx-swap="none">
+			<input type="hidden" name="chat" value={ d.SelChat }/>
+			<input type="hidden" name="c" value={ d.SelKey }/>
+			<div class="modal-head">
+				<div class="modal-title">
+					<h3 id={ "move-title-" + i64(r.ID) }>Sposta in un'altra inserzione</h3>
+					<span class="muted">{ r.Utente } · { r.Ora }</span>
+				</div>
+				<button type="button" class="icon" data-modal-close aria-label="Chiudi">@IconX()</button>
+			</div>
+			<div class="modal-body">
+				<div class="modal-quote">{ compactText(r.Testo) }</div>
+				if r.Override != "" {
+					<p class="muted modal-note">La correzione a mano ({ overrideLabel(r.Override) }) verrà tolta: nella nuova inserzione il messaggio viene riletto.</p>
+				}
+				<input type="search" placeholder="Cerca un'inserzione…" data-filter=".move-item" aria-label="Cerca un'inserzione"/>
+				<div class="move-list">
+					for _, x := range rows {
+						if x.ChatID != d.SelChat || x.Key != d.SelKey {
+							<button
+								type="submit"
+								class="move-item"
+								name="to"
+								value={ moveTarget(x) }
+								data-name={ x.DisplayTitle + " " + x.ChatName }
+							>
+								<span class="dl-day">{ dayMonthShort(x.Data) }</span>
+								<span class="dl-main">
+									<b class="dl-title">{ x.DisplayTitle }</b>
+									<span class="muted dl-group">{ x.ChatName } · { dateIT(x.Data) }</span>
+								</span>
+							</button>
+						}
+					}
+				</div>
+			</div>
+			<div class="modal-foot">
+				<button type="button" class="btn" data-modal-close>Annulla</button>
+			</div>
+		</form>
+	</dialog>
 }
 
 // ModalSlot holds the open modal; emptied out-of-band once it is done.

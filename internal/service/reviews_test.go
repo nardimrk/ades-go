@@ -376,3 +376,50 @@ func TestSetReplyOrderAddingOptions(t *testing.T) {
 		t.Fatalf("failed add changed the order: %v", rv.Current)
 	}
 }
+
+// "Sposta": the reply goes under the other campaign and its correction is dropped.
+func TestMoveReply(t *testing.T) {
+	ctx := context.Background()
+	store, err := db.Open(filepath.Join(t.TempDir(), "wine.db"))
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer store.Close()
+	svc := New(store, &config.Config{}, nil)
+	const chat = "1@g.us"
+	for _, l := range []db.Listing{
+		{MsgID: "L1", ChatID: chat, AuthorID: "owner", Body: "Barolo\nA. 6x Barolo 2019 a 40€", Timestamp: 1000},
+		{MsgID: "L2", ChatID: chat, AuthorID: "owner", Body: "Champagne\nA. 6x Brut a 30€", Timestamp: 2000},
+	} {
+		if err := store.InsertListing(ctx, l); err != nil {
+			t.Fatal(err)
+		}
+	}
+	lid := "L2"
+	if err := store.InsertReply(ctx, db.Reply{MsgID: "R1", ListingMsgID: &lid, ChatID: chat, AuthorID: "u1", Body: "2A", Timestamp: 2100}); err != nil {
+		t.Fatal(err)
+	}
+	var rid int64
+	store.DB.QueryRowContext(ctx, "SELECT id FROM replies WHERE msg_id = 'R1'").Scan(&rid)
+	if err := svc.SetReplyOrder(ctx, rid, "1A"); err != nil {
+		t.Fatal(err)
+	}
+	rows, _ := svc.InserzioniList(ctx, "", "")
+	var barolo *Campaign
+	for i := range rows {
+		if rows[i].MsgIDs[0] == "L1" {
+			barolo = &rows[i].Campaign
+		}
+	}
+	if barolo == nil {
+		t.Fatal("Barolo campaign not found")
+	}
+	if err := svc.MoveReply(ctx, rid, barolo); err != nil {
+		t.Fatal(err)
+	}
+	var listing, override string
+	store.DB.QueryRowContext(ctx, "SELECT listing_msg_id, COALESCE(order_override,'') FROM replies WHERE id = ?", rid).Scan(&listing, &override)
+	if listing != "L1" || override != "" {
+		t.Fatalf("after move: listing %q, override %q", listing, override)
+	}
+}

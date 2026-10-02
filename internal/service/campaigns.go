@@ -393,6 +393,50 @@ func (s *Service) SetCampaignDelivery(ctx context.Context, msgIDs []string, date
 	})
 }
 
+// campaignPostFor picks the post of the campaign a reply sent at ts belongs
+// to: the latest one sent before it, else the first one.
+func (s *Service) campaignPostFor(ctx context.Context, c *Campaign, ts int64) (string, error) {
+	if c == nil || len(c.MsgIDs) == 0 {
+		return "", errors.New("inserzione non trovata")
+	}
+	ph := strings.TrimSuffix(strings.Repeat("?,", len(c.MsgIDs)), ",")
+	args := make([]any, 0, len(c.MsgIDs)+2)
+	for _, id := range c.MsgIDs {
+		args = append(args, id)
+	}
+	args = append(args, ts, ts)
+	var listing string
+	err := s.db().QueryRowContext(ctx, `
+		SELECT msg_id FROM listings WHERE msg_id IN (`+ph+`)
+		ORDER BY timestamp <= ? DESC, CASE WHEN timestamp <= ? THEN -timestamp ELSE timestamp END
+		LIMIT 1`, args...).Scan(&listing)
+	return listing, err
+}
+
+// MoveReply files a reply under another campaign (a reply the rules linked
+// to the wrong listing). Its order correction and its check refer to the old
+// listing's options, so they are dropped: the rules read it again there.
+func (s *Service) MoveReply(ctx context.Context, replyID int64, to *Campaign) error {
+	var ts int64
+	if err := s.db().QueryRowContext(ctx, "SELECT COALESCE(timestamp,0) FROM replies WHERE id = ?", replyID).Scan(&ts); err != nil {
+		if errors.Is(err, sql.ErrNoRows) {
+			return errors.New("messaggio non trovato")
+		}
+		return err
+	}
+	listing, err := s.campaignPostFor(ctx, to, ts)
+	if err != nil {
+		return err
+	}
+	return s.inTx(ctx, func(tx *sql.Tx) error {
+		if _, err := tx.ExecContext(ctx, "UPDATE replies SET listing_msg_id = ?, order_override = NULL WHERE id = ?", listing, replyID); err != nil {
+			return err
+		}
+		_, err := tx.ExecContext(ctx, "DELETE FROM reply_checks WHERE reply_id = ?", replyID)
+		return err
+	})
+}
+
 // ManualReplyPrefix marks the msg_id of replies added by hand.
 const ManualReplyPrefix = "manual_"
 
@@ -403,20 +447,8 @@ var ErrDuplicateReply = errors.New("questo messaggio c'è già")
 // by hand. It goes under the campaign's latest post sent before it (or the
 // first post), like the collector would have filed it.
 func (s *Service) AddManualReply(ctx context.Context, c *Campaign, authorID, body string, ts int64) error {
-	if c == nil || len(c.MsgIDs) == 0 {
-		return errors.New("inserzione non trovata")
-	}
-	ph := strings.TrimSuffix(strings.Repeat("?,", len(c.MsgIDs)), ",")
-	args := make([]any, 0, len(c.MsgIDs)+2)
-	for _, id := range c.MsgIDs {
-		args = append(args, id)
-	}
-	args = append(args, ts, ts)
-	var listing string
-	if err := s.db().QueryRowContext(ctx, `
-		SELECT msg_id FROM listings WHERE msg_id IN (`+ph+`)
-		ORDER BY timestamp <= ? DESC, CASE WHEN timestamp <= ? THEN -timestamp ELSE timestamp END
-		LIMIT 1`, args...).Scan(&listing); err != nil {
+	listing, err := s.campaignPostFor(ctx, c, ts)
+	if err != nil {
 		return err
 	}
 	rnd := make([]byte, 4)
