@@ -117,7 +117,7 @@ templ InserzioniList(d InserzioniData) {
 							<a class={ "dl-item", "dl-link", templ.KV("dl-empty", r.Risposte == 0), templ.KV("dl-ordered", r.HasOrders) } href={ templ.URL(convURL(d, r)) }>
 								<span class="dl-day">{ dayMonthShort(r.Data) }</span>
 								<span class="dl-main">
-									<b class="dl-title">{ r.DisplayTitle }</b>
+									<b class="dl-title" title={ r.DisplayTitle }>{ r.DisplayTitle }</b>
 									<span class="muted dl-group">
 										{ r.ChatName }
 										if r.LastData != "" && dateIT(r.LastData) != dateIT(r.Data) {

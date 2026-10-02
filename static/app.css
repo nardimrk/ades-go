@@ -573,6 +573,12 @@ a.dl-item:hover .dl-title { color: var(--accent); }
   background: var(--accent); box-shadow: 0 0 0 3px var(--bg);
 }
 .dl-stats:empty { display: none; }
+/* Inserzioni list: every card is one line of title + one of group, so all
+   cards have the same height; what does not fit is cut with "…" */
+#ins-list .dl-item { flex-wrap: nowrap; }
+#ins-list .dl-title, #ins-list .dl-group { white-space: nowrap; overflow: hidden; text-overflow: ellipsis; overflow-wrap: normal; }
+#ins-list .dl-stats { width: auto; flex: none; flex-wrap: nowrap; padding-left: 0; }
+#ins-list .dl-day { min-width: 3.4rem; font-variant-numeric: tabular-nums; }
 .view-timeline .month-items { display: flex; flex-direction: column; gap: .4rem; }
 /* cards: a responsive grid */
 .view-cards .month-items { display: grid; grid-template-columns: repeat(auto-fill, minmax(min(240px, 100%), 1fr)); gap: .75rem; }
