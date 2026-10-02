@@ -193,7 +193,66 @@ func (s *Store) migrate(ctx context.Context) error {
 		WHERE quotation_id IS NOT NULL AND quotation_id NOT IN (SELECT id FROM quotations)`); err != nil {
 		return err
 	}
-	return s.ensureDedupIndexes(ctx)
+	if err := s.ensureDedupIndexes(ctx); err != nil {
+		return err
+	}
+	return s.ensureSelectionsTriggers(ctx)
+}
+
+// selectionsVersionKey is the app_meta counter bumped by triggers on every
+// write that can change the parsed order selections (see SelectionsVersion).
+const selectionsVersionKey = "selections_version"
+
+// Triggers are created with IF NOT EXISTS: to change one, rename it (and DROP
+// the old name here) so existing databases pick up the new definition.
+var selectionsTriggers = func() []string {
+	bump := "BEGIN UPDATE app_meta SET value = CAST(value AS INTEGER) + 1 WHERE key = '" + selectionsVersionKey + "'; END"
+	defs := []string{
+		"trg_sel_replies_ins AFTER INSERT ON replies",
+		"trg_sel_replies_upd AFTER UPDATE ON replies",
+		"trg_sel_replies_del AFTER DELETE ON replies",
+		"trg_sel_listings_ins AFTER INSERT ON listings WHEN NEW.quotation_id IS NOT NULL",
+		"trg_sel_listings_upd AFTER UPDATE OF msg_id, quotation_id ON listings",
+		"trg_sel_listings_del AFTER DELETE ON listings WHEN OLD.quotation_id IS NOT NULL",
+		"trg_sel_users_ins AFTER INSERT ON users",
+		"trg_sel_users_upd AFTER UPDATE OF id, name ON users",
+		"trg_sel_users_del AFTER DELETE ON users",
+		"trg_sel_quotations_ins AFTER INSERT ON quotations",
+		"trg_sel_quotations_upd AFTER UPDATE OF id, quotation_number, quotation_date ON quotations",
+		"trg_sel_quotations_del AFTER DELETE ON quotations",
+		"trg_sel_qitems_ins AFTER INSERT ON quotation_items",
+		"trg_sel_qitems_upd AFTER UPDATE ON quotation_items",
+		"trg_sel_qitems_del AFTER DELETE ON quotation_items",
+	}
+	out := make([]string, len(defs))
+	for i, d := range defs {
+		out[i] = "CREATE TRIGGER IF NOT EXISTS " + d + " " + bump
+	}
+	return out
+}()
+
+// ensureSelectionsTriggers keeps the selections counter in step with the
+// data, whoever writes it: the collector, the dashboard, a chat import or a
+// manual fix with the sqlite3 shell.
+func (s *Store) ensureSelectionsTriggers(ctx context.Context) error {
+	if _, err := s.DB.ExecContext(ctx, "INSERT OR IGNORE INTO app_meta (key, value) VALUES (?, '0')", selectionsVersionKey); err != nil {
+		return err
+	}
+	for _, stmt := range selectionsTriggers {
+		if _, err := s.DB.ExecContext(ctx, stmt); err != nil {
+			return fmt.Errorf("%s: %w", stmt, err)
+		}
+	}
+	return nil
+}
+
+// SelectionsVersion changes whenever replies, linked listings, users,
+// quotations or quotation items change, so callers can cache results
+// derived from them.
+func (s *Store) SelectionsVersion(ctx context.Context) (string, error) {
+	var v string
+	err := s.DB.QueryRowContext(ctx, "SELECT value FROM app_meta WHERE key = ?", selectionsVersionKey).Scan(&v)
+	return v, err
 }
 
 // ensureDedupIndexes enforces one row per (chat, author, body, timestamp) in

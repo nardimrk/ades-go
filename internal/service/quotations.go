@@ -145,9 +145,50 @@ func (s *Service) OrderReplyIDs(ctx context.Context) (map[int64]bool, error) {
 	return ids, nil
 }
 
+// parsedBody is what the order parser reads from one reply body.
+type parsedBody struct {
+	codes          []textutil.OrderCode
+	mentionsQuotNo bool
+}
+
 // parseSelections reads every order code of the quotation-linked replies, in
-// order, before later mentions replace earlier ones.
+// order, before later mentions replace earlier ones. Parsing every reply is
+// the most expensive thing the dashboard does, so the result is cached until
+// the DB's selections version changes. The returned slice is shared: callers
+// must not modify it.
 func (s *Service) parseSelections(ctx context.Context) ([]Selection, error) {
+	s.selMu.Lock()
+	defer s.selMu.Unlock()
+	// read the version before parsing: a write that lands meanwhile bumps it
+	// again, so the next call recomputes
+	ver, verErr := s.Store.SelectionsVersion(ctx)
+	if verErr == nil && s.selOK && ver == s.selVer {
+		return s.selCache, nil
+	}
+	sel, err := s.loadSelections(ctx)
+	if err != nil {
+		return nil, err
+	}
+	s.selVer, s.selOK, s.selCache = ver, verErr == nil, sel
+	return sel, nil
+}
+
+// loadSelections does the work of parseSelections. Reply bodies parsed on a
+// previous run are reused, so after a new message only that one is parsed.
+// Call with selMu held.
+func (s *Service) loadSelections(ctx context.Context) ([]Selection, error) {
+	parsed := map[string]parsedBody{} // replaces s.selParsed: drops bodies no longer stored
+	parse := func(body string) parsedBody {
+		p, ok := parsed[body]
+		if !ok {
+			if p, ok = s.selParsed[body]; !ok {
+				p = parsedBody{textutil.ParseOrders(body), textutil.MentionsQuotationNumber(body)}
+			}
+			parsed[body] = p
+		}
+		return p
+	}
+
 	rows, err := s.db().QueryContext(ctx, `
 		SELECT r.id, r.author_id, `+userNameSQL+`, COALESCE(r.msg_id,''), COALESCE(r.body,''), COALESCE(r.timestamp,0),
 		       q.quotation_number, q.id, COALESCE(q.quotation_date,'')
@@ -167,7 +208,7 @@ func (s *Service) parseSelections(ctx context.Context) ([]Selection, error) {
 		qnum                            string
 		qid                             int64
 		qdate                           string
-		matches                         int
+		parsed                          parsedBody
 	}
 	var reps []rep
 	for rows.Next() {
@@ -178,7 +219,7 @@ func (s *Service) parseSelections(ctx context.Context) ([]Selection, error) {
 			return nil, err
 		}
 		r.authorID, r.userName, r.qnum = nullStr(author), nullStr(name), nullStr(qnum)
-		r.matches = len(textutil.ParseOrders(r.body))
+		r.parsed = parse(r.body)
 		reps = append(reps, r)
 	}
 	rows.Close()
@@ -200,8 +241,9 @@ func (s *Service) parseSelections(ctx context.Context) ([]Selection, error) {
 	best := map[key]int{}
 	for i, r := range reps {
 		k := key{r.qid, r.authorID, r.ts}
-		if j, ok := best[k]; !ok || r.matches > reps[j].matches ||
-			(r.matches == reps[j].matches && realID(r.msgID) && !realID(reps[j].msgID)) {
+		n := len(r.parsed.codes)
+		if j, ok := best[k]; !ok || n > len(reps[j].parsed.codes) ||
+			(n == len(reps[j].parsed.codes) && realID(r.msgID) && !realID(reps[j].msgID)) {
 			best[k] = i
 		}
 	}
@@ -249,10 +291,10 @@ func (s *Service) parseSelections(ctx context.Context) ([]Selection, error) {
 
 	var sel []Selection
 	for _, r := range kept {
-		if textutil.MentionsQuotationNumber(r.body) {
+		if r.parsed.mentionsQuotNo {
 			continue
 		}
-		for _, c := range textutil.ParseOrders(r.body) {
+		for _, c := range r.parsed.codes {
 			if c.Qty >= 1900 {
 				continue
 			}
@@ -269,6 +311,7 @@ func (s *Service) parseSelections(ctx context.Context) ([]Selection, error) {
 			})
 		}
 	}
+	s.selParsed = parsed
 	return sel, nil
 }
 

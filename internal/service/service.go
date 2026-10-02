@@ -9,6 +9,7 @@ import (
 	"fmt"
 	"math"
 	"strings"
+	"sync"
 	"time"
 
 	"adesgo/internal/config"
@@ -25,6 +26,14 @@ type Service struct {
 	Store  *db.Store
 	Cfg    *config.Config
 	Groups GroupNamer
+
+	// parseSelections cache: the result for the DB's selections version,
+	// plus the parsed order codes of every reply body seen last time.
+	selMu     sync.Mutex
+	selVer    string
+	selOK     bool
+	selCache  []Selection
+	selParsed map[string]parsedBody
 }
 
 func New(store *db.Store, cfg *config.Config, groups GroupNamer) *Service {
