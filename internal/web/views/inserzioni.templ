@@ -151,7 +151,7 @@ templ InserzioniList(d InserzioniData) {
 templ InserzioneDetail(d InserzioniData) {
 	@Layout("Inserzione", "inserzioni") {
 		<div class="page-head">
-			<a href={ templ.URL("/inserzioni" + d.listQuery()) } class="btn">← Elenco</a>
+			<a href={ templ.URL("/inserzioni" + d.listQuery()) } class="btn icon-btn" title="Elenco" aria-label="Elenco">@IconList()</a>
 			<h2>
 				if d.Selected != nil {
 					{ d.Selected.DisplayTitle }
@@ -159,10 +159,21 @@ templ InserzioneDetail(d InserzioniData) {
 					Conversazione
 				}
 			</h2>
-			<nav class="prev-next" aria-label="Altre inserzioni">
-				@neighborLink(d, d.Prev, "Inserzione precedente", true)
-				@neighborLink(d, d.Next, "Inserzione successiva", false)
-			</nav>
+			<div class="head-actions">
+				// the campaign's order, when there is one (not every listing has it)
+				if d.Review != nil && d.Review.QuotationNumber != "" {
+					<a
+						href={ templ.URL(previewURL(d.Review.QuotationNumber)) }
+						class="btn icon-btn order-link"
+						title={ "Apri l'ordine " + d.Review.QuotationNumber }
+						aria-label={ "Apri l'ordine " + d.Review.QuotationNumber }
+					>@IconReceipt()</a>
+				}
+				<nav class="prev-next" aria-label="Altre inserzioni">
+					@neighborLink(d, d.Prev, "Inserzione precedente", true)
+					@neighborLink(d, d.Next, "Inserzione successiva", false)
+				</nav>
+			</div>
 		</div>
 		<div id="conv" class="conv">
 			@Conversation(d)
