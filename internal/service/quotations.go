@@ -801,6 +801,64 @@ type QuotationDetail struct {
 	Sections   []CustomerSection
 	Single     bool
 	Overbooked []StockWarning // options ordered beyond what the listing offers
+	// set by the page: the neighbours in the Ordini list and the listing
+	Prev, Next   *QuotationSummary
+	ListingURL   string // "" = manual order (no listing)
+	ListingTitle string
+}
+
+// QuotationNeighbors returns the orders shown just before and after num in
+// the Ordini list (same order as QuotationMonths); nil at either end.
+func QuotationNeighbors(sums []QuotationSummary, num string) (prev, next *QuotationSummary) {
+	var sorted []QuotationSummary
+	for _, m := range QuotationMonths(sums) {
+		sorted = append(sorted, m.Rows...)
+	}
+	for i := range sorted {
+		if sorted[i].Number != num {
+			continue
+		}
+		if i > 0 {
+			prev = &sorted[i-1]
+		}
+		if i+1 < len(sorted) {
+			next = &sorted[i+1]
+		}
+		break
+	}
+	return prev, next
+}
+
+// QuotationListing returns the campaign (listing) the quotation was created
+// from, nil for a manual order.
+func (s *Service) QuotationListing(ctx context.Context, quotationID int64) (*Campaign, error) {
+	rows, err := s.ListingRows(ctx)
+	if err != nil {
+		return nil, err
+	}
+	// campaigns are grouped within one chat, as FindCampaign does
+	byChat := map[string][]ListingRow{}
+	for _, r := range rows {
+		if r.QuotationID != nil && *r.QuotationID == quotationID {
+			byChat[r.ChatID] = nil
+		}
+	}
+	for _, r := range rows {
+		if _, ok := byChat[r.ChatID]; ok {
+			byChat[r.ChatID] = append(byChat[r.ChatID], r)
+		}
+	}
+	for _, chatRows := range byChat {
+		for _, c := range GroupCampaigns(chatRows) {
+			for _, id := range c.QuotationIDs {
+				if id == quotationID {
+					c := c
+					return &c, nil
+				}
+			}
+		}
+	}
+	return nil, nil
 }
 
 // StockWarning: an option of the listing ordered beyond its availability.

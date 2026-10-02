@@ -652,6 +652,19 @@ func (s *Server) preventivoView(w http.ResponseWriter, r *http.Request) {
 	for i := range d.Sections {
 		s.useSavedRows(r, d.Quotation.Number, &d.Sections[i])
 	}
+	// the listing it comes from and the orders next to it in the list
+	if c, err := s.svc.QuotationListing(r.Context(), d.Quotation.ID); err != nil {
+		s.fail(w, r, err)
+		return
+	} else if c != nil {
+		d.ListingURL, d.ListingTitle = service.CampaignURL(c.ChatID, c.Key), c.DisplayTitle
+	}
+	sums, err := s.svc.QuotationSummaries(r.Context())
+	if err != nil {
+		s.fail(w, r, err)
+		return
+	}
+	d.Prev, d.Next = service.QuotationNeighbors(sums, d.Quotation.Number)
 	catalog, err := s.svc.Catalog(r.Context())
 	if err != nil {
 		s.fail(w, r, err)

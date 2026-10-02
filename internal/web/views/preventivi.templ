@@ -126,8 +126,23 @@ templ PreventiviSearch(rows []service.Selection) {
 templ PreventivoDetail(d *service.QuotationDetail, catalog []service.CatalogEntry) {
 	@Layout("Ordine "+d.Quotation.Number, "ordini") {
 		<div class="page-head">
-			<a href="/ordini" class="btn">← Elenco</a>
+			<a href="/ordini" class="btn icon-btn" title="Elenco" aria-label="Elenco">@IconList()</a>
 			<h2>{ d.Quotation.Number } · { d.Date }</h2>
+			<div class="head-actions">
+				// the listing the order comes from (manual orders have none)
+				if d.ListingURL != "" {
+					<a
+						href={ templ.URL(d.ListingURL) }
+						class="btn icon-btn order-link"
+						title={ "Apri l'inserzione: " + d.ListingTitle }
+						aria-label={ "Apri l'inserzione: " + d.ListingTitle }
+					>@IconMegaphone()</a>
+				}
+				<nav class="prev-next" aria-label="Altri ordini">
+					@orderNeighborLink(d.Prev, "Ordine precedente", true)
+					@orderNeighborLink(d.Next, "Ordine successivo", false)
+				</nav>
+			</div>
 		</div>
 		<hr/>
 		if len(d.Sections) == 0 {
@@ -160,6 +175,27 @@ templ ProdottiDatalist(catalog []service.CatalogEntry) {
 			}
 		}
 	</datalist>
+}
+
+// orderNeighborLink: the order before/after this one in the Ordini list.
+templ orderNeighborLink(q *service.QuotationSummary, label string, left bool) {
+	if q != nil {
+		<a href={ templ.URL(previewURL(q.Number)) } class="btn icon-btn" title={ label + ": " + q.Number + " · " + q.Title } aria-label={ label }>
+			if left {
+				@IconChevronLeft()
+			} else {
+				@IconChevronRight()
+			}
+		</a>
+	} else {
+		<button type="button" class="btn icon-btn" disabled aria-label={ label }>
+			if left {
+				@IconChevronLeft()
+			} else {
+				@IconChevronRight()
+			}
+		</button>
+	}
 }
 
 // StockWarnings: options ordered beyond the bottles the listing offers.
