@@ -88,46 +88,50 @@ templ TitleJobStatus(st service.TitleStatus, enabled bool) {
 	}
 }
 
+// InserzioniList: the campaigns as a monthly timeline (by first post),
+// like Ordini.
 templ InserzioniList(d InserzioniData) {
 	if len(d.Rows) == 0 {
 		@Alert("info", "Nessuna inserzione.")
 	} else {
-		<p class="muted">{ itoa(len(d.Rows)) } campagne · clicca sul titolo per aprire la conversazione</p>
-		<table class="table clickable">
-			<thead>
-				<tr>
-					<th>Data</th>
-					<th>Inserzione</th>
-					<th>Gruppo</th>
-					<th>Ultimo agg.</th>
-					<th class="num">Risposte</th>
-					<th>Ordine</th>
-				</tr>
-			</thead>
-			<tbody>
-				for _, r := range d.Rows {
-					<tr data-href={ convURL(d, r) }>
-						<td class="nowrap">{ dateIT(r.Data) }</td>
-						<td class="title-cell"><a href={ templ.URL(convURL(d, r)) }>{ r.DisplayTitle }</a></td>
-						<td class="nowrap">
-							{ r.ChatName }
-							if r.Orphan {
-								<span class="badge badge-warn">non monitorato</span>
-							}
-						</td>
-						<td class="nowrap">{ dateIT(r.LastData) }</td>
-						<td class="num">{ itoa(r.Risposte) }</td>
-						<td>
-							if len(r.QuotationIDs) > 0 {
-								<span class="badge badge-ok">Sì</span>
-							} else {
-								—
-							}
-						</td>
-					</tr>
-				}
-			</tbody>
-		</table>
+		<p class="muted">{ itoa(len(d.Rows)) } campagne · clicca su un'inserzione per aprire la conversazione</p>
+		<div class="view-timeline timeline">
+			for _, m := range service.InserzioniMonths(d.Rows) {
+				<section class="month">
+					<header class="month-head">
+						<h3>{ monthLabel(m.Year, m.Month) }</h3>
+						<span class="muted">
+							{ plural(len(m.Rows), "inserzione", "inserzioni") } · { plural(m.Risposte, "risposta", "risposte") }
+						</span>
+					</header>
+					<div class="month-items">
+						for _, r := range m.Rows {
+							<a class={ "dl-item", "dl-link", templ.KV("dl-empty", r.Risposte == 0) } href={ templ.URL(convURL(d, r)) }>
+								<span class="dl-day">{ dayMonthShort(r.Data) }</span>
+								<span class="dl-main">
+									<b class="dl-title">{ r.DisplayTitle }</b>
+									<span class="muted dl-group">
+										{ r.ChatName }
+										if r.LastData != "" && dateIT(r.LastData) != dateIT(r.Data) {
+											· agg. { dateIT(r.LastData) }
+										}
+									</span>
+								</span>
+								<span class="dl-stats">
+									<span>{ plural(r.Risposte, "risposta", "risposte") }</span>
+									if r.Orphan {
+										<span class="badge badge-warn">non monitorato</span>
+									}
+									if len(r.QuotationIDs) > 0 {
+										<span class="badge badge-ok">Ordine</span>
+									}
+								</span>
+							</a>
+						}
+					</div>
+				</section>
+			}
+		</div>
 	}
 }
 

@@ -64,7 +64,15 @@ templ PreventiviSummary(months []service.QuotationMonth) {
 								<a class={ "dl-item", "dl-link", templ.KV("dl-empty", r.Clienti == 0) } href={ templ.URL(previewURL(r.Number)) }>
 									<span class="dl-day">{ dayMonthShort(r.Date) }</span>
 									<span class="dl-main">
-										<b class="dl-title">{ noEmoji(r.Title) }</b>
+										if r.Manual {
+											<b class="dl-title dl-manual" title="Ordine manuale">
+												@IconHand()
+												<span class="sr-only">Ordine manuale</span>
+												{ noEmoji(r.Title) }
+											</b>
+										} else {
+											<b class="dl-title">{ noEmoji(r.Title) }</b>
+										}
 										<span class="muted dl-group">{ r.Number }</span>
 									</span>
 									<span class="dl-stats">
@@ -254,14 +262,14 @@ templ NuovoPreventivo(d NuovoPreventivoData) {
 			@Alert("error", d.Error)
 		}
 		<form method="post" action="/ordini/nuovo" class="stack" id="np-form">
-			<div class="grid3">
-				<div><b>Numero ordine:</b> <code>{ d.Number }</code></div>
+			<div class="np-head">
+				<div class="np-number"><b>Numero ordine:</b> <code>{ d.Number }</code></div>
+				<label>
+					Cliente
+					<input type="text" name="cliente" list="np-clients" value={ d.Cliente } placeholder="Scrivi per cercare un cliente..." autocomplete="off" required/>
+				</label>
 				<label>Data <input type="date" name="date" value={ d.Date } required/></label>
 			</div>
-			<label>
-				Cliente
-				<input type="text" name="cliente" list="np-clients" value={ d.Cliente } placeholder="Scrivi per cercare un cliente..." autocomplete="off" required/>
-			</label>
 			<datalist id="np-clients">
 				for _, c := range d.Clients {
 					<option value={ c }></option>

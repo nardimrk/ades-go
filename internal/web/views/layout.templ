@@ -51,11 +51,17 @@ templ Layout(title, active string) {
 		<div class="shell">
 			<aside class="sidebar">
 				<div class="brand">ADES Wine Club</div>
-				<nav>
-					for _, n := range nav {
-						<a href={ templ.URL(n.Href) } class={ templ.KV("active", n.Key == active) }>{ n.Label }</a>
-					}
-				</nav>
+				<div class="nav-wrap" data-nav-wrap>
+					<nav>
+						for _, n := range nav {
+							<a href={ templ.URL(n.Href) } class={ templ.KV("active", n.Key == active) }>{ n.Label }</a>
+						}
+					</nav>
+					// arrows of the horizontally scrolling mobile menu, shown only
+					// on the side where more sections are hidden
+					<button type="button" class="nav-arrow left" data-nav-scroll="-1" tabindex="-1" aria-label="Sezioni precedenti">@IconChevronLeft()</button>
+					<button type="button" class="nav-arrow right" data-nav-scroll="1" tabindex="-1" aria-label="Altre sezioni">@IconChevronRight()</button>
+				</div>
 				<div class="sidebar-foot">
 					<form method="post" action="/logout" class="logout">
 						<button type="submit" class="link">Esci</button>

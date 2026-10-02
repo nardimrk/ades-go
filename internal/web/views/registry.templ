@@ -2,6 +2,7 @@ package views
 
 import (
 	"adesgo/internal/service"
+	"fmt"
 	"strings"
 )
 
@@ -185,12 +186,26 @@ templ ClientiPage(users []service.User) {
 			>＋ Aggiungi</button>
 		</div>
 		<div class="row between">
-			<input type="search" placeholder="Cerca cliente…" data-filter=".user-row" class="narrow"/>
+			<div class="row">
+				<input type="search" placeholder="Cerca cliente…" data-filter=".user-row" class="narrow"/>
+				<span class="muted" data-filter-count=".user-row" data-noun="clienti">{ fmt.Sprint(len(users)) } clienti</span>
+			</div>
 			<span class="muted">Le modifiche si salvano da sole quando esci dal campo.</span>
 		</div>
 		<div class="table-wrap sticky-head">
 			<table class="table edit autosave">
-				<thead><tr><th>ID WhatsApp</th><th>Nome</th><th>Indirizzo</th><th>Città</th><th>Provincia</th><th>Regione</th><th>CAP</th><th class="num"></th></tr></thead>
+				<thead>
+					<tr>
+						@filterTh("ID WhatsApp")
+						@filterTh("Nome")
+						@filterTh("Indirizzo")
+						@filterTh("Città")
+						@filterTh("Provincia")
+						@filterTh("Regione")
+						@filterTh("CAP")
+						<th class="num"></th>
+					</tr>
+				</thead>
 				<tbody id="clienti-body">
 					for _, u := range users {
 						@ClienteRow(u, false)
@@ -223,6 +238,17 @@ templ ClienteRow(u service.User, focus bool) {
 			}
 		</td>
 	</tr>
+}
+
+// filterTh is a column title with a filter box under it: rows whose value in
+// this column doesn't contain the typed text are hidden (app.js
+// [data-col-filter], combined with the page's search box). Phones hide the
+// table header, so there only the search box filters.
+templ filterTh(title string) {
+	<th>
+		{ title }
+		<input type="search" class="col-filter" data-col-filter placeholder="Filtra" aria-label={ "Filtra " + title }/>
+	</th>
 }
 
 // autosaveField posts only this field to url when it changes (fired on
@@ -279,7 +305,7 @@ templ ProdottiPage(items []service.Item) {
 		</div>
 		<div class="table-wrap sticky-head">
 			<table class="table edit autosave">
-				<thead><tr><th>Codice</th><th>Codice ERP</th><th>Descrizione</th><th>Cantina</th><th>Area</th><th class="num"></th></tr></thead>
+				<thead><tr><th>Codice</th><th class="col-erp">Codice ERP</th><th>Descrizione</th><th>Cantina</th><th>Area</th><th class="num"></th></tr></thead>
 				<tbody id="prodotti-body">
 					for _, it := range items {
 						@ProdottoRow(it, false)
@@ -292,14 +318,14 @@ templ ProdottiPage(items []service.Item) {
 
 templ ProdottoRow(it service.Item, focus bool) {
 	<tr class="item-row" data-name={ it.Code + " " + it.CodeAlias + " " + it.Description + " " + it.Winery + " " + it.Area }>
-		<td class="mono title-cell">
+		<td class="mono code-cell title-cell">
 			if it.Code != "" {
 				{ it.Code }
 			} else {
 				<span class="muted">—</span>
 			}
 		</td>
-		<td>@autosaveField("/prodotti/field", i64(it.ID), "alias", it.CodeAlias, "Codice ERP", "", false)</td>
+		<td class="col-erp code-cell">@autosaveField("/prodotti/field", i64(it.ID), "alias", it.CodeAlias, "Codice ERP", "", false)</td>
 		<td class="wide">@autosaveField("/prodotti/field", i64(it.ID), "description", it.Description, "Descrizione", "", focus)</td>
 		<td>@autosaveField("/prodotti/field", i64(it.ID), "winery", it.Winery, "Cantina", "", false)</td>
 		<td>@autosaveField("/prodotti/field", i64(it.ID), "area", it.Area, "Area", "", false)</td>

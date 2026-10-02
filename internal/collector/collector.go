@@ -15,6 +15,7 @@ import (
 	"adesgo/internal/config"
 	"adesgo/internal/db"
 	"adesgo/internal/llm"
+	"adesgo/internal/textutil"
 )
 
 // Message is a normalized incoming group message.
@@ -55,6 +56,10 @@ func (c *Collector) isOwner(m *Message) bool {
 // chronological order per chat (reply → listing linking relies on it).
 func (c *Collector) Handle(ctx context.Context, m *Message) error {
 	if !c.cfg.IsChannel(m.ChatID) {
+		return nil
+	}
+	if textutil.IsMediaBlob(m.Body) {
+		log.Printf("[SKIP]    image data instead of text ignored (%s)", m.Source)
 		return nil
 	}
 	if m.ID == "" {

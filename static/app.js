@@ -65,6 +65,26 @@
     }
   }
 
+  // Mobile menu arrows: show "<" / ">" where more sections are hidden.
+  function updateNavArrows() {
+    var wrap = document.querySelector("[data-nav-wrap]");
+    var nav = wrap && wrap.querySelector("nav");
+    if (!nav) return;
+    var max = nav.scrollWidth - nav.clientWidth;
+    wrap.classList.toggle("can-left", max > 1 && nav.scrollLeft > 1);
+    wrap.classList.toggle("can-right", max > 1 && nav.scrollLeft < max - 1);
+  }
+  document.addEventListener("scroll", function (e) {
+    if (e.target.closest && e.target.closest("[data-nav-wrap]")) updateNavArrows();
+  }, true);
+  window.addEventListener("resize", updateNavArrows);
+  document.addEventListener("click", function (e) {
+    var b = e.target.closest && e.target.closest("[data-nav-scroll]");
+    if (!b) return;
+    var nav = b.parentElement.querySelector("nav");
+    nav.scrollBy({ left: Number(b.dataset.navScroll) * nav.clientWidth * 0.7, behavior: matchMedia("(prefers-reduced-motion: reduce)").matches ? "auto" : "smooth" });
+  });
+
   // Consegne summary bar: bounce once when it appears (not on every update
   // while it's already visible — htmx replaces it out-of-band each time).
   var selBarVisible = false;
@@ -100,8 +120,8 @@
     if (flash && flash.dataset.toast) { showToast(flash.dataset.toast); flash.remove(); }
   }
 
-  document.addEventListener("DOMContentLoaded", function () { init(document); revealActiveNav(); });
-  document.addEventListener("htmx:load", function (e) { init(e.target); revealActiveNav(); });
+  document.addEventListener("DOMContentLoaded", function () { init(document); revealActiveNav(); updateNavArrows(); });
+  document.addEventListener("htmx:load", function (e) { init(e.target); revealActiveNav(); updateNavArrows(); });
 
   // Sun/moon button: switch light/dark theme; the choice is remembered in this browser
   // (layout.templ applies it before the first paint).
@@ -153,21 +173,47 @@
   }
 
   // Client-side filter: <input data-filter=".row-selector"> hides rows whose
-  // data-name doesn't contain the typed text.
-  document.addEventListener("input", function (e) {
-    var sel = e.target.dataset && e.target.dataset.filter;
-    if (!sel) return;
-    var q = e.target.value.trim().toLowerCase();
-    var scope = e.target.closest("main") || document;
-    scope.querySelectorAll(sel).forEach(function (row) {
-      var name = (row.dataset.name || row.textContent).toLowerCase();
-      row.hidden = q !== "" && name.indexOf(q) === -1;
+  // data-name doesn't contain the typed text. Column filters
+  // (<th><input data-col-filter></th>) also hide rows whose cell in that
+  // column (its input's value, or its text) doesn't contain theirs.
+  function matchesColumns(row) {
+    var t = row.closest("table");
+    if (!t) return true;
+    return Array.prototype.every.call(t.querySelectorAll("thead [data-col-filter]"), function (f) {
+      var q = f.value.trim().toLowerCase();
+      if (!q) return true;
+      var cell = row.children[f.closest("th").cellIndex];
+      if (!cell) return false;
+      var inp = cell.querySelector("input:not([type=hidden])");
+      return (inp ? inp.value : cell.textContent).toLowerCase().indexOf(q) !== -1;
+    });
+  }
+
+  function runFilters(scope) {
+    scope.querySelectorAll("[data-filter]").forEach(function (box) {
+      var q = box.value.trim().toLowerCase();
+      scope.querySelectorAll(box.dataset.filter).forEach(function (row) {
+        var name = (row.dataset.name || row.textContent).toLowerCase();
+        row.hidden = (q !== "" && name.indexOf(q) === -1) || !matchesColumns(row);
+      });
+    });
+    // "12 di 282 clienti" while filtering, "282 clienti" otherwise
+    scope.querySelectorAll("[data-filter-count]").forEach(function (c) {
+      var rows = scope.querySelectorAll(c.dataset.filterCount);
+      var shown = Array.prototype.filter.call(rows, function (r) { return !r.hidden; }).length;
+      c.textContent = (shown === rows.length ? "" : shown + " di ") + rows.length + " " + c.dataset.noun;
     });
     // groups (e.g. a month) disappear when none of their rows match
     scope.querySelectorAll("[data-filter-group]").forEach(function (g) {
       var items = g.querySelectorAll(g.dataset.filterGroup);
       g.hidden = items.length > 0 && Array.prototype.every.call(items, function (x) { return x.hidden; });
     });
+  }
+
+  document.addEventListener("input", function (e) {
+    var d = e.target.dataset;
+    if (!d || !(d.filter || d.colFilter !== undefined)) return;
+    runFilters(e.target.closest("main") || document);
   });
 
   // View toggle (e.g. Consegne: timeline / cards). The choice is remembered

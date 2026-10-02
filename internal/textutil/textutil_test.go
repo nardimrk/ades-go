@@ -208,3 +208,19 @@ func TestStripEmoji(t *testing.T) {
 		}
 	}
 }
+
+func TestIsMediaBlob(t *testing.T) {
+	jpeg := "/9j/4AAQSkZJRgABAQAAAQABAAD/2wCEAAQFBQkGCQkJCQkKCAkICgsLCgoLCwwKCwoLCgwMDAwNDQwMDAwMDw4PDAwNDw8PDw0OERERDhEQEBETERMREQ0BBAQECAYIBwgIBwgG"
+	cases := map[string]bool{
+		jpeg:                  true,
+		"\n" + jpeg + "\n":    true,
+		"A1 x2, grazie":       false,
+		"/9j/ prefix in text": false,
+		"":                    false,
+	}
+	for in, want := range cases {
+		if got := IsMediaBlob(in); got != want {
+			t.Errorf("IsMediaBlob(%.20q) = %v, want %v", in, got, want)
+		}
+	}
+}

@@ -84,6 +84,9 @@ h3 { font-size: 1.1rem; margin-top: 1.25rem; }
 hr { border: 0; border-top: 1px solid var(--border); margin: 1rem 0; }
 a { color: var(--accent); }
 code, .mono { font-family: ui-monospace, SFMono-Regular, Menlo, monospace; font-size: .85em; overflow-wrap: anywhere; }
+/* product codes (Prodotti: Codice, Codice ERP): same monospace font, bolder;
+   the ERP input keeps its own size (16px on phones, no iOS zoom) */
+.code-cell.mono, .code-cell input { font-family: ui-monospace, SFMono-Regular, Menlo, monospace; font-weight: 600; }
 .muted { color: var(--muted); font-size: .9rem; }
 .ok { color: var(--ok); }
 .warn { color: var(--warn); }
@@ -100,6 +103,8 @@ code, .mono { font-family: ui-monospace, SFMono-Regular, Menlo, monospace; font-
 }
 .brand { font-weight: 700; font-size: 1.05rem; padding: 0 .5rem; min-height: var(--head-h); display: flex; align-items: center; }
 .sidebar nav { display: flex; flex-direction: column; gap: 2px; }
+.nav-wrap { position: relative; }
+.nav-arrow { display: none; }
 .sidebar nav a {
   text-decoration: none; color: var(--text); padding: .5rem .65rem; border-radius: 8px;
 }
@@ -122,6 +127,8 @@ code, .mono { font-family: ui-monospace, SFMono-Regular, Menlo, monospace; font-
 .stack { display: flex; flex-direction: column; gap: .75rem; }
 .form-end { display: flex; justify-content: flex-end; margin-top: .75rem; }
 .grid3 { display: grid; grid-template-columns: repeat(3, 1fr); gap: 1rem; align-items: end; }
+.np-head { display: grid; grid-template-columns: auto minmax(0, 1fr) auto; gap: 1rem; align-items: end; }
+.np-number { white-space: nowrap; padding-bottom: .6rem; }
 
 /* ── controls ───────────────────────────────────────────── */
 input, select, textarea {
@@ -133,6 +140,7 @@ input:not([type=checkbox]):not([type=radio]):not([type=hidden]), select { min-he
 input:focus, select:focus { outline: 2px solid var(--accent-soft); border-color: var(--accent); }
 input[type=search] { margin-bottom: .75rem; }
 .narrow { max-width: 280px; margin-bottom: 0 !important; }
+.row > .narrow { width: 280px; flex: 0 1 280px; min-width: 0; }
 label { display: flex; flex-direction: column; gap: .25rem; font-size: .9rem; color: var(--muted); }
 label.grow { flex: 1; }
 /* fields keep the body size even inside a smaller label */
@@ -215,10 +223,24 @@ details.card > summary { cursor: pointer; margin-bottom: .5rem; }
 .table.edit input { min-height: 0; padding: .3rem .45rem; border-color: transparent; background: transparent; min-width: 110px; }
 .table.edit input:hover { border-color: var(--border); }
 .table.edit input.short { min-width: 70px; }
+/* Prodotti: ERP codes are short (about 12 chars) */
+@media (min-width: 721px) {
+  .table.edit .col-erp { width: 8.5rem; }
+  .table.edit td.mono { white-space: nowrap; }
+}
+/* column filters under the titles (Clienti): the typed text starts under the
+   title, the box lines up with the inputs of the rows */
+.table th .col-filter {
+  display: block; width: calc(100% + .9rem + 2px); min-width: 0; margin: .35rem 0 .1rem calc(-.45rem - 1px);
+  min-height: 0; padding: .3rem .45rem; font-size: .9rem; font-weight: 400; background: var(--panel);
+}
 /* autosave tables (Clienti): fields look fillable; each saves on leaving it */
 .table.autosave input { background: var(--fill); border-color: var(--border); }
 .table.autosave input:hover { border-color: var(--border-strong); }
 .table.autosave input:focus { background: var(--panel); }
+/* the row being edited stands out (accent tint + bar on the left) */
+.table.autosave tbody tr:focus-within > td { background: var(--accent-soft); }
+.table.autosave tbody tr:focus-within > td:first-child { box-shadow: inset 3px 0 0 var(--accent); }
 input.saving { opacity: .6; }
 input.save-error { border-color: var(--danger) !important; box-shadow: 0 0 0 2px var(--danger-border); }
 .add-row { display: grid; grid-template-columns: minmax(0, 4fr) minmax(0, 1fr) minmax(0, 1.5fr) auto; gap: .5rem; align-items: end; }
@@ -317,6 +339,9 @@ a.dl-item:hover .dl-title { color: var(--accent); }
 .dl-day { font-weight: 600; color: var(--muted); min-width: 3.4rem; white-space: nowrap; }
 .dl-main { display: flex; flex-direction: column; min-width: 0; flex: 1; }
 .dl-title { overflow-wrap: anywhere; }
+.dl-manual { display: inline-flex; align-items: center; gap: .4rem; }
+.dl-manual .icon-svg { flex: none; color: var(--accent); }
+.sr-only { position: absolute; width: 1px; height: 1px; padding: 0; margin: -1px; overflow: hidden; clip: rect(0 0 0 0); white-space: nowrap; border: 0; }
 .dl-group { font-size: .8rem; }
 .dl-stats { display: flex; gap: .2rem 1rem; flex-wrap: wrap; justify-content: flex-end; color: var(--muted); font-size: .9rem; white-space: nowrap; }
 .dl-stats b { color: var(--text); }
@@ -410,12 +435,27 @@ img { max-width: 100%; height: auto; }
   .brand { padding: 0; }
   .sidebar-foot { margin: 0 0 0 auto; padding: 0; gap: .75rem; }
   .logout { margin: 0; padding: 0; }
+  .nav-wrap { order: 3; width: 100%; }
   .sidebar nav {
-    order: 3; width: 100%; flex-direction: row; flex-wrap: nowrap; overflow-x: auto;
+    flex-direction: row; flex-wrap: nowrap; overflow-x: auto; gap: .25rem;
     scrollbar-width: none; -webkit-overflow-scrolling: touch; padding-bottom: .25rem;
   }
   .sidebar nav::-webkit-scrollbar { display: none; }
-  .sidebar nav a { white-space: nowrap; padding: .45rem .7rem; }
+  /* big touch targets */
+  .sidebar nav a {
+    white-space: nowrap; min-height: 44px; display: inline-flex; align-items: center;
+    padding: .55rem 1rem; font-size: 1.05rem; border-radius: 10px;
+  }
+  /* arrow + fade on the side where more sections are hidden (app.js sets
+     .can-left / .can-right); tapping it scrolls the menu */
+  .nav-arrow {
+    position: absolute; top: 0; bottom: .25rem; width: 3rem; border: 0; padding: 0;
+    align-items: center; color: var(--accent); cursor: pointer; z-index: 1;
+  }
+  .nav-arrow.left { left: 0; justify-content: flex-start; background: linear-gradient(to right, var(--panel) 45%, transparent); }
+  .nav-arrow.right { right: 0; justify-content: flex-end; background: linear-gradient(to left, var(--panel) 45%, transparent); }
+  .nav-wrap.can-left .nav-arrow.left, .nav-wrap.can-right .nav-arrow.right { display: flex; }
+  .nav-arrow .icon-svg { width: 22px; height: 22px; }
   .content { padding: 1rem; padding-left: max(1rem, env(safe-area-inset-left)); padding-right: max(1rem, env(safe-area-inset-right)); }
 }
 
@@ -429,6 +469,8 @@ img { max-width: 100%; height: auto; }
   .narrow { max-width: none; }
   .filters select { width: 100%; min-width: 0; }
   .grid3 { grid-template-columns: 1fr; }
+  .np-head { grid-template-columns: 1fr; }
+  .np-number { padding-bottom: 0; }
   .row.between > * { min-width: 0; }
   .card { padding: .8rem; }
   .add-row { grid-template-columns: 1fr 1fr; }
@@ -476,5 +518,7 @@ img { max-width: 100%; height: auto; }
   .table.edit input, .table td > input, .table td > select { width: 100%; min-width: 0; border-color: var(--border); background: var(--panel); }
   .table.autosave input { background: var(--fill); }
   .table.autosave input:focus { background: var(--panel); }
+  .table.autosave tbody tr:focus-within { background: var(--accent-soft); border-color: var(--accent); }
+  .table.autosave tbody tr:focus-within > td, .table.autosave tbody tr:focus-within > td:first-child { background: transparent; box-shadow: none; }
 }
 }

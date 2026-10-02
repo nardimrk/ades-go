@@ -181,6 +181,43 @@ func (s *Service) InserzioniList(ctx context.Context, search, chatID string) ([]
 	return out, nil
 }
 
+// InserzioniMonth groups the campaigns first posted in one month.
+type InserzioniMonth struct {
+	Key      string // "2026-09"
+	Year     int
+	Month    int
+	Rows     []CampaignRow
+	Risposte int
+}
+
+// InserzioniMonths groups campaigns by month of first post, newest month
+// first and, inside a month, newest post first.
+func InserzioniMonths(rows []CampaignRow) []InserzioniMonth {
+	sorted := append([]CampaignRow(nil), rows...)
+	sort.SliceStable(sorted, func(i, j int) bool { return sorted[i].Data > sorted[j].Data })
+	var out []InserzioniMonth
+	idx := map[string]int{}
+	for _, r := range sorted {
+		key := ""
+		if len(r.Data) >= 7 {
+			key = r.Data[:7]
+		}
+		i, ok := idx[key]
+		if !ok {
+			i = len(out)
+			idx[key] = i
+			m := InserzioniMonth{Key: key}
+			if t, err := time.Parse("2006-01", key); err == nil {
+				m.Year, m.Month = t.Year(), int(t.Month())
+			}
+			out = append(out, m)
+		}
+		out[i].Rows = append(out[i].Rows, r)
+		out[i].Risposte += r.Risposte
+	}
+	return out
+}
+
 // FindCampaign returns the campaign with this chat + key (unfiltered).
 func (s *Service) FindCampaign(ctx context.Context, chatID, key string) (*Campaign, error) {
 	rows, err := s.ListingRows(ctx)

@@ -464,7 +464,8 @@ func (s *Service) QuotationByNumber(ctx context.Context, num string) (*Quotation
 
 type QuotationSummary struct {
 	ID        int64
-	Title     string // linked listing's title, or "Ordine manuale"
+	Title     string // linked listing's title; for a manual order, the customer's name
+	Manual    bool   // created by hand (no linked listing)
 	Number    string
 	Date      string
 	Clienti   int
@@ -526,9 +527,10 @@ func (s *Service) QuotationSummaries(ctx context.Context) ([]QuotationSummary, e
 	for _, q := range quots {
 		sum := QuotationSummary{ID: q.ID, Number: q.Number, Date: q.Date, SavedOn: saved[q.Number], Title: titles[q.ID]}
 		if sum.Title == "" {
-			sum.Title = "Ordine manuale"
-			if q.ManualClientName != "" {
-				sum.Title += " · " + textutil.StripEmoji(q.ManualClientName)
+			sum.Manual = true
+			sum.Title = textutil.StripEmoji(q.ManualClientName)
+			if sum.Title == "" {
+				sum.Title = "Ordine manuale"
 			}
 		}
 		clienti := map[string]bool{}
