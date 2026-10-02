@@ -135,7 +135,7 @@ templ ConsegneResult(r *service.Consegne, ids []string) {
 		default:
 			<div class="row between">
 				<h3>Riepilogo</h3>
-				<a class="btn" href={ templ.URL(selURL("/consegne/excel", ids)) } hx-boost="false" download>Scarica Excel</a>
+				<a href={ templ.URL(selURL("/consegne/excel", ids)) } hx-boost="false" download class="btn icon-btn" title="Scarica Excel" aria-label="Scarica Excel">@IconExcel()</a>
 			</div>
 			<div class="metrics">
 				<div class="metric"><span>Inserzioni</span><b>{ itoa(len(r.Selected)) }</b></div>

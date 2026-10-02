@@ -213,4 +213,34 @@ func IconChevronRight() templ.Component {
 	})
 }
 
+// IconExcel: a spreadsheet file with an "X" (Excel download).
+func IconExcel() templ.Component {
+	return templruntime.GeneratedTemplate(func(templ_7745c5c3_Input templruntime.GeneratedComponentInput) (templ_7745c5c3_Err error) {
+		templ_7745c5c3_W, ctx := templ_7745c5c3_Input.Writer, templ_7745c5c3_Input.Context
+		if templ_7745c5c3_CtxErr := ctx.Err(); templ_7745c5c3_CtxErr != nil {
+			return templ_7745c5c3_CtxErr
+		}
+		templ_7745c5c3_Buffer, templ_7745c5c3_IsBuffer := templruntime.GetBuffer(templ_7745c5c3_W)
+		if !templ_7745c5c3_IsBuffer {
+			defer func() {
+				templ_7745c5c3_BufErr := templruntime.ReleaseBuffer(templ_7745c5c3_Buffer)
+				if templ_7745c5c3_Err == nil {
+					templ_7745c5c3_Err = templ_7745c5c3_BufErr
+				}
+			}()
+		}
+		ctx = templ.InitializeContext(ctx)
+		templ_7745c5c3_Var8 := templ.GetChildren(ctx)
+		if templ_7745c5c3_Var8 == nil {
+			templ_7745c5c3_Var8 = templ.NopComponent
+		}
+		ctx = templ.ClearChildren(ctx)
+		templ_7745c5c3_Err = templruntime.WriteString(templ_7745c5c3_Buffer, 8, "<svg class=\"icon-svg icon-excel\" width=\"22\" height=\"22\" viewBox=\"0 0 24 24\" fill=\"none\" aria-hidden=\"true\"><path d=\"M8 2.75h7.5L20.25 7.5v12.75a1 1 0 0 1-1 1H8a1 1 0 0 1-1-1V3.75a1 1 0 0 1 1-1z\" stroke=\"currentColor\" stroke-width=\"1.5\" stroke-linejoin=\"round\"></path><path d=\"M15.5 2.75V7.5h4.75\" stroke=\"currentColor\" stroke-width=\"1.5\" stroke-linejoin=\"round\"></path><path d=\"M11 11.5h6.5M11 14.5h6.5M11 17.5h6.5\" stroke=\"currentColor\" stroke-width=\"1.25\" stroke-linecap=\"round\" opacity=\".55\"></path><rect x=\"2.75\" y=\"9.25\" width=\"8.5\" height=\"8.5\" rx=\"1.25\" fill=\"currentColor\"></rect><path d=\"M5.25 11.5l3.5 4M8.75 11.5l-3.5 4\" stroke=\"var(--panel)\" stroke-width=\"1.6\" stroke-linecap=\"round\"></path></svg>")
+		if templ_7745c5c3_Err != nil {
+			return templ_7745c5c3_Err
+		}
+		return nil
+	})
+}
+
 var _ = templruntime.GeneratedTemplate

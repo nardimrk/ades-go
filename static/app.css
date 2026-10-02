@@ -22,6 +22,7 @@
   --warning-bg: #fffbeb; --warning-border: #fde68a; --warning-text: #78350f;
   --error-bg: #fef2f2;   --error-border: #fecaca;   --error-text: #7f1d1d;
   --sidebar-w: 210px;
+  --excel: #1d6f42;         /* Excel download icon */
   --fill: #fbf3f6;          /* background of fields the user can fill in */
   color-scheme: light;
   --radius: 10px;
@@ -45,6 +46,7 @@
   --border-strong: #3b4250;
   --accent: #e0708f;
   --accent-soft: #3a1f2a;
+  --excel: #4caf7d;
   --wa-dark: #25d366;
   --danger: #f87171;
   --danger-soft: #3b1d1d;
@@ -156,6 +158,9 @@ label input, label select, label textarea { font-size: 1rem; }
 .btn.primary { background: var(--accent); border-color: var(--accent); color: #fff; }
 .btn.primary:hover { filter: brightness(1.1); }
 .btn.danger { color: var(--danger); border-color: var(--danger-border); }
+/* icon-only button (e.g. Excel download): square, the label is in aria-label */
+.btn.icon-btn { padding: 0; width: var(--ctl-h); height: var(--ctl-h); }
+.icon-excel { color: var(--excel); }
 .btn.small { padding: .25rem .6rem; font-size: .85rem; min-height: 0; }
 .btn:disabled { opacity: .5; cursor: not-allowed; }
 button.link { background: none; border: 0; color: var(--muted); cursor: pointer; padding: 0; font: inherit; }
@@ -427,6 +432,7 @@ img { max-width: 100%; height: auto; }
 @media (pointer: coarse) {
   .btn, input:not([type=checkbox]):not([type=radio]), select { min-height: 44px; }
   button.icon { min-width: 40px; min-height: 40px; }
+  .btn.icon-btn { width: 44px; height: 44px; }
   input[type=checkbox] { width: 22px; height: 22px; }
   .pick { padding: .55rem .5rem; }
 }
