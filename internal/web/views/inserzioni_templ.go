@@ -92,7 +92,7 @@ func Inserzioni(d InserzioniData) templ.Component {
 			if templ_7745c5c3_Err != nil {
 				return templ_7745c5c3_Err
 			}
-			templ_7745c5c3_Err = templruntime.WriteString(templ_7745c5c3_Buffer, 3, "\" placeholder=\"Cerca per Cliente, Vino\" hx-get=\"/inserzioni/list\" hx-trigger=\"input changed delay:300ms, search\" hx-target=\"#ins-list\" hx-include=\"closest form\"> ")
+			templ_7745c5c3_Err = templruntime.WriteString(templ_7745c5c3_Buffer, 3, "\" placeholder=\"Cerca per Vino\" hx-get=\"/inserzioni/list\" hx-trigger=\"input changed delay:300ms, search\" hx-target=\"#ins-list\" hx-include=\"closest form\"> ")
 			if templ_7745c5c3_Err != nil {
 				return templ_7745c5c3_Err
 			}
