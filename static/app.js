@@ -8,15 +8,35 @@
     var el = document.createElement("div");
     el.className = "toast toast-" + (kind || "success");
     el.dataset.autohide = "";
+    el.dataset.bound = "1";
     el.textContent = msg;
     box.appendChild(el);
     autohide(el);
   }
 
+  // Every toast (from the server or from showToast) gets a close button and
+  // disappears by itself after a few seconds.
+  var CLOSE_ICON = '<svg class="icon-svg" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.25" stroke-linecap="round" aria-hidden="true"><path d="M6 6l12 12M18 6L6 18"></path></svg>';
   function autohide(el) {
+    if (!el.querySelector(".toast-close")) {
+      var text = document.createElement("span");
+      text.className = "toast-text";
+      while (el.firstChild) text.appendChild(el.firstChild);
+      var btn = document.createElement("button");
+      btn.type = "button";
+      btn.className = "toast-close";
+      btn.setAttribute("aria-label", "Chiudi notifica");
+      btn.innerHTML = CLOSE_ICON;
+      el.appendChild(text);
+      el.appendChild(btn);
+    }
     setTimeout(function () { el.classList.add("hide"); }, 3500);
     setTimeout(function () { el.remove(); }, 4000);
   }
+  document.addEventListener("click", function (e) {
+    var btn = e.target.closest(".toast-close");
+    if (btn) btn.closest(".toast").remove();
+  });
 
   // Copy each column header into its cells' data-label: on phones the CSS
   // turns table rows into cards and shows these labels next to the values.
@@ -240,7 +260,9 @@
     syncFlagView();
     openModals(root);
     root.querySelectorAll("[data-proposal]").forEach(proposalTotal);
-    root.querySelectorAll("[data-autohide]").forEach(function (el) {
+    // a toast from the server is itself the htmx:load root
+    var toasts = root.matches && root.matches("[data-autohide]") ? [root] : root.querySelectorAll("[data-autohide]");
+    Array.prototype.forEach.call(toasts, function (el) {
       if (!el.dataset.bound) { el.dataset.bound = "1"; autohide(el); }
     });
     var flash = root.querySelector("#toasts-init");

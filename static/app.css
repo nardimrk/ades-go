@@ -179,12 +179,21 @@ button.icon:hover { background: var(--danger-soft); }
 .alert-error { background: var(--error-bg); border-color: var(--error-border); color: var(--error-text); }
 #toasts { position: fixed; right: 1rem; bottom: 1rem; display: flex; flex-direction: column; gap: .5rem; z-index: 50; }
 .toast {
-  padding: .7rem 1rem; border-radius: 8px; background: var(--toast-bg); color: var(--on-dark); box-shadow: 0 4px 12px var(--shadow);
+  display: flex; align-items: flex-start; gap: .5rem;
+  padding: .7rem .5rem .7rem 1rem; border-radius: 8px; background: var(--toast-bg); color: var(--on-dark); box-shadow: 0 4px 12px var(--shadow);
   transition: opacity .4s; max-width: 380px;
 }
 .toast-error { background: var(--danger); }
 .toast-warning { background: var(--warn); }
 .toast.hide { opacity: 0; }
+.toast-text { flex: 1; min-width: 0; overflow-wrap: anywhere; }
+.toast-close {
+  flex: none; display: inline-flex; align-items: center; justify-content: center;
+  width: 28px; height: 28px; margin: -.3rem 0; padding: 0; border: 0; border-radius: 6px;
+  background: transparent; color: inherit; opacity: .8; cursor: pointer;
+}
+.toast-close:hover, .toast-close:focus-visible { opacity: 1; background: rgba(255, 255, 255, .15); }
+@media (pointer: coarse) { .toast-close { width: 44px; height: 44px; margin: -.75rem -.25rem -.75rem 0; } }
 
 /* ── cards / tables ─────────────────────────────────────── */
 .card {
