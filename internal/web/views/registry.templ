@@ -143,11 +143,40 @@ templ ConsegneResult(r *service.Consegne, ids []string) {
 				<div class="metric"><span>Bottiglie</span><b>{ itoa(r.Bottiglie) }</b></div>
 				<div class="metric"><span>Totale (€)</span><b>{ money(r.Totale) }</b></div>
 			</div>
+			if n := clientsWithoutProvincia(r); n > 0 {
+				@Alert("info", plural(n, "cliente non ha", "clienti non hanno")+" la provincia: completala in Clienti per raggrupparli per zona.")
+			}
 			<div class="table-wrap">
 				<table class="table deliveries">
 					<thead><tr><th>Vino</th><th>Inserzione</th><th class="num">Qtà</th><th class="num">Prezzo (€)</th><th class="num">Totale (€)</th></tr></thead>
 					<tbody>
-						for _, c := range r.Customers {
+						for _, a := range r.Areas {
+							<tr class="area-row">
+								<td class="title-cell" colspan="5" data-label="">
+									{ placeOr(a.Provincia, "Provincia non indicata") }
+									<span class="muted">· { plural(a.Clienti, "cliente", "clienti") } · { itoa(a.Bottiglie) } bott. · € { money(a.Totale) }</span>
+								</td>
+							</tr>
+							for _, city := range a.Cities {
+								<tr class="city-row">
+									<td class="title-cell" colspan="5" data-label="">
+										{ placeOr(city.Citta, "Città non indicata") }
+										<span class="muted">· { plural(len(city.Customers), "cliente", "clienti") } · { itoa(city.Bottiglie) } bott.</span>
+									</td>
+								</tr>
+								for _, c := range city.Customers {
+									@deliveryCustomer(c)
+								}
+							}
+						}
+					</tbody>
+				</table>
+			</div>
+	}
+}
+
+// deliveryCustomer: a customer's header row and their lines.
+templ deliveryCustomer(c service.CustomerDelivery) {
 							<tr class="group-row">
 								<td class="title-cell" colspan="5" data-label="">
 									{ c.Cliente } <span class="muted">· { itoa(c.Bottiglie) } bott. · € { money(c.Totale) }</span>
@@ -162,11 +191,6 @@ templ ConsegneResult(r *service.Consegne, ids []string) {
 									<td class="num">{ money(l.Totale()) }</td>
 								</tr>
 							}
-						}
-					</tbody>
-				</table>
-			</div>
-	}
 }
 
 // ── Clienti ──────────────────────────────────────────────────────────────────

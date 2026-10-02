@@ -598,6 +598,10 @@ body:has(.sel-bar:not(:empty)) #toasts { bottom: 6.5rem;
 }
 /* delivery table: one group row per customer */
 .table.deliveries tr.group-row td { background: var(--bg); font-weight: 600; padding-top: .7rem; }
+/* area headers above the customers: provincia, then città */
+.table.deliveries tr.area-row td { background: var(--accent-soft); color: var(--accent); font-weight: 700; font-size: 1.05rem; padding: .75rem .6rem .55rem; border-top: 2px solid var(--accent); }
+.table.deliveries tr.city-row td { font-weight: 700; padding: .65rem .6rem .35rem; border-bottom: 1px solid var(--border-strong); }
+.table.deliveries tr.area-row .muted, .table.deliveries tr.city-row .muted { font-weight: 500; font-size: .85rem; }
 @media (max-width: 720px) {
   .dl-item { flex-wrap: wrap; }
   .view-timeline .dl-stats { width: 100%; justify-content: flex-start; padding-left: calc(22px + .75rem); }
@@ -606,6 +610,11 @@ body:has(.sel-bar:not(:empty)) #toasts { bottom: 6.5rem;
   .month-head .btn { margin-left: 0; }
   .table.deliveries tr.group-row { background: transparent; border: 0; padding: .6rem 0 .1rem; margin: .4rem 0 .2rem; }
   .table.deliveries tr.group-row td { background: transparent; padding: 0; }
+  .table.deliveries tr.area-row, .table.deliveries tr.city-row { border: 0; padding: 0; margin: .9rem 0 .1rem; background: transparent; box-shadow: none; }
+  .table.deliveries tr.area-row td { border-radius: var(--radius); padding: .6rem .75rem; }
+  .table.deliveries tr.city-row td { background: transparent; padding: .2rem .1rem .3rem; }
+  /* header rows: name and counts on one line, wrapping like text */
+  .table.deliveries tr.area-row td, .table.deliveries tr.city-row td, .table.deliveries tr.group-row td { display: block; }
 }
 
 /* ── login / whatsapp ───────────────────────────────────── */

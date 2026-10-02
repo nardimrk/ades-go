@@ -115,3 +115,21 @@ func clientChoices(sections []service.CustomerSection) []string {
 	}
 	return out
 }
+
+// placeOr is the place name, or fallback when it is not set.
+func placeOr(place, fallback string) string {
+	if place == "" {
+		return fallback
+	}
+	return place
+}
+
+// clientsWithoutProvincia counts the delivery customers with no provincia.
+func clientsWithoutProvincia(r *service.Consegne) int {
+	for _, a := range r.Areas {
+		if a.Provincia == "" {
+			return a.Clienti
+		}
+	}
+	return 0
+}
