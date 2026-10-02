@@ -77,7 +77,53 @@ templ Layout(title, active string) {
 				{ children... }
 			</main>
 		</div>
+		@SectionFab(active)
 	}
+}
+
+// fabNav: the sections offered by the floating button (phones and tablets).
+var fabNav = nav[:5] // Inserzioni, Ordini, Consegne, Clienti, Prodotti
+
+templ fabIcon(key string) {
+	switch key {
+		case "inserzioni":
+			@IconMegaphone()
+		case "ordini":
+			@IconReceipt()
+		case "consegne":
+			@IconTruck()
+		case "clienti":
+			@IconUsers()
+		case "prodotti":
+			@IconBottle()
+	}
+}
+
+// SectionFab: a floating button (bottom right, phones and tablets only) that
+// fans out the main sections over a dimmed backdrop.
+templ SectionFab(active string) {
+	<div class="fab" data-fab>
+		<div class="fab-backdrop" data-fab-close></div>
+		<nav class="fab-menu" id="fab-menu" aria-label="Vai a una sezione">
+			for _, n := range fabNav {
+				<a
+					href={ templ.URL(n.Href) }
+					class={ "fab-item", templ.KV("active", n.Key == active) }
+					aria-label={ n.Label }
+					if n.Key == active {
+						aria-current="page"
+					}
+				>
+					@fabIcon(n.Key)
+					<span class="fab-label" aria-hidden="true">{ n.Label }</span>
+				</a>
+			}
+		</nav>
+		<button type="button" class="fab-btn" data-fab-toggle aria-expanded="false" aria-controls="fab-menu" aria-label="Sezioni">
+			<span class="fab-open">@IconGrid()</span>
+			<span class="fab-close">@IconX()</span>
+		</button>
+	</div>
 }
 
 // Toast is returned out-of-band by htmx handlers to show a notification.

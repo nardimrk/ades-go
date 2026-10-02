@@ -496,6 +496,24 @@
     if (sub) { e.preventDefault(); sub.click(); }
   });
 
+  // Floating sections button (phones/tablets): fans out the main sections.
+  function setFab(fab, open) {
+    fab.classList.toggle("open", open);
+    var b = fab.querySelector("[data-fab-toggle]");
+    if (b) b.setAttribute("aria-expanded", open ? "true" : "false");
+  }
+  document.addEventListener("click", function (e) {
+    var fab = e.target.closest("[data-fab]");
+    if (!fab) return;
+    if (e.target.closest("[data-fab-toggle]")) setFab(fab, !fab.classList.contains("open"));
+    else if (e.target.closest("[data-fab-close], .fab-item")) setFab(fab, false);
+  });
+  document.addEventListener("keydown", function (e) {
+    if (e.key !== "Escape") return;
+    var fab = document.querySelector("[data-fab].open");
+    if (fab) { setFab(fab, false); fab.querySelector("[data-fab-toggle]").focus(); }
+  });
+
   // Clickable table rows (data-href).
   document.addEventListener("click", function (e) {
     var tr = e.target.closest("tr[data-href]");

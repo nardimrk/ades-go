@@ -751,3 +751,69 @@ img { max-width: 100%; height: auto; }
   .table.autosave tbody tr:focus-within > td, .table.autosave tbody tr:focus-within > td:first-child { background: transparent; box-shadow: none; }
 }
 }
+
+/* Floating sections button: phones and tablets only (≤ 900px, where the
+   sidebar is a top bar). Tapping it fans the main sections out in an arc
+   over a dimmed backdrop. */
+.fab { display: none; }
+@media (max-width: 900px) {
+  .fab { display: block; }
+  .content { padding-bottom: 6rem; }
+  .fab-btn {
+    position: fixed; z-index: 41;
+    right: max(1rem, env(safe-area-inset-right)); bottom: max(1rem, env(safe-area-inset-bottom));
+    width: 60px; height: 60px; padding: 0; border: 0; border-radius: 50%;
+    display: inline-flex; align-items: center; justify-content: center;
+    background: var(--accent); color: #fff; cursor: pointer;
+    box-shadow: 0 6px 18px var(--shadow);
+    transition: bottom .2s, transform .2s;
+  }
+  :root[data-theme="dark"] .fab-btn { color: #1a0d12; }
+  .fab-btn .icon-svg { width: 24px; height: 24px; }
+  .fab-btn .fab-close, .fab.open .fab-btn .fab-open { display: none; }
+  .fab.open .fab-btn .fab-close { display: inline-flex; }
+  .fab.open .fab-btn { transform: rotate(90deg); }
+  /* above the selection bar while it is shown */
+  body:has(.sel-bar:not(:empty)) .fab-btn { bottom: calc(max(.75rem, env(safe-area-inset-bottom)) + 5.25rem); }
+
+  .fab-backdrop {
+    position: fixed; inset: 0; z-index: 40;
+    background: rgba(17, 24, 39, .45); -webkit-backdrop-filter: blur(3px); backdrop-filter: blur(3px);
+    opacity: 0; visibility: hidden; transition: opacity .2s, visibility .2s;
+  }
+  .fab.open .fab-backdrop { opacity: 1; visibility: visible; }
+
+  /* the items sit on the button's centre and move out along the arc */
+  .fab-menu { position: fixed; z-index: 41; right: max(1rem, env(safe-area-inset-right)); bottom: max(1rem, env(safe-area-inset-bottom)); width: 60px; height: 60px; pointer-events: none; transition: bottom .2s; }
+  body:has(.sel-bar:not(:empty)) .fab-menu { bottom: calc(max(.75rem, env(safe-area-inset-bottom)) + 5.25rem); }
+  /* every round is the button's size and colour; the label sits under it */
+  .fab-item {
+    position: absolute; right: 0; bottom: 0; width: 60px; height: 60px; border-radius: 50%;
+    display: flex; align-items: center; justify-content: center; text-decoration: none;
+    background: var(--accent); color: #fff;
+    box-shadow: 0 6px 18px var(--shadow);
+    opacity: 0; visibility: hidden; transform: translate(0, 0) scale(.3);
+    transition: transform .22s cubic-bezier(.3, 1.4, .5, 1), opacity .15s, visibility .22s;
+  }
+  :root[data-theme="dark"] .fab-item { color: #1a0d12; }
+  .fab-item .icon-svg { width: 26px; height: 26px; }
+  /* the current section: a ring around it */
+  .fab-item.active { box-shadow: 0 0 0 3px var(--panel), 0 0 0 5px var(--accent), 0 6px 18px var(--shadow); }
+  .fab-label {
+    position: absolute; top: calc(100% + .3rem); left: 50%; transform: translateX(-50%);
+    white-space: nowrap; font-size: .78rem; font-weight: 600; color: #fff;
+    text-shadow: 0 1px 3px rgba(0, 0, 0, .6);
+  }
+  .fab.open .fab-item { opacity: 1; visibility: visible; pointer-events: auto; }
+  /* two arcs from up to left, lifted so the lowest label stays on screen:
+     Inserzioni, Ordini, Consegne close to the button, Clienti and Prodotti
+     on the outer arc, between them */
+  .fab.open .fab-item:nth-child(1) { transform: translate(0, -150px); }
+  .fab.open .fab-item:nth-child(2) { transform: translate(-92px, -122px); transition-delay: .03s; }
+  .fab.open .fab-item:nth-child(3) { transform: translate(-130px, -30px); transition-delay: .06s; }
+  .fab.open .fab-item:nth-child(4) { transform: translate(-110px, -225px); transition-delay: .09s; }
+  .fab.open .fab-item:nth-child(5) { transform: translate(-215px, -110px); transition-delay: .12s; }
+}
+@media (max-width: 900px) and (prefers-reduced-motion: reduce) {
+  .fab-btn, .fab-item, .fab-backdrop, .fab-menu { transition: none; }
+}
