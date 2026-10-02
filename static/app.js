@@ -108,7 +108,131 @@
   }
   window.addEventListener("resize", fitStickyTables);
 
+  // Suggestions for <input list="…">: the native <datalist> popup is hidden
+  // or unusable on phones (iOS shows only a few items above the keyboard), so
+  // we draw our own list under the field, filled from the same <datalist>.
+  // Matches every typed word anywhere in the option, ignoring case and accents.
+  var COMBO_MAX = 50;
+  var combo = null; // { input, list, items, active }
+
+  function fold(s) {
+    return s.normalize("NFD").replace(/[̀-ͯ]/g, "").toLowerCase();
+  }
+
+  function initCombos(root) {
+    root.querySelectorAll("input[list]").forEach(function (inp) {
+      inp.dataset.combo = inp.getAttribute("list");
+      inp.removeAttribute("list");
+      inp.setAttribute("autocomplete", "off");
+      inp.setAttribute("role", "combobox");
+      inp.setAttribute("aria-autocomplete", "list");
+      inp.setAttribute("aria-expanded", "false");
+    });
+  }
+
+  function closeCombo() {
+    if (!combo) return;
+    combo.list.remove();
+    combo.input.setAttribute("aria-expanded", "false");
+    combo = null;
+  }
+
+  function openCombo(inp) {
+    var dl = document.getElementById(inp.dataset.combo);
+    if (!dl) return;
+    if (!combo || combo.input !== inp) {
+      closeCombo();
+      var list = document.createElement("ul");
+      list.className = "combo-list";
+      list.setAttribute("role", "listbox");
+      inp.parentNode.classList.add("combo-host");
+      inp.insertAdjacentElement("afterend", list);
+      combo = { input: inp, list: list, items: [], active: -1 };
+      inp.setAttribute("aria-expanded", "true");
+    }
+    var words = fold(inp.value.trim()).split(/\s+/).filter(Boolean);
+    var matches = [], total = 0;
+    Array.prototype.forEach.call(dl.options, function (o) {
+      var hay = fold(o.value + " " + o.textContent);
+      if (!words.every(function (w) { return hay.indexOf(w) !== -1; })) return;
+      total++;
+      if (matches.length < COMBO_MAX) matches.push(o);
+    });
+    combo.items = matches;
+    combo.active = -1;
+    combo.list.innerHTML = "";
+    matches.forEach(function (o, i) {
+      var li = document.createElement("li");
+      li.setAttribute("role", "option");
+      li.dataset.i = i;
+      li.textContent = o.value;
+      var extra = o.textContent.trim();
+      if (extra && extra !== o.value) {
+        var s = document.createElement("small");
+        s.textContent = extra;
+        li.appendChild(s);
+      }
+      combo.list.appendChild(li);
+    });
+    var note = "";
+    if (!total) note = "Nessun risultato";
+    else if (total > matches.length) note = matches.length + " di " + total + ": continua a scrivere per restringere";
+    if (note) {
+      var li = document.createElement("li");
+      li.className = "combo-note";
+      li.textContent = note;
+      combo.list.appendChild(li);
+    }
+  }
+
+  function pickCombo(i) {
+    var o = combo && combo.items[i];
+    if (!o) return;
+    var inp = combo.input;
+    inp.value = o.value;
+    closeCombo();
+    inp.dispatchEvent(new Event("input", { bubbles: true }));
+    inp.dispatchEvent(new Event("change", { bubbles: true }));
+  }
+
+  function moveCombo(d) {
+    var n = combo.items.length;
+    if (!n) return;
+    combo.active = (combo.active + d + n) % n;
+    Array.prototype.forEach.call(combo.list.querySelectorAll("li[data-i]"), function (li, i) {
+      li.classList.toggle("active", i === combo.active);
+      if (i === combo.active) li.scrollIntoView({ block: "nearest" });
+    });
+  }
+
+  document.addEventListener("focusin", function (e) {
+    if (e.target.dataset && e.target.dataset.combo) openCombo(e.target);
+    else if (combo && !combo.list.contains(e.target)) closeCombo();
+  });
+  document.addEventListener("input", function (e) {
+    if (e.target.dataset && e.target.dataset.combo) openCombo(e.target);
+  });
+  document.addEventListener("keydown", function (e) {
+    if (!combo || e.target !== combo.input) return;
+    if (e.key === "ArrowDown") { e.preventDefault(); moveCombo(1); }
+    else if (e.key === "ArrowUp") { e.preventDefault(); moveCombo(-1); }
+    else if (e.key === "Escape") closeCombo();
+    else if (e.key === "Enter" && combo.active >= 0) { e.preventDefault(); pickCombo(combo.active); }
+  });
+  // mousedown keeps the focus in the field (the list stays open while tapping)
+  document.addEventListener("mousedown", function (e) {
+    if (combo && combo.list.contains(e.target)) e.preventDefault();
+  });
+  document.addEventListener("click", function (e) {
+    if (!combo) return;
+    var li = e.target.closest && e.target.closest(".combo-list li[data-i]");
+    if (li) pickCombo(Number(li.dataset.i));
+    else if (e.target !== combo.input) closeCombo();
+  });
+  document.addEventListener("htmx:beforeSwap", closeCombo);
+
   function init(root) {
+    initCombos(root);
     labelTables();
     fitStickyTables();
     checkSelBar();

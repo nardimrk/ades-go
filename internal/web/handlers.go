@@ -138,7 +138,7 @@ func (s *Server) preventivi(w http.ResponseWriter, r *http.Request) {
 func (s *Server) preventiviListComponent(r *http.Request, q string) (templ.Component, error) {
 	ctx := r.Context()
 	if strings.TrimSpace(q) != "" {
-		sel, err := s.svc.ComputeSelections(ctx)
+		sel, err := s.svc.SearchableSelections(ctx)
 		if err != nil {
 			return nil, err
 		}

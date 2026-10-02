@@ -639,6 +639,45 @@ func QuotationMonths(rows []QuotationSummary) []QuotationMonth {
 	return out
 }
 
+// SearchableSelections: the chat selections plus the lines of manual orders
+// (customer set by hand, wines in quotation_items), as QuotationDetail shows
+// them, so Ordini search finds orders created without a WhatsApp reply.
+func (s *Service) SearchableSelections(ctx context.Context) ([]Selection, error) {
+	sel, err := s.ComputeSelections(ctx)
+	if err != nil {
+		return nil, err
+	}
+	quots, err := s.Quotations(ctx)
+	if err != nil {
+		return nil, err
+	}
+	items, err := s.quotationItems(ctx, "")
+	if err != nil {
+		return nil, err
+	}
+	itemsBy := map[int64][]QuotationItem{}
+	for _, it := range items {
+		itemsBy[it.QuotationID] = append(itemsBy[it.QuotationID], it)
+	}
+	fromChat := map[string]bool{} // quotation|customer with chat selections
+	for _, x := range sel {
+		if x.Qta > 0 {
+			fromChat[x.Preventivo+"|"+x.Utente] = true
+		}
+	}
+	for _, q := range quots {
+		m := q.ManualClientName
+		if m == "" || fromChat[q.Number+"|"+m] {
+			continue
+		}
+		for _, it := range itemsBy[q.ID] {
+			sel = append(sel, Selection{Preventivo: q.Number, QuotationID: q.ID, DataPrev: q.Date, Utente: m,
+				AuthorID: q.ManualClientID, Opzione: it.Option, Vino: it.WineName, Vintage: it.Vintage, Qta: it.Quantity, Prezzo: it.Price})
+		}
+	}
+	return sel, nil
+}
+
 // SearchSelections filters selections by customer or wine, newest first.
 func SearchSelections(sel []Selection, q string) []Selection {
 	q = strings.ToLower(strings.TrimSpace(q))
