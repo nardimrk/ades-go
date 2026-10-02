@@ -172,6 +172,9 @@ var addColumns = []string{
 	"ALTER TABLE listings ADD COLUMN quotation_id INTEGER REFERENCES quotations(id)",
 	"ALTER TABLE listings ADD COLUMN message TEXT",
 	"ALTER TABLE listings ADD COLUMN title TEXT",
+	// estimated delivery date of a campaign ("YYYY-MM-DD"), set in Inserzioni
+	// and copied to the quotation linked to it
+	"ALTER TABLE listings ADD COLUMN consegna_stimata TEXT",
 	"ALTER TABLE quotations ADD COLUMN consegna_stimata TEXT",
 	"ALTER TABLE quotations ADD COLUMN manual_client_id TEXT",
 	"ALTER TABLE quotations ADD COLUMN manual_client_name TEXT",

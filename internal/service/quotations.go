@@ -431,6 +431,19 @@ func (s *Service) CreateImportedQuotation(ctx context.Context, msgIDs []string, 
 			return err
 		}
 		qid, _ := res.LastInsertId()
+		// the delivery estimate set on the campaign in Inserzioni comes along
+		if len(msgIDs) > 0 {
+			ph := strings.TrimSuffix(strings.Repeat("?,", len(msgIDs)), ",")
+			args := make([]any, 0, len(msgIDs)+1)
+			for _, id := range msgIDs {
+				args = append(args, id)
+			}
+			if _, err := tx.ExecContext(ctx, `UPDATE quotations SET consegna_stimata =
+				(SELECT consegna_stimata FROM listings WHERE msg_id IN (`+ph+`) AND COALESCE(consegna_stimata,'') <> ''
+				 ORDER BY timestamp DESC LIMIT 1) WHERE id = ?`, append(args, qid)...); err != nil {
+				return err
+			}
+		}
 		for _, o := range opts {
 			if _, err := tx.ExecContext(ctx, "INSERT INTO quotation_items (quotation_id, option, wine_name, quantity, price) VALUES (?,?,?,?,?)",
 				qid, o.Code(), o.WineName, o.Quantity, o.Price); err != nil {

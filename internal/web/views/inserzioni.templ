@@ -133,6 +133,9 @@ templ InserzioniList(d InserzioniData) {
 									if len(r.QuotationIDs) > 0 {
 										<span class="badge badge-ok">Ordine</span>
 									}
+									if r.Consegna != "" {
+										<span class="badge badge-info">Consegna { dayMonthShort(r.Consegna) }</span>
+									}
 								</span>
 							</a>
 						}
@@ -178,6 +181,7 @@ templ Conversation(d InserzioniData) {
 					</label>
 					<button type="submit" class="btn">Rinomina</button>
 				</form>
+				@deliveryField(d)
 				<div class="listing-box">
 					<strong>{ noEmoji(d.Selected.Venditore) }</strong> · { d.Selected.Data }
 					<div class="listing-text">{ noEmoji(d.Selected.Testo) }</div>
@@ -208,6 +212,34 @@ templ Conversation(d InserzioniData) {
 			</section>
 		</div>
 	}
+}
+
+// deliveryField: the vendor's estimated delivery date for the campaign,
+// saved on change (app.js [data-autosave]) and copied to the linked order.
+templ deliveryField(d InserzioniData) {
+	<div class="delivery col-head">
+		<label class="grow">
+			Consegna stimata
+			<input
+				type="date"
+				name="value"
+				value={ d.Selected.Consegna }
+				aria-label="Consegna stimata"
+				data-autosave
+				hx-post="/inserzioni/consegna"
+				hx-trigger="change"
+				hx-swap="none"
+				hx-vals={ templ.JSONString(map[string]string{"chat": d.SelChat, "c": d.SelKey}) }
+			/>
+		</label>
+		<span class="muted delivery-hint">
+			if len(d.Selected.QuotationIDs) > 0 {
+				Si salva da sola ed è riportata anche nell'ordine collegato.
+			} else {
+				Si salva da sola e passerà all'ordine quando verrà creato.
+			}
+		</span>
+	</div>
 }
 
 // AddReplyForm: a reply typed in by hand, for a message WhatsApp never

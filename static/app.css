@@ -417,6 +417,10 @@ button.icon { display: inline-flex; align-items: center; justify-content: center
    control line), so title/count, input/search and the boxes below line up */
 .col-head { display: flex; gap: .5rem; align-items: flex-end; margin-bottom: .75rem; flex-wrap: wrap; }
 .col-head input[type=search] { margin-bottom: 0; }
+/* Inserzioni: estimated delivery date of the campaign (autosaved) */
+.delivery label { flex: 0 1 14rem; min-width: 0; }
+.delivery input[type=date] { background: var(--fill); width: 100%; }
+.delivery-hint { flex: 1 1 12rem; font-size: .85rem; padding-bottom: .55rem; }
 .listing-box {
   background: var(--listing-bg); border-left: 4px solid var(--wa-dark); border-radius: 4px;
   padding: 10px 14px; margin-bottom: 12px; font-size: 14px; line-height: 1.5;
@@ -817,14 +821,10 @@ img { max-width: 100%; height: auto; }
     text-shadow: 0 1px 3px rgba(0, 0, 0, .6);
   }
   .fab.open .fab-item { opacity: 1; visibility: visible; pointer-events: auto; }
-  /* two arcs from up to left, lifted so the lowest label stays on screen:
-     Inserzioni, Ordini, Consegne close to the button, Clienti and Prodotti
-     on the outer arc, between them */
+  /* an arc from up to left, lifted so the lowest label stays on screen */
   .fab.open .fab-item:nth-child(1) { transform: translate(0, -150px); }
   .fab.open .fab-item:nth-child(2) { transform: translate(-92px, -122px); transition-delay: .03s; }
   .fab.open .fab-item:nth-child(3) { transform: translate(-130px, -30px); transition-delay: .06s; }
-  .fab.open .fab-item:nth-child(4) { transform: translate(-110px, -225px); transition-delay: .09s; }
-  .fab.open .fab-item:nth-child(5) { transform: translate(-215px, -110px); transition-delay: .12s; }
 }
 @media (max-width: 900px) and (prefers-reduced-motion: reduce) {
   .fab-btn, .fab-item, .fab-backdrop, .fab-menu { transition: none; }

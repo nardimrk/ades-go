@@ -25,6 +25,7 @@ type ListingRow struct {
 	Testo       string
 	QuotationID *int64
 	Title       string
+	Consegna    string // estimated delivery "YYYY-MM-DD" ("" = not set)
 	Risposte    int
 	Campaign    string
 }
@@ -40,6 +41,7 @@ type Campaign struct {
 	Risposte     int
 	NUpdates     int
 	Title        string // custom title ("" = never renamed)
+	Consegna     string // estimated delivery "YYYY-MM-DD" ("" = not set)
 	DisplayTitle string
 	MaxTS        int64
 	QuotationIDs []int64
@@ -57,7 +59,7 @@ func (s *Service) ListingRows(ctx context.Context) ([]ListingRow, error) {
 	rows, err := s.db().QueryContext(ctx, `
 		SELECT l.msg_id, COALESCE(l.timestamp,0), COALESCE(l.created_at,''), COALESCE(l.chat_id,''),
 		       COALESCE(l.author_name,''), COALESCE(l.body,''), l.quotation_id, COALESCE(l.title,''),
-		       COUNT(r.id)
+		       COALESCE(l.consegna_stimata,''), COUNT(r.id)
 		FROM listings l
 		LEFT JOIN replies r ON r.listing_msg_id = l.msg_id
 		GROUP BY l.id ORDER BY l.timestamp ASC, l.id ASC`)
@@ -69,7 +71,7 @@ func (s *Service) ListingRows(ctx context.Context) ([]ListingRow, error) {
 	for rows.Next() {
 		var r ListingRow
 		var qid sql.NullInt64
-		if err := rows.Scan(&r.MsgID, &r.TS, &r.Data, &r.ChatID, &r.Venditore, &r.Testo, &qid, &r.Title, &r.Risposte); err != nil {
+		if err := rows.Scan(&r.MsgID, &r.TS, &r.Data, &r.ChatID, &r.Venditore, &r.Testo, &qid, &r.Title, &r.Consegna, &r.Risposte); err != nil {
 			return nil, err
 		}
 		if qid.Valid {
@@ -118,6 +120,9 @@ func GroupCampaigns(rows []ListingRow) []Campaign {
 		c.NUpdates++
 		if c.Title == "" && strings.TrimSpace(r.Title) != "" {
 			c.Title = r.Title
+		}
+		if r.Consegna != "" {
+			c.Consegna = r.Consegna // the latest post's wins
 		}
 		if r.TS > c.MaxTS {
 			c.MaxTS = r.TS
@@ -321,6 +326,35 @@ func (s *Service) RenameCampaign(ctx context.Context, msgIDs []string, title str
 	}
 	_, err := s.db().ExecContext(ctx, "UPDATE listings SET title = ? WHERE msg_id IN ("+ph+")", args...)
 	return err
+}
+
+// SetCampaignDelivery stores the estimated delivery date ("YYYY-MM-DD", ""
+// clears it) on every post of a campaign and on the quotations linked to
+// them, where Consegne can read it.
+func (s *Service) SetCampaignDelivery(ctx context.Context, msgIDs []string, date string) error {
+	if len(msgIDs) == 0 {
+		return nil
+	}
+	var v any
+	if date = strings.TrimSpace(date); date != "" {
+		if _, err := time.Parse("2006-01-02", date); err != nil {
+			return fmt.Errorf("data non valida: %q", date)
+		}
+		v = date
+	}
+	ph := strings.TrimSuffix(strings.Repeat("?,", len(msgIDs)), ",")
+	args := []any{v}
+	for _, id := range msgIDs {
+		args = append(args, id)
+	}
+	return s.inTx(ctx, func(tx *sql.Tx) error {
+		if _, err := tx.ExecContext(ctx, "UPDATE listings SET consegna_stimata = ? WHERE msg_id IN ("+ph+")", args...); err != nil {
+			return err
+		}
+		_, err := tx.ExecContext(ctx, `UPDATE quotations SET consegna_stimata = ?
+			WHERE id IN (SELECT quotation_id FROM listings WHERE msg_id IN (`+ph+`))`, args...)
+		return err
+	})
 }
 
 // ManualReplyPrefix marks the msg_id of replies added by hand.

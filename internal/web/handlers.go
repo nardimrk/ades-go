@@ -110,6 +110,20 @@ func (s *Server) inserzioniRename(w http.ResponseWriter, r *http.Request) {
 	w.Header().Set("HX-Redirect", "/inserzioni?"+url.Values{"chat": {d.SelChat}, "c": {d.SelKey}}.Encode())
 }
 
+// inserzioniConsegna autosaves the campaign's estimated delivery date.
+func (s *Server) inserzioniConsegna(w http.ResponseWriter, r *http.Request) {
+	d := views.InserzioniData{SelChat: r.FormValue("chat"), SelKey: r.FormValue("c")}
+	if err := s.loadSelection(r, &d); err != nil {
+		autosaveResult(w, r, err)
+		return
+	}
+	if d.Selected == nil {
+		autosaveResult(w, r, fmt.Errorf("inserzione non trovata"))
+		return
+	}
+	autosaveResult(w, r, s.svc.SetCampaignDelivery(r.Context(), d.Selected.MsgIDs, r.FormValue("value")))
+}
+
 func (s *Server) deleteReply(w http.ResponseWriter, r *http.Request) {
 	id, err := strconv.ParseInt(r.PathValue("id"), 10, 64)
 	if err != nil {

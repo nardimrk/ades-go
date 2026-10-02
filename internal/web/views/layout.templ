@@ -82,7 +82,7 @@ templ Layout(title, active string) {
 }
 
 // fabNav: the sections offered by the floating button (phones and tablets).
-var fabNav = nav[:5] // Inserzioni, Ordini, Consegne, Clienti, Prodotti
+var fabNav = nav[:3] // Inserzioni, Ordini, Consegne
 
 templ fabIcon(key string) {
 	switch key {
@@ -92,10 +92,6 @@ templ fabIcon(key string) {
 			@IconReceipt()
 		case "consegne":
 			@IconTruck()
-		case "clienti":
-			@IconUsers()
-		case "prodotti":
-			@IconBottle()
 	}
 }
 
