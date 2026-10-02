@@ -423,3 +423,58 @@ func TestMoveReply(t *testing.T) {
 		t.Fatalf("after move: listing %q, override %q", listing, override)
 	}
 }
+
+func TestNormalizePhone(t *testing.T) {
+	for in, want := range map[string]string{
+		"+39 349 286 9246": "+393492869246", "349 2869246": "+393492869246", "0039 349.286.9246": "+393492869246",
+		"+41 79 123 45 67": "+41791234567", "": "",
+	} {
+		if got, err := NormalizePhone(in); err != nil || got != want {
+			t.Errorf("NormalizePhone(%q) = %q, %v; want %q", in, got, err, want)
+		}
+	}
+	for _, bad := range []string{"123", "abc 349", "+39 349 286 9246 9999 99"} {
+		if _, err := NormalizePhone(bad); err == nil {
+			t.Errorf("NormalizePhone(%q): no error", bad)
+		}
+	}
+}
+
+// Phones from WhatsApp fill only empty numbers: LID map at start, the
+// sender's number with a message; a number typed in Clienti stays.
+func TestFillPhones(t *testing.T) {
+	ctx := context.Background()
+	store, err := db.Open(filepath.Join(t.TempDir(), "wine.db"))
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer store.Close()
+	svc := New(store, &config.Config{}, nil)
+	if _, err := store.DB.ExecContext(ctx, "CREATE TABLE whatsmeow_lid_map (lid TEXT PRIMARY KEY, pn TEXT)"); err != nil {
+		t.Fatal(err)
+	}
+	store.DB.ExecContext(ctx, "INSERT INTO whatsmeow_lid_map VALUES ('111', '393492869246'), ('222', '393350000000')")
+	for _, u := range []string{"111@lid", "222@lid", "333@lid", "393471112222@c.us"} {
+		store.UpsertUser(ctx, u, "x")
+	}
+	if err := svc.SetUserField(ctx, "222@lid", "telefono", "+39 333 999 8888"); err != nil {
+		t.Fatal(err)
+	}
+	n, err := store.FillPhones(ctx)
+	if err != nil || n != 2 {
+		t.Fatalf("FillPhones = %d, %v; want 2", n, err)
+	}
+	if err := store.SetPhoneIfEmpty(ctx, "333@lid", "393400000001"); err != nil {
+		t.Fatal(err)
+	}
+	if err := store.SetPhoneIfEmpty(ctx, "111@lid", "390000000000"); err != nil {
+		t.Fatal(err)
+	}
+	want := map[string]string{"111@lid": "+393492869246", "222@lid": "+393339998888", "333@lid": "+393400000001", "393471112222@c.us": "+393471112222"}
+	users, _ := svc.Users(ctx)
+	for _, u := range users {
+		if w, ok := want[u.ID]; ok && u.Telefono != w {
+			t.Errorf("%s: telefono %q, want %q", u.ID, u.Telefono, w)
+		}
+	}
+}

@@ -187,6 +187,9 @@ var addColumns = []string{
 	// order codes set by hand on a reply ("3A, 1 cassa B"; "-" = not an
 	// order): read instead of the body by the order parser
 	"ALTER TABLE replies ADD COLUMN order_override TEXT",
+	// the customer's phone ("+393492869246"): filled from WhatsApp when
+	// empty (see FillPhones), editable in Clienti
+	"ALTER TABLE users ADD COLUMN telefono TEXT",
 }
 
 func (s *Store) migrate(ctx context.Context) error {

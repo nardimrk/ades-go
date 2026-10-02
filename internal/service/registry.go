@@ -23,12 +23,13 @@ type User struct {
 	Provincia string
 	Regione   string
 	CAP       string
+	Telefono  string // "+393492869246", "" = unknown
 }
 
 func (s *Service) Users(ctx context.Context) ([]User, error) {
 	rows, err := s.db().QueryContext(ctx, `
 		SELECT id, COALESCE(name,''), COALESCE(indirizzo,''), COALESCE(città,''),
-		       COALESCE(provincia,''), COALESCE(regione,''), COALESCE(cap,'')
+		       COALESCE(provincia,''), COALESCE(regione,''), COALESCE(cap,''), COALESCE(telefono,'')
 		FROM users WHERE id NOT LIKE '%@g.us' ORDER BY name`)
 	if err != nil {
 		return nil, err
@@ -37,7 +38,7 @@ func (s *Service) Users(ctx context.Context) ([]User, error) {
 	var out []User
 	for rows.Next() {
 		var u User
-		if err := rows.Scan(&u.ID, &u.Name, &u.Indirizzo, &u.Citta, &u.Provincia, &u.Regione, &u.CAP); err != nil {
+		if err := rows.Scan(&u.ID, &u.Name, &u.Indirizzo, &u.Citta, &u.Provincia, &u.Regione, &u.CAP, &u.Telefono); err != nil {
 			return nil, err
 		}
 		out = append(out, u)
@@ -83,7 +84,35 @@ func (s *Service) DeleteManualUser(ctx context.Context, id string) error {
 // userColumns are the customer fields editable from the Clienti page.
 var userColumns = map[string]string{
 	"name": "name", "indirizzo": "indirizzo", "citta": "città",
-	"provincia": "provincia", "regione": "regione", "cap": "cap",
+	"provincia": "provincia", "regione": "regione", "cap": "cap", "telefono": "telefono",
+}
+
+// NormalizePhone turns a typed number into "+<country><number>": spaces,
+// dots and dashes are dropped, "00" becomes "+", and a number without a
+// country code is taken as Italian ("349 2869246" → "+393492869246").
+func NormalizePhone(v string) (string, error) {
+	v = strings.TrimSpace(v)
+	if v == "" {
+		return "", nil
+	}
+	plus := strings.HasPrefix(v, "+")
+	digits := strings.Map(func(r rune) rune {
+		if r >= '0' && r <= '9' {
+			return r
+		}
+		return -1
+	}, v)
+	switch {
+	case plus:
+	case strings.HasPrefix(digits, "00"):
+		digits = digits[2:]
+	default:
+		digits = "39" + digits
+	}
+	if strings.Trim(v, "+0123456789 .-/()") != "" || len(digits) < 8 || len(digits) > 15 {
+		return "", fmt.Errorf("numero di telefono non valido: %q", v)
+	}
+	return "+" + digits, nil
 }
 
 // SetUserField updates one field of one customer.
@@ -91,6 +120,12 @@ func (s *Service) SetUserField(ctx context.Context, id, field, value string) err
 	col, ok := userColumns[field]
 	if !ok {
 		return fmt.Errorf("campo %q non valido", field)
+	}
+	if field == "telefono" {
+		var err error
+		if value, err = NormalizePhone(value); err != nil {
+			return err
+		}
 	}
 	res, err := s.db().ExecContext(ctx,
 		`UPDATE users SET "`+col+`" = ?, updated_at = datetime('now') WHERE id = ?`, strings.TrimSpace(value), id)

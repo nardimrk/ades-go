@@ -222,6 +222,7 @@ templ ClientiPage(users []service.User) {
 					<tr>
 						@filterTh("ID WhatsApp")
 						@filterTh("Nome")
+						@filterTh("Telefono")
 						@filterTh("Indirizzo")
 						@filterTh("Città")
 						@filterTh("Provincia")
@@ -242,7 +243,7 @@ templ ClientiPage(users []service.User) {
 
 // ClienteRow is one customer; focus=true for a just-created one (cursor in Nome).
 templ ClienteRow(u service.User, focus bool) {
-	<tr class="user-row" data-name={ u.Name + " " + u.ID + " " + u.Citta }>
+	<tr class="user-row" data-name={ u.Name + " " + u.ID + " " + u.Citta + " " + u.Telefono }>
 		<td class="mono title-cell">
 			if service.IsManualUser(u.ID) {
 				<span class="badge badge-warn">aggiunto a mano</span>
@@ -251,6 +252,14 @@ templ ClienteRow(u service.User, focus bool) {
 			}
 		</td>
 		<td class="wide col-nome">@autosaveField("/clienti/field", u.ID, "name", u.Name, "Nome", "", focus)</td>
+		<td class="wide col-tel">
+			<span class="tel-field">
+				@autosaveField("/clienti/field", u.ID, "telefono", u.Telefono, "Telefono", "", false)
+				if u.Telefono != "" {
+					<a class="btn icon-btn tel-link" href={ templ.SafeURL("tel:" + u.Telefono) } hx-boost="false" title={ "Chiama " + u.Telefono } aria-label={ "Chiama " + u.Telefono }>@IconPhone()</a>
+				}
+			</span>
+		</td>
 		<td class="wide">@autosaveField("/clienti/field", u.ID, "indirizzo", u.Indirizzo, "Indirizzo", "", false)</td>
 		<td>@autosaveField("/clienti/field", u.ID, "citta", u.Citta, "Città", "", false)</td>
 		<td>@autosaveField("/clienti/field", u.ID, "provincia", u.Provincia, "Provincia", "", false)</td>

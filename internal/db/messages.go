@@ -57,6 +57,43 @@ func (s *Store) UpsertUser(ctx context.Context, id, name string) error {
 	return err
 }
 
+// SetPhoneIfEmpty stores the phone number of a customer who has none yet
+// (a number typed in Clienti is never replaced). phone is digits with or
+// without "+"; users that don't exist are left alone.
+func (s *Store) SetPhoneIfEmpty(ctx context.Context, userID, phone string) error {
+	digits := strings.TrimPrefix(strings.TrimSpace(phone), "+")
+	if userID == "" || len(digits) < 8 || strings.Trim(digits, "0123456789") != "" {
+		return nil
+	}
+	_, err := s.DB.ExecContext(ctx, `UPDATE users SET telefono = ? WHERE id = ? AND COALESCE(TRIM(telefono),'') = ''`, "+"+digits, userID)
+	return err
+}
+
+// FillPhones fills the empty phone numbers it can derive: "<n>@c.us" ids are
+// the number itself, and "<n>@lid" ids are looked up in whatsmeow's LID →
+// phone map. Safe to run at every start; returns how many were filled.
+func (s *Store) FillPhones(ctx context.Context) (int64, error) {
+	res, err := s.DB.ExecContext(ctx, `UPDATE users SET telefono = '+' || substr(id, 1, length(id) - 5)
+		WHERE id LIKE '%@c.us' AND COALESCE(TRIM(telefono),'') = '' AND substr(id, 1, length(id) - 5) GLOB '[0-9]*'`)
+	if err != nil {
+		return 0, err
+	}
+	n, _ := res.RowsAffected()
+	var hasMap int
+	if err := s.DB.QueryRowContext(ctx, "SELECT COUNT(*) FROM sqlite_master WHERE type = 'table' AND name = 'whatsmeow_lid_map'").Scan(&hasMap); err != nil || hasMap == 0 {
+		return n, err // no WhatsApp session in this database (e.g. a test copy)
+	}
+	res, err = s.DB.ExecContext(ctx, `UPDATE users SET telefono = '+' || (
+			SELECT m.pn FROM whatsmeow_lid_map m WHERE m.lid = substr(users.id, 1, length(users.id) - 4))
+		WHERE id LIKE '%@lid' AND COALESCE(TRIM(telefono),'') = ''
+		  AND EXISTS (SELECT 1 FROM whatsmeow_lid_map m WHERE m.lid = substr(users.id, 1, length(users.id) - 4) AND m.pn GLOB '[0-9]*')`)
+	if err != nil {
+		return n, err
+	}
+	m, _ := res.RowsAffected()
+	return n + m, nil
+}
+
 // InsertListing is a no-op when the same message (by msg_id or by content —
 // see ensureDedupIndexes) is already stored.
 func (s *Store) InsertListing(ctx context.Context, l Listing) error {

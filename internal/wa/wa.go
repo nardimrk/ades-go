@@ -230,6 +230,7 @@ func (m *Manager) onEvent(evt any) {
 		go m.handleHistorySync(e)
 	case *events.Connected:
 		log.Printf("[wa] connected")
+		go m.syncGroupPhones(context.Background())
 		m.mu.Lock()
 		m.lastError = ""
 		m.mu.Unlock()
@@ -302,6 +303,49 @@ func (m *Manager) handleHistorySync(e *events.HistorySync) {
 	sort.SliceStable(batch, func(i, j int) bool { return batch[i].Timestamp < batch[j].Timestamp })
 	log.Printf("[wa] history sync (%s): %d messages from monitored groups", e.Data.GetSyncType(), len(batch))
 	m.enqueue(batch)
+}
+
+// syncGroupPhones reads the members of the monitored groups and stores each
+// member's phone number on their customer, when it is still empty (members
+// who never wrote have no customer yet and are skipped).
+func (m *Manager) syncGroupPhones(ctx context.Context) {
+	cli := m.client()
+	for _, id := range m.cfg.ChannelIDs {
+		jid, err := types.ParseJID(id)
+		if err != nil {
+			continue
+		}
+		lctx, cancel := context.WithTimeout(ctx, 15*time.Second)
+		gi, err := cli.GetGroupInfo(lctx, jid)
+		cancel()
+		if err != nil {
+			log.Printf("[wa] group %s members: %v", id, err)
+			continue
+		}
+		for _, p := range gi.Participants {
+			lid, pn := p.LID, p.PhoneNumber
+			if lid.IsEmpty() && p.JID.Server == types.HiddenUserServer {
+				lid = p.JID
+			}
+			if pn.IsEmpty() && p.JID.Server == types.DefaultUserServer {
+				pn = p.JID
+			}
+			if pn.IsEmpty() {
+				continue
+			}
+			for _, user := range []types.JID{lid, pn} {
+				if user.IsEmpty() {
+					continue
+				}
+				if err := m.store.SetPhoneIfEmpty(ctx, legacyID(user), pn.User); err != nil {
+					log.Printf("[wa] phone of %s: %v", legacyID(user), err)
+				}
+			}
+		}
+	}
+	if n, err := m.store.FillPhones(ctx); err == nil && n > 0 {
+		log.Printf("[wa] %d phone numbers filled from WhatsApp", n)
+	}
 }
 
 // RequestHistory asks the phone for up to count messages older than the

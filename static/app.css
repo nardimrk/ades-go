@@ -891,3 +891,10 @@ body:has(.sel-bar:not(:empty)) .fab-menu { bottom: calc(max(.75rem, env(safe-are
 .move-item .dl-title, .move-item .dl-group { white-space: nowrap; overflow: hidden; text-overflow: ellipsis; display: block; }
 .reply-head .reply-move { color: var(--muted); }
 .reply-head .reply-move:hover { color: var(--accent); background: var(--accent-soft); }
+
+/* Clienti: the phone field with its call button */
+.tel-field { display: flex; align-items: center; gap: .35rem; min-width: 0; width: 100%; }
+.tel-field input { flex: 1 1 auto; min-width: 0; }
+/* room for a whole number ("+39 349 286 9246") next to the call button */
+@media (min-width: 721px) { .table td.col-tel { min-width: 14.5rem; } }
+.tel-link { flex: none; color: var(--accent); }

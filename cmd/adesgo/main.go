@@ -36,6 +36,13 @@ func main() {
 		log.Fatalf("database: %v", err)
 	}
 	defer store.Close()
+	// phone numbers WhatsApp already knows (LID → phone map), for customers
+	// who have none yet; numbers typed in Clienti are kept
+	if n, err := store.FillPhones(ctx); err != nil {
+		log.Printf("[clienti] phone numbers: %v", err)
+	} else if n > 0 {
+		log.Printf("[clienti] %d phone numbers filled from WhatsApp", n)
+	}
 
 	llmClient := llm.New(cfg.OpenRouterAPIKey, cfg.OpenRouterModel)
 	mailer := mail.New(cfg.MailgunAPIKey, cfg.MailgunDomain)

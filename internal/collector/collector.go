@@ -118,6 +118,16 @@ func (c *Collector) Handle(ctx context.Context, m *Message) error {
 	if err := c.store.UpsertUser(ctx, m.AuthorID, m.Author); err != nil {
 		return err
 	}
+	// the sender's phone number comes with the message (the alternative id of
+	// a LID, or the id itself): kept for Clienti when they have none yet
+	for _, id := range []string{m.AuthorAlt, m.AuthorID} {
+		if n, ok := strings.CutSuffix(id, "@c.us"); ok {
+			if err := c.store.SetPhoneIfEmpty(ctx, m.AuthorID, n); err != nil {
+				return err
+			}
+			break
+		}
+	}
 
 	targetAuthor, targetListing, storedBody := m.AuthorID, listingID, m.Body
 	resolved := ""
