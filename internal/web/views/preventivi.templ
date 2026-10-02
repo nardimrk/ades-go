@@ -135,6 +135,7 @@ templ PreventivoDetail(d *service.QuotationDetail, catalog []service.CatalogEntr
 		}
 		@ProdottiDatalist(catalog)
 		@ClientiDatalist(d.Sections)
+		@StockWarnings(d.Overbooked)
 		if len(d.Sections) > 1 {
 			<div class="filters sections-filter">
 				<input type="search" placeholder="Filtra per cliente, città o provincia" data-filter=".cust-section" aria-label="Filtra per cliente, città o provincia"/>
@@ -159,6 +160,22 @@ templ ProdottiDatalist(catalog []service.CatalogEntry) {
 			}
 		}
 	</datalist>
+}
+
+// StockWarnings: options ordered beyond the bottles the listing offers.
+templ StockWarnings(ws []service.StockWarning) {
+	if len(ws) > 0 {
+		<div class="alert alert-warning stock-warning" role="alert">
+			<b>Attenzione: sono state ordinate più bottiglie di quelle disponibili.</b>
+			<ul>
+				for _, w := range ws {
+					<li>
+						Opzione <b>{ w.Letter }</b> · { noEmoji(w.Wine) }: { plural(w.Ordered, "bottiglia ordinata", "bottiglie ordinate") } dopo l'ultima disponibilità del { w.Since } ({ itoa(w.Available) } disponibili), <b>{ itoa(w.Excess()) } in più</b>.
+					</li>
+				}
+			</ul>
+		</div>
+	}
 }
 
 // ClientiDatalist: the customers offered by "Modifica cliente" in every

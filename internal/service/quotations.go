@@ -796,10 +796,119 @@ func (c CustomerSection) Total() float64 {
 }
 
 type QuotationDetail struct {
-	Quotation Quotation
-	Date      string
-	Sections  []CustomerSection
-	Single    bool
+	Quotation  Quotation
+	Date       string
+	Sections   []CustomerSection
+	Single     bool
+	Overbooked []StockWarning // options ordered beyond what the listing offers
+}
+
+// StockWarning: an option of the listing ordered beyond its availability.
+type StockWarning struct {
+	Letter    string
+	Wine      string
+	Available int    // bottles offered by the latest post that gives a count
+	Ordered   int    // bottles ordered after that post
+	Since     string // that post's time, "02/10/2026 12:02"
+}
+
+// Excess is how many bottles are missing.
+func (w StockWarning) Excess() int { return w.Ordered - w.Available }
+
+// overbooked compares, for each option, the bottles ordered with the
+// availability of the listing. The seller reposts "Disponibili: 26 x …"
+// after each round of orders, so every post already counts the orders
+// before it: only the orders after the latest post that gives a count for
+// the option are measured against that count. Cases count their bottles.
+func (s *Service) overbooked(ctx context.Context, quotationID int64, qsel []Selection) ([]StockWarning, error) {
+	rows, err := s.db().QueryContext(ctx, "SELECT COALESCE(body,''), COALESCE(timestamp,0) FROM listings WHERE quotation_id = ? ORDER BY timestamp DESC, id DESC", quotationID)
+	if err != nil {
+		return nil, err
+	}
+	type stock struct {
+		wine  string
+		count int
+		ts    int64
+	}
+	latest := map[string]stock{}
+	var letters []string
+	for rows.Next() {
+		var body string
+		var ts int64
+		if err := rows.Scan(&body, &ts); err != nil {
+			rows.Close()
+			return nil, err
+		}
+		opts := textutil.ParseOptions(body)
+		if len(opts) == 0 {
+			opts, _ = textutil.ParseSingleWine(body)
+		}
+		for _, o := range opts {
+			if o.Case || o.Quantity <= 0 {
+				continue
+			}
+			if _, seen := latest[o.Letter]; !seen {
+				latest[o.Letter] = stock{o.WineName, o.Quantity, ts}
+				letters = append(letters, o.Letter)
+			}
+		}
+	}
+	rows.Close()
+	if err := rows.Err(); err != nil || len(latest) == 0 {
+		return nil, err
+	}
+	// when each reply was sent
+	var ids []any
+	for _, x := range qsel {
+		if x.ReplyID != 0 {
+			ids = append(ids, x.ReplyID)
+		}
+	}
+	sent := map[int64]int64{}
+	if len(ids) > 0 {
+		ph := strings.TrimSuffix(strings.Repeat("?,", len(ids)), ",")
+		r, err := s.db().QueryContext(ctx, "SELECT id, COALESCE(timestamp,0) FROM replies WHERE id IN ("+ph+")", ids...)
+		if err != nil {
+			return nil, err
+		}
+		for r.Next() {
+			var id, ts int64
+			if r.Scan(&id, &ts) == nil {
+				sent[id] = ts
+			}
+		}
+		r.Close()
+	}
+	ordered := map[string]int{}
+	for _, x := range qsel {
+		letter, _ := strings.CutSuffix(x.Opzione, textutil.CaseSuffix)
+		st, ok := latest[letter]
+		if !ok || x.Qta <= 0 || x.ReplyID == 0 || sent[x.ReplyID] <= st.ts {
+			continue
+		}
+		ordered[letter] += x.Bottles()
+	}
+	// the wine as named in the order (the listing line may carry extra text)
+	names := map[string]string{}
+	if items, err := s.quotationItems(ctx, "WHERE quotation_id = ?", quotationID); err == nil {
+		for _, it := range items {
+			if o := strings.ToUpper(it.Option); len(o) == 1 {
+				names[o] = wineWithVintage(it.WineName, it.Vintage)
+			}
+		}
+	}
+	sort.Strings(letters)
+	var out []StockWarning
+	for _, l := range letters {
+		if st := latest[l]; ordered[l] > st.count {
+			wine := names[l]
+			if wine == "" {
+				wine = st.wine
+			}
+			out = append(out, StockWarning{Letter: l, Wine: wine, Available: st.count, Ordered: ordered[l], Since: FmtTS(st.ts)})
+		}
+	}
+	return out, nil
 }
 
 // ClientOptions maps display name → user id for every non-group user.
@@ -890,6 +999,9 @@ func (s *Service) QuotationDetail(ctx context.Context, num string) (*QuotationDe
 
 	// The manual client override is a single field on the quotation, so it
 	// only stands in as default when there is exactly one customer section.
+	if d.Overbooked, err = s.overbooked(ctx, q.ID, qsel); err != nil {
+		return nil, err
+	}
 	d.Single = len(order) == 1
 	for _, utente := range order {
 		sec, err := s.BuildSection(ctx, q, utente, s.DefaultCliente(q, utente, d.Single), rowsBy[utente])

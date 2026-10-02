@@ -478,3 +478,39 @@ func TestFillPhones(t *testing.T) {
 		}
 	}
 }
+
+// Orders after the latest post beyond its count are flagged; orders before
+// it are already counted by the seller's repost.
+func TestOverbooked(t *testing.T) {
+	ctx := context.Background()
+	store, err := db.Open(filepath.Join(t.TempDir(), "wine.db"))
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer store.Close()
+	svc := New(store, &config.Config{}, nil)
+	const chat = "1@g.us"
+	if err := store.InsertListing(ctx, db.Listing{MsgID: "L1", ChatID: chat, AuthorID: "owner", Body: "Barolo\nA. 3x Barolo 2019 a 40€\nB. 6x Barbaresco 2018 a 30€", Timestamp: 1000}); err != nil {
+		t.Fatal(err)
+	}
+	lid := "L1"
+	for i, r := range []struct {
+		body string
+		ts   int64
+	}{{"5A", 900}, {"2A", 1100}, {"2A 1B", 1200}} { // the first one came before the post
+		if err := store.InsertReply(ctx, db.Reply{MsgID: "R" + itoa(i), ListingMsgID: &lid, ChatID: chat, AuthorID: "u" + itoa(i), Body: r.body, Timestamp: r.ts}); err != nil {
+			t.Fatal(err)
+		}
+	}
+	if _, _, _, err := svc.ImportPreventivi(ctx); err != nil {
+		t.Fatal(err)
+	}
+	sums, _ := svc.QuotationSummaries(ctx)
+	d, err := svc.QuotationDetail(ctx, sums[0].Number)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if len(d.Overbooked) != 1 || d.Overbooked[0].Letter != "A" || d.Overbooked[0].Ordered != 4 || d.Overbooked[0].Available != 3 {
+		t.Fatalf("overbooked = %+v", d.Overbooked)
+	}
+}

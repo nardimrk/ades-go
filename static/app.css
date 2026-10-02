@@ -931,3 +931,7 @@ body:has(.sel-bar:not(:empty)) .fab-menu { bottom: calc(max(.75rem, env(safe-are
 /* Consegne header rows: "Vicenza · 3 clienti · 14 bott." with room around each dot */
 .dl-meta > span { white-space: nowrap; }
 .dl-meta > span::before { content: "·"; margin: 0 .55rem; }
+
+/* order page: options ordered beyond the listing's availability */
+.stock-warning { display: flex; flex-direction: column; gap: .35rem; margin-bottom: .75rem; }
+.stock-warning ul { margin: 0; padding-left: 1.2rem; }
