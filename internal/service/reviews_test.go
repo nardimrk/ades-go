@@ -261,15 +261,18 @@ func TestListingMismatch(t *testing.T) {
 		t.Fatal(err)
 	}
 	opts := []OrderOption{{Key: "A", Letter: "A", Wine: "Ürziger Würzgarten Auslese 2003", Price: 19.83}}
-	got, err := svc.listingMismatch(ctx, []string{"L1"}, opts)
+	got, missing, err := svc.listingMismatch(ctx, []string{"L1"}, opts)
 	if err != nil {
 		t.Fatal(err)
 	}
 	if len(got) != 2 || !strings.Contains(got[0], "opzione A") || !strings.Contains(got[0], "119.00") || !strings.Contains(got[1], "manca l'opzione B") {
 		t.Fatalf("mismatch = %q", got)
 	}
+	if len(missing) != 1 || missing[0].Letter != "B" || missing[0].Price != 24.5 {
+		t.Fatalf("missing = %+v", missing)
+	}
 	opts = []OrderOption{{Key: "A", Letter: "A", Price: 119}, {Key: "B", Letter: "B", Price: 24.5}}
-	if got, _ := svc.listingMismatch(ctx, []string{"L1"}, opts); len(got) != 0 {
+	if got, _, _ := svc.listingMismatch(ctx, []string{"L1"}, opts); len(got) != 0 {
 		t.Fatalf("matching order flagged: %q", got)
 	}
 }
@@ -326,5 +329,50 @@ func TestSummarySavedOnAllCustomers(t *testing.T) {
 	}
 	if got := savedOn(); got == "" {
 		t.Fatal("2 of 2 saved: no SavedOn")
+	}
+}
+
+// Confirm modal: a missing option is added to the quotation together with
+// the reply's order; adding an option that exists fails and changes nothing.
+func TestSetReplyOrderAddingOptions(t *testing.T) {
+	ctx := context.Background()
+	store, err := db.Open(filepath.Join(t.TempDir(), "wine.db"))
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer store.Close()
+	svc := New(store, &config.Config{}, nil)
+	const chat = "1@g.us"
+	if err := store.InsertListing(ctx, db.Listing{MsgID: "L1", ChatID: chat, AuthorID: "owner", Body: "Matallana\nA. 11x Matallana 2023 a 49,95€\nB. 6x Yjar 2022 a 120€", Timestamp: 1000}); err != nil {
+		t.Fatal(err)
+	}
+	lid := "L1"
+	if err := store.InsertReply(ctx, db.Reply{MsgID: "R1", ListingMsgID: &lid, ChatID: chat, AuthorID: "u1", Body: "Una cassa B per me", Timestamp: 1100}); err != nil {
+		t.Fatal(err)
+	}
+	if _, _, _, err := svc.ImportPreventivi(ctx); err != nil {
+		t.Fatal(err)
+	}
+	rows, _ := svc.InserzioniList(ctx, "", "")
+	camp := &rows[0].Campaign
+	qid := camp.QuotationIDs[0]
+	// simulate the legacy order without B
+	if _, err := store.DB.ExecContext(ctx, "DELETE FROM quotation_items WHERE quotation_id = ? AND option = 'B'", qid); err != nil {
+		t.Fatal(err)
+	}
+	replies, _ := svc.CampaignReplies(ctx, camp.MsgIDs)
+	add := []NewOption{{Letter: "B", Wine: "Yjar 2022", Price: 120}}
+	if err := svc.SetReplyOrderAddingOptions(ctx, replies[0].ID, qid, add, "6B"); err != nil {
+		t.Fatal(err)
+	}
+	rv, _ := svc.CampaignReview(ctx, camp)
+	if len(rv.Missing) != 0 || len(rv.Options) != 2 || rv.Current["u1"] != "6B" {
+		t.Fatalf("after add: missing %v, options %v, current %v", rv.Missing, rv.Options, rv.Current)
+	}
+	if err := svc.SetReplyOrderAddingOptions(ctx, replies[0].ID, qid, add, "1B"); err == nil {
+		t.Fatal("adding B twice: no error")
+	}
+	if rv, _ := svc.CampaignReview(ctx, camp); rv.Current["u1"] != "6B" {
+		t.Fatalf("failed add changed the order: %v", rv.Current)
 	}
 }

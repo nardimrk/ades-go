@@ -417,9 +417,13 @@
   // the quantity (empty = option not touched); the total follows.
   function proposalTotal(box) {
     var tot = 0, any = false;
-    box.querySelectorAll("input[data-price]").forEach(function (inp) {
+    box.querySelectorAll("input[data-price], input[data-new-qty]").forEach(function (inp) {
       var n = parseInt(inp.value, 10);
-      if (!isNaN(n) && n > 0) { tot += n * parseFloat(inp.dataset.price); any = true; }
+      // a new option's price is the one typed next to it
+      var price = inp.hasAttribute("data-new-qty")
+        ? parseFloat((inp.closest("[data-new-option]").querySelector("[name=new_price]").value || "").replace(",", "."))
+        : parseFloat(inp.dataset.price);
+      if (!isNaN(n) && n > 0 && !isNaN(price)) { tot += n * price; any = true; }
     });
     var out = box.querySelector("[data-prop-total]");
     if (out) out.textContent = any ? "Totale € " + tot.toFixed(2) : "";
@@ -436,6 +440,34 @@
   });
   document.addEventListener("input", function (e) {
     var box = e.target.closest && e.target.closest("[data-proposal]");
+    if (box) proposalTotal(box);
+  });
+
+  // "+ Aggiungi opzione" in the confirm modal: a new option row with the
+  // first letter (A–J) the order doesn't use yet.
+  document.addEventListener("click", function (e) {
+    var b = e.target.closest("[data-add-option]");
+    if (!b) return;
+    var box = b.closest("[data-proposal]");
+    var tpl = box && box.querySelector("template[data-new-option-template]");
+    if (!tpl) return;
+    var used = {};
+    box.querySelectorAll(".prop-opt b").forEach(function (x) { used[x.textContent.trim().replace(/^cassa\s+/i, "")] = true; });
+    var letter = "ABCDEFGHIJ".split("").filter(function (l) { return !used[l]; })[0];
+    if (!letter) { showToast("L'ordine ha già tutte le opzioni da A a J.", "warning"); return; }
+    var wrap = document.createElement("div");
+    wrap.innerHTML = tpl.innerHTML.replace(/__L__/g, letter);
+    var row = wrap.firstElementChild;
+    box.querySelector("[data-new-options]").appendChild(row);
+    initCombos(row);
+    var wine = row.querySelector("[name=new_wine]");
+    if (wine && !matchMedia("(pointer: coarse)").matches) wine.focus();
+  });
+  document.addEventListener("click", function (e) {
+    var b = e.target.closest("[data-remove-option]");
+    if (!b) return;
+    var box = b.closest("[data-proposal]");
+    b.closest("[data-new-option]").remove();
     if (box) proposalTotal(box);
   });
 

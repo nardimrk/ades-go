@@ -13,6 +13,7 @@ type InserzioniData struct {
 	Selected *service.Campaign
 	Replies  []service.ReplyView
 	Clients  []string // customer names for "Aggiungi risposta"
+	Catalog  []service.CatalogEntry // Prodotti, for new options in the confirm modal
 
 	TitleJob   service.TitleStatus
 	LLMEnabled bool
@@ -649,10 +650,36 @@ templ ModalSlot(oob bool) {
 	<div id="modal" { oobAttrs(oob)... }></div>
 }
 
+// NewOptionRow is an option the order lacks, typed in the confirm modal:
+// one per option of the listing missing from the order, plus the ones added
+// with "Aggiungi opzione". Values are the typed text, to redraw on errors.
+type NewOptionRow struct {
+	Letter string
+	Case   bool
+	Wine   string
+	Price  string
+	Qty    string
+	Hint   string // what the listing says ("Yjar a € 120.00"), "" = added by hand
+}
+
+func (x NewOptionRow) label() string {
+	if x.Case {
+		return "cassa " + x.Letter
+	}
+	return x.Letter
+}
+
+func boolStr(b bool) string {
+	if b {
+		return "1"
+	}
+	return "0"
+}
+
 // ReplyOrderModal: confirm by hand a reply the rules didn't read as an
 // order. The lines go to the order (quotation) of the inserzione, next to
 // those read automatically.
-templ ReplyOrderModal(d InserzioniData, r service.ReplyView, qty map[string]int, errMsg string) {
+templ ReplyOrderModal(d InserzioniData, r service.ReplyView, qty map[string]int, extra []NewOptionRow, errMsg string) {
 	<dialog class="modal" data-modal-open aria-labelledby={ "modal-title-" + i64(r.ID) }>
 		<form class="modal-form" hx-post={ "/replies/" + i64(r.ID) + "/order" } hx-swap="none">
 			<input type="hidden" name="chat" value={ d.SelChat }/>
@@ -676,12 +703,13 @@ templ ReplyOrderModal(d InserzioniData, r service.ReplyView, qty map[string]int,
 				if errMsg != "" {
 					@Alert("error", errMsg)
 				}
-				if d.Review == nil || len(d.Review.Options) == 0 {
+				if d.Review == nil || d.Review.QuotationID == 0 {
 					@Alert("info", "Questa inserzione non ha vini con prezzo da cui creare l'ordine.")
 				} else {
 					if cur := d.Review.Current[r.AuthorID]; cur != "" {
 						<p class="muted modal-note">Ordine attuale di { r.Utente }: <b>{ cur }</b>. Le quantità indicate qui sostituiscono quelle della stessa opzione.</p>
 					}
+					@ProdottiDatalist(d.Catalog)
 					<fieldset class="add-panel proposal" data-proposal>
 						<legend>Vino e quantità</legend>
 						<div class="prop-rows">
@@ -689,6 +717,18 @@ templ ReplyOrderModal(d InserzioniData, r service.ReplyView, qty map[string]int,
 								@proposalRow("m", r, o, qty)
 							}
 						</div>
+						if len(extra) > 0 {
+							<p class="muted modal-note prop-new-note">Opzioni dell'inserzione che mancano nell'ordine: scegli il vino dai Prodotti, il prezzo e la quantità per aggiungerle.</p>
+						}
+						<div class="prop-rows prop-new-rows" data-new-options>
+							for _, x := range extra {
+								@newOptionRow(r, x)
+							}
+						</div>
+						<template data-new-option-template>
+							@newOptionRow(r, NewOptionRow{Letter: "__L__"})
+						</template>
+						<button type="button" class="btn small prop-add" data-add-option>＋ Aggiungi opzione</button>
 						<div class="prop-foot">
 							<span class="muted">Vuoto = opzione non toccata · 0 = annullata</span>
 							<b class="prop-total" data-prop-total></b>
@@ -698,10 +738,57 @@ templ ReplyOrderModal(d InserzioniData, r service.ReplyView, qty map[string]int,
 			</div>
 			<div class="modal-foot">
 				<button type="button" class="btn" data-modal-close>Annulla</button>
-				if d.Review != nil && len(d.Review.Options) > 0 {
+				if d.Review != nil && d.Review.QuotationID != 0 {
 					<button type="submit" class="btn primary" name="op" value="apply">Conferma ordine</button>
 				}
 			</div>
 		</form>
 	</dialog>
+}
+
+// newOptionRow: an option to add to the order — wine (from Prodotti), price
+// and quantity. Left empty, it is ignored.
+templ newOptionRow(r service.ReplyView, x NewOptionRow) {
+	<div class="prop-row prop-new" data-new-option>
+		<label class="prop-opt" for={ "new-" + i64(r.ID) + "-" + x.Letter + "-wine" }>
+			<b>{ x.label() }</b>
+			<input type="hidden" name="new_letter" value={ x.Letter }/>
+			<input type="hidden" name="new_case" value={ boolStr(x.Case) }/>
+			<input type="hidden" name="new_hint" value={ x.Hint }/>
+		</label>
+		<span class="prop-new-fields">
+			<input
+				type="text"
+				id={ "new-" + i64(r.ID) + "-" + x.Letter + "-wine" }
+				name="new_wine"
+				list="prodotti-list"
+				value={ x.Wine }
+				placeholder="Vino, dai Prodotti…"
+				autocomplete="off"
+				aria-label={ "Vino dell'opzione " + x.label() }
+			/>
+			<input type="number" name="new_price" value={ x.Price } min="0" step="0.01" inputmode="decimal" placeholder="Prezzo €" aria-label={ "Prezzo dell'opzione " + x.label() }/>
+			if x.Hint != "" {
+				<small class="muted prop-hint">Nell'inserzione: { noEmoji(x.Hint) }</small>
+			} else {
+				<button type="button" class="icon danger prop-remove" data-remove-option aria-label={ "Togli l'opzione " + x.label() }>@IconX()</button>
+			}
+		</span>
+		<span class="stepper">
+			<button type="button" class="btn step" data-step="-1" aria-label={ "Meno " + x.label() }>&minus;</button>
+			<input
+				type="number"
+				name="new_qty"
+				value={ x.Qty }
+				min="0"
+				max="999"
+				step="1"
+				inputmode="numeric"
+				placeholder="–"
+				data-new-qty
+				aria-label={ "Quantità " + x.label() }
+			/>
+			<button type="button" class="btn step" data-step="1" aria-label={ "Più " + x.label() }>+</button>
+		</span>
+	</div>
 }

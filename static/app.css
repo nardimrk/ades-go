@@ -499,6 +499,16 @@ button.icon { display: inline-flex; align-items: center; justify-content: center
 .prop-more > summary { margin: .55rem 0 .4rem; font-size: .9rem; color: var(--accent); }
 .prop-foot { display: flex; justify-content: space-between; align-items: baseline; gap: .25rem 1rem; flex-wrap: wrap; margin-top: .55rem; font-size: .85rem; }
 .prop-total { font-size: .95rem; }
+/* confirm modal: options the order lacks — wine (Prodotti), price, quantity */
+.prop-new-note { margin: .6rem 0 .3rem; }
+.prop-new-rows:not(:empty) { margin-top: .4rem; }
+.prop-new-fields { display: flex; flex-wrap: wrap; align-items: center; gap: .35rem; min-width: 0; }
+.prop-new-fields input[name=new_wine] { flex: 1 1 11rem; min-width: 0; }
+.prop-new-fields input[name=new_price] { flex: 0 0 6.5rem; width: 6.5rem; }
+.prop-hint { flex-basis: 100%; font-size: .8rem; }
+.prop-add { margin-top: .55rem; }
+/* suggestions inside a modal push the content (no clipping in the scrolling body) */
+.modal-body .combo-list { position: static; margin-top: .35rem; box-shadow: none; flex-basis: 100%; }
 .review-actions { display: flex; gap: .5rem; flex-wrap: wrap; }
 .reply-fixed { display: flex; align-items: center; gap: .5rem; flex-wrap: wrap; margin-top: .35rem; font-size: .9rem; }
 

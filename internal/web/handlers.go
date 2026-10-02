@@ -258,7 +258,18 @@ func (s *Server) replyOrder(w http.ResponseWriter, r *http.Request) {
 	var msg string
 	switch r.FormValue("op") {
 	case "apply":
-		codes, err := proposalCodes(r, d.Review)
+		var catalog []service.CatalogEntry
+		if modal {
+			if catalog, err = s.svc.Catalog(ctx); err != nil {
+				s.fail(w, r, err)
+				return
+			}
+		}
+		add, extra, rows, err := newOptionRows(r, d.Review, catalog)
+		var codes string
+		if err == nil {
+			codes, err = proposalCodes(r, d.Review, extra)
+		}
 		if err != nil {
 			if modal {
 				// the error shows inside the modal, which stays open
@@ -268,14 +279,33 @@ func (s *Server) replyOrder(w http.ResponseWriter, r *http.Request) {
 				if errors.Is(err, errNoQuantity) {
 					msg = "Indica la quantità di almeno un vino."
 				}
-				render(w, r, views.ReplyOrderModal(d, *reply, formQty(r, d.Review), msg))
+				d.Catalog = catalog
+				render(w, r, views.ReplyOrderModal(d, *reply, formQty(r, d.Review), rows, msg))
 				return
 			}
 			s.fail(w, r, err)
 			return
 		}
-		err = s.svc.SetReplyOrder(ctx, id, codes)
+		err = s.svc.SetReplyOrderAddingOptions(ctx, id, d.Review.QuotationID, add, codes)
 		msg = "Ordine aggiornato: " + who + " · " + codes
+		if err == nil && len(add) > 0 {
+			// new options change how other replies read and the warning:
+			// redraw the whole conversation
+			var keys []string
+			for _, o := range add {
+				keys = append(keys, o.Key())
+			}
+			if err := s.loadSelection(r, &d); err != nil {
+				s.fail(w, r, err)
+				return
+			}
+			w.Header().Set("HX-Retarget", "#conv")
+			w.Header().Set("HX-Reswap", "innerHTML")
+			render(w, r, views.Conversation(d))
+			render(w, r, views.ModalSlot(true))
+			toast(w, r, "success", msg+" · aggiunte all'ordine le opzioni "+strings.Join(keys, ", "))
+			return
+		}
 	case "notorder":
 		err = s.svc.SetReplyOrder(ctx, id, "-")
 		msg = "Non è un ordine: " + who
@@ -334,9 +364,13 @@ func (s *Server) replyOrderForm(w http.ResponseWriter, r *http.Request) {
 			return
 		}
 	}
+	if d.Catalog, err = s.svc.Catalog(r.Context()); err != nil {
+		s.fail(w, r, err)
+		return
+	}
 	for _, x := range d.Replies {
 		if x.ID == id {
-			render(w, r, views.ReplyOrderModal(d, x, d.Review.GuessQty(x.Testo), ""))
+			render(w, r, views.ReplyOrderModal(d, x, d.Review.GuessQty(x.Testo), missingOptionRows(d.Review, x.Testo), ""))
 			return
 		}
 	}
@@ -357,15 +391,119 @@ func formQty(r *http.Request, rv *service.CampaignReview) map[string]int {
 	return out
 }
 
+// missingOptionRows: a row for each option of the listing that the order
+// lacks, with the listing's price and, when the reply names that option
+// ("una cassa B"), its quantity. The wine is left to pick from Prodotti.
+func missingOptionRows(rv *service.CampaignReview, body string) []views.NewOptionRow {
+	if rv == nil {
+		return nil
+	}
+	named := map[string]int{}
+	for _, c := range textutil.ParseOrders(body) {
+		k := c.Option
+		if c.Case {
+			k += textutil.CaseSuffix
+		}
+		named[k] = c.Qty
+	}
+	var out []views.NewOptionRow
+	for _, o := range rv.Missing {
+		row := views.NewOptionRow{Letter: o.Letter, Case: o.Case, Price: strconv.FormatFloat(o.Price, 'f', 2, 64),
+			Hint: fmt.Sprintf("%s a € %.2f", o.WineName, o.Price)}
+		k := o.Letter
+		if o.Case {
+			k += textutil.CaseSuffix
+		}
+		if n, ok := named[k]; ok && n > 0 {
+			row.Qty = strconv.Itoa(n)
+		}
+		out = append(out, row)
+	}
+	return out
+}
+
+// newOptionRows reads the options typed in the confirm modal (new_letter,
+// new_case, new_wine, new_price, new_qty). A row left empty is ignored; a
+// filled one needs a wine from Prodotti, a price and a quantity, and a letter
+// the order doesn't use yet. Returns the options to add, their order codes
+// and the rows as typed (to redraw the modal on errors).
+func newOptionRows(r *http.Request, rv *service.CampaignReview, catalog []service.CatalogEntry) (add []service.NewOption, codes []textutil.OrderCode, rows []views.NewOptionRow, err error) {
+	if err := r.ParseForm(); err != nil {
+		return nil, nil, nil, err
+	}
+	at := func(vals []string, i int) string {
+		if i < len(vals) {
+			return strings.TrimSpace(vals[i])
+		}
+		return ""
+	}
+	letters := r.Form["new_letter"]
+	used := map[string]bool{}
+	if rv != nil {
+		for _, o := range rv.Options {
+			used[o.Key] = true
+		}
+	}
+	for i := range letters {
+		row := views.NewOptionRow{Letter: strings.ToUpper(at(letters, i)), Case: at(r.Form["new_case"], i) == "1",
+			Wine: at(r.Form["new_wine"], i), Price: at(r.Form["new_price"], i), Qty: at(r.Form["new_qty"], i), Hint: at(r.Form["new_hint"], i)}
+		rows = append(rows, row)
+		if err != nil || (row.Wine == "" && (row.Qty == "" || row.Qty == "0")) {
+			continue // untouched row, or already failed
+		}
+		o := service.NewOption{Letter: row.Letter, Case: row.Case}
+		label := row.Letter
+		if row.Case {
+			label = "cassa " + row.Letter
+		}
+		if len(o.Letter) != 1 || o.Letter < "A" || o.Letter > "J" {
+			err = fmt.Errorf("lettera dell'opzione non valida: %q", row.Letter)
+			continue
+		}
+		if used[o.Key()] {
+			err = fmt.Errorf("l'opzione %s c'è già nell'ordine", label)
+			continue
+		}
+		name, _, _ := strings.Cut(row.Wine, " — ")
+		for _, e := range catalog {
+			if strings.EqualFold(e.Description, strings.TrimSpace(name)) {
+				o.Wine = e.Description
+				break
+			}
+		}
+		price, perr := strconv.ParseFloat(strings.ReplaceAll(row.Price, ",", "."), 64)
+		qty, qerr := strconv.Atoi(row.Qty)
+		switch {
+		case row.Wine == "":
+			err = fmt.Errorf("scegli il vino dell'opzione %s dai Prodotti", label)
+		case o.Wine == "":
+			err = fmt.Errorf("“%s” non è tra i Prodotti: sceglilo dall'elenco (o aggiungilo prima nella pagina Prodotti)", row.Wine)
+		case perr != nil || price <= 0:
+			err = fmt.Errorf("indica il prezzo dell'opzione %s", label)
+		case qerr != nil || qty < 1 || qty > 999:
+			err = fmt.Errorf("indica la quantità dell'opzione %s", label)
+		default:
+			o.Price = price
+			used[o.Key()] = true
+			add = append(add, o)
+			codes = append(codes, textutil.OrderCode{Qty: qty, Option: o.Letter, Case: o.Case})
+		}
+	}
+	if err != nil {
+		return nil, nil, rows, err
+	}
+	return add, codes, rows, nil
+}
+
 var errNoQuantity = errors.New(`indica almeno una quantità, oppure scegli "Non è un ordine"`)
 
 // proposalCodes reads the quantities of the proposal editor (qty_<option>):
 // empty = option not touched, 0 = cancelled.
-func proposalCodes(r *http.Request, rv *service.CampaignReview) (string, error) {
-	if rv == nil || len(rv.Options) == 0 {
+func proposalCodes(r *http.Request, rv *service.CampaignReview, extra []textutil.OrderCode) (string, error) {
+	if rv == nil || len(rv.Options)+len(extra) == 0 {
 		return "", fmt.Errorf("l'inserzione non ha opzioni ordinabili")
 	}
-	var codes []textutil.OrderCode
+	codes := append([]textutil.OrderCode(nil), extra...)
 	for _, o := range rv.Options {
 		v := strings.TrimSpace(r.FormValue("qty_" + o.Key))
 		if v == "" {

@@ -76,6 +76,25 @@ type CampaignReview struct {
 	// (an option missing, a different price), e.g. "manca B: Riesling a € 24.50".
 	// Orders confirmed against it would be wrong, so the page warns.
 	Mismatch []string
+	// Missing: the listing's options that the quotation lacks; the confirm
+	// modal offers them as new options to add to the order
+	Missing []textutil.Option
+}
+
+// NewOption is an option added to a quotation from the confirm modal.
+type NewOption struct {
+	Letter string
+	Case   bool
+	Wine   string // one of the Prodotti
+	Price  float64
+}
+
+// Key is the quotation_items.option of the new option ("B", "B-CASSA").
+func (o NewOption) Key() string {
+	if o.Case {
+		return o.Letter + textutil.CaseSuffix
+	}
+	return o.Letter
 }
 
 func reviewMetaKey(chatID, key string) string { return "review:" + chatID + "|" + key }
@@ -148,7 +167,7 @@ func (s *Service) CampaignReview(ctx context.Context, c *Campaign) (*CampaignRev
 		return a.Letter < b.Letter
 	})
 	rv.Orderable = len(rv.Options) > 0
-	if rv.Mismatch, err = s.listingMismatch(ctx, c.MsgIDs, rv.Options); err != nil {
+	if rv.Mismatch, rv.Missing, err = s.listingMismatch(ctx, c.MsgIDs, rv.Options); err != nil {
 		return nil, err
 	}
 	sel, err := s.ComputeSelections(ctx)
@@ -176,9 +195,9 @@ func (s *Service) CampaignReview(ctx context.Context, c *Campaign) (*CampaignRev
 // listingMismatch compares the quotation's options with the options of the
 // campaign's posts (every repost: an option may appear in only some of them,
 // the latest price wins). A listing the rules can't read gives no warning.
-func (s *Service) listingMismatch(ctx context.Context, msgIDs []string, opts []OrderOption) ([]string, error) {
+func (s *Service) listingMismatch(ctx context.Context, msgIDs []string, opts []OrderOption) (msgs []string, missing []textutil.Option, err error) {
 	if len(msgIDs) == 0 {
-		return nil, nil
+		return nil, nil, nil
 	}
 	ph := strings.TrimSuffix(strings.Repeat("?,", len(msgIDs)), ",")
 	args := make([]any, len(msgIDs))
@@ -187,7 +206,7 @@ func (s *Service) listingMismatch(ctx context.Context, msgIDs []string, opts []O
 	}
 	rows, err := s.db().QueryContext(ctx, "SELECT COALESCE(body,'') FROM listings WHERE msg_id IN ("+ph+") ORDER BY timestamp, id", args...)
 	if err != nil {
-		return nil, err
+		return nil, nil, err
 	}
 	defer rows.Close()
 	want := map[string]textutil.Option{}
@@ -195,7 +214,7 @@ func (s *Service) listingMismatch(ctx context.Context, msgIDs []string, opts []O
 	for rows.Next() {
 		var body string
 		if err := rows.Scan(&body); err != nil {
-			return nil, err
+			return nil, nil, err
 		}
 		parsed := textutil.ParseOptions(body)
 		if len(parsed) == 0 {
@@ -213,26 +232,26 @@ func (s *Service) listingMismatch(ctx context.Context, msgIDs []string, opts []O
 		}
 	}
 	if err := rows.Err(); err != nil {
-		return nil, err
+		return nil, nil, err
 	}
 	have := map[string]OrderOption{}
 	for _, o := range opts {
 		have[o.Key] = o
 	}
 	sort.Strings(keys)
-	var out []string
 	for _, k := range keys {
 		w := want[k]
 		label := strings.Replace(k, textutil.CaseSuffix, " (cassa)", 1)
 		h, ok := have[k]
 		switch {
 		case !ok:
-			out = append(out, fmt.Sprintf("manca l'opzione %s: %s a € %.2f", label, w.WineName, w.Price))
+			msgs = append(msgs, fmt.Sprintf("manca l'opzione %s: %s a € %.2f", label, w.WineName, w.Price))
+			missing = append(missing, w)
 		case math.Abs(h.Price-w.Price) > 0.005:
-			out = append(out, fmt.Sprintf("opzione %s: nell'ordine € %.2f, nell'inserzione € %.2f", label, h.Price, w.Price))
+			msgs = append(msgs, fmt.Sprintf("opzione %s: nell'ordine € %.2f, nell'inserzione € %.2f", label, h.Price, w.Price))
 		}
 	}
-	return out, nil
+	return msgs, missing, nil
 }
 
 // Option returns the option an order code refers to. A case order that
@@ -384,7 +403,27 @@ func (s *Service) EnsureSingleWineQuotation(ctx context.Context, c *Campaign) (b
 // SetReplyOrder stores the order codes confirmed by hand on a reply ("-" =
 // not an order) and closes its check.
 func (s *Service) SetReplyOrder(ctx context.Context, replyID int64, codes string) error {
+	return s.SetReplyOrderAddingOptions(ctx, replyID, 0, nil, codes)
+}
+
+// SetReplyOrderAddingOptions first adds new options to the quotation (the
+// ones the order lacked, typed in the confirm modal), then stores the reply's
+// order — all or nothing.
+func (s *Service) SetReplyOrderAddingOptions(ctx context.Context, replyID, quotationID int64, add []NewOption, codes string) error {
 	return s.inTx(ctx, func(tx *sql.Tx) error {
+		for _, o := range add {
+			var exists int
+			err := tx.QueryRowContext(ctx, "SELECT 1 FROM quotation_items WHERE quotation_id = ? AND UPPER(option) = ?", quotationID, o.Key()).Scan(&exists)
+			if err == nil {
+				return fmt.Errorf("l'opzione %s c'è già nell'ordine", o.Key())
+			} else if !errors.Is(err, sql.ErrNoRows) {
+				return err
+			}
+			if _, err := tx.ExecContext(ctx, "INSERT INTO quotation_items (quotation_id, option, wine_name, quantity, price) VALUES (?, ?, ?, 0, ?)",
+				quotationID, o.Key(), o.Wine, o.Price); err != nil {
+				return err
+			}
+		}
 		res, err := tx.ExecContext(ctx, "UPDATE replies SET order_override = ? WHERE id = ?", codes, replyID)
 		if err != nil {
 			return err
