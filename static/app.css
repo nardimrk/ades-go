@@ -393,7 +393,9 @@ input.save-error { border-color: var(--danger) !important; box-shadow: 0 0 0 2px
   box-shadow: 0 6px 18px var(--shadow);
 }
 .combo-list li { padding: .55rem .75rem; cursor: pointer; overflow-wrap: anywhere; min-height: 44px; box-sizing: border-box; }
-.combo-list li small { display: block; color: var(--muted); font-size: .8rem; }
+/* the cantina (or other detail) on the same line as the name: "Yjar 2022 · Telmo Rodríguez" */
+.combo-list li small { display: inline; color: var(--muted); font-size: .8rem; margin-left: .35rem; }
+.combo-list li small::before { content: "· "; }
 .combo-list li.active, .combo-list li[data-i]:hover { background: var(--accent-soft); }
 .combo-list li.combo-note { cursor: default; color: var(--muted); font-size: .85rem; min-height: 0; }
 .metrics { display: grid; grid-template-columns: repeat(auto-fit, minmax(150px, 1fr)); gap: 1rem; margin-bottom: 1rem; }
