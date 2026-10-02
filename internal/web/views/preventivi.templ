@@ -237,16 +237,45 @@ templ CustomerSection(qnum string, sec service.CustomerSection, msg, errMsg, cli
 			</table>
 		}
 		if sec.SavedOn == "" {
-			<fieldset class="add-panel">
-				<legend>Aggiungi un vino all'ordine</legend>
+			@addWineModal(sec, errMsg)
+			<div class="section-foot">
+				<button type="button" class="btn" data-modal-show={ sectionID(sec.Utente) + "-vino" }>＋ Aggiungi vino</button>
+				<button type="submit" name="op" value="save" class="btn primary">Conferma ordine</button>
+			</div>
+		}
+	</form>
+}
+
+// addWineModal adds a wine (from Prodotti) to the customer's order. Like
+// clientModal it sits inside the section's form, so the draft rows travel
+// with it; errMsg reopens it with the error.
+templ addWineModal(sec service.CustomerSection, errMsg string) {
+	<dialog
+		id={ sectionID(sec.Utente) + "-vino" }
+		class="modal modal-wine"
+		data-modal-keep
+		if errMsg != "" {
+			data-modal-open
+		}
+		aria-labelledby={ sectionID(sec.Utente) + "-vino-title" }
+	>
+		<div class="modal-form">
+			<div class="modal-head">
+				<div class="modal-title">
+					<h3 id={ sectionID(sec.Utente) + "-vino-title" }>Aggiungi un vino all'ordine</h3>
+					<span class="muted">{ sec.Cliente }</span>
+				</div>
+				<button type="button" class="icon" data-modal-close aria-label="Chiudi">@IconX()</button>
+			</div>
+			<div class="modal-body">
 				if errMsg != "" {
 					@Alert("error", errMsg)
 				}
-				<div class="add-row">
-					<label class="add-wine">
-						Vino (dai Prodotti)
-						<input type="text" name="new_vino" list="prodotti-list" placeholder="Scrivi per cercare tra i Prodotti…" autocomplete="off"/>
-					</label>
+				<label class="add-wine">
+					Vino (dai Prodotti)
+					<input type="text" name="new_vino" list="prodotti-list" placeholder="Scrivi per cercare tra i Prodotti…" autocomplete="off"/>
+				</label>
+				<div class="add-wine-nums">
 					<label>
 						Quantità
 						<input type="number" name="new_qta" min="1" step="1" value="1"/>
@@ -255,12 +284,14 @@ templ CustomerSection(qnum string, sec service.CustomerSection, msg, errMsg, cli
 						Prezzo (€)
 						<input type="number" name="new_prezzo" min="0" step="0.01" placeholder="0,00"/>
 					</label>
-					<button type="submit" name="op" value="add" class="btn">＋ Aggiungi</button>
 				</div>
-			</fieldset>
-			<button type="submit" name="op" value="save" class="btn primary">Conferma ordine</button>
-		}
-	</form>
+			</div>
+			<div class="modal-foot">
+				<button type="button" class="btn" data-modal-close>Annulla</button>
+				<button type="submit" name="op" value="add" class="btn primary">＋ Aggiungi</button>
+			</div>
+		</div>
+	</dialog>
 }
 
 // clientModal changes the section's customer. It sits inside the section's
