@@ -57,6 +57,13 @@ func (s *Server) inserzioni(w http.ResponseWriter, r *http.Request) {
 			s.fail(w, r, err)
 			return
 		}
+		// previous / next inserzione of the list, with the same filters
+		rows, err := s.svc.InserzioniList(r.Context(), d.Search, d.Group)
+		if err != nil {
+			s.fail(w, r, err)
+			return
+		}
+		d.Prev, d.Next = service.CampaignNeighbors(rows, d.SelChat, d.SelKey)
 		render(w, r, views.InserzioneDetail(d))
 		return
 	}

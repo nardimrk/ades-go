@@ -20,6 +20,9 @@ type InserzioniData struct {
 	// "Controlla risposte" (conversation page)
 	Review    *service.CampaignReview
 	ReviewJob service.ReviewStatus
+
+	// the inserzioni before / after the selected one in the list (nil at the ends)
+	Prev, Next *service.CampaignRow
 }
 
 // listQuery keeps the list filters across list ↔ conversation navigation.
@@ -156,6 +159,10 @@ templ InserzioneDetail(d InserzioniData) {
 					Conversazione
 				}
 			</h2>
+			<nav class="prev-next" aria-label="Altre inserzioni">
+				@neighborLink(d, d.Prev, "Inserzione precedente", true)
+				@neighborLink(d, d.Next, "Inserzione successiva", false)
+			</nav>
 		</div>
 		<div id="conv" class="conv">
 			@Conversation(d)
@@ -165,6 +172,28 @@ templ InserzioneDetail(d InserzioniData) {
 }
 
 // Conversation: the listing on the left, the replies on the right.
+// neighborLink opens the previous/next inserzione of the list; disabled at
+// the ends of the list.
+templ neighborLink(d InserzioniData, r *service.CampaignRow, label string, left bool) {
+	if r != nil {
+		<a href={ templ.URL(convURL(d, *r)) } class="btn icon-btn" title={ label + ": " + r.DisplayTitle } aria-label={ label }>
+			if left {
+				@IconChevronLeft()
+			} else {
+				@IconChevronRight()
+			}
+		</a>
+	} else {
+		<button type="button" class="btn icon-btn" disabled aria-label={ label }>
+			if left {
+				@IconChevronLeft()
+			} else {
+				@IconChevronRight()
+			}
+		</button>
+	}
+}
+
 templ Conversation(d InserzioniData) {
 	if d.Selected == nil {
 		@Alert("info", "Inserzione non trovata.")

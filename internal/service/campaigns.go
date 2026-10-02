@@ -240,6 +240,29 @@ func InserzioniMonths(rows []CampaignRow) []InserzioniMonth {
 	return out
 }
 
+// CampaignNeighbors returns the campaigns shown just before and after
+// chat + key in the Inserzioni list (same order as InserzioniMonths); nil
+// at either end or when the campaign is not in rows.
+func CampaignNeighbors(rows []CampaignRow, chatID, key string) (prev, next *CampaignRow) {
+	var sorted []CampaignRow
+	for _, m := range InserzioniMonths(rows) {
+		sorted = append(sorted, m.Rows...)
+	}
+	for i := range sorted {
+		if sorted[i].ChatID != chatID || sorted[i].Key != key {
+			continue
+		}
+		if i > 0 {
+			prev = &sorted[i-1]
+		}
+		if i+1 < len(sorted) {
+			next = &sorted[i+1]
+		}
+		break
+	}
+	return prev, next
+}
+
 // FindCampaign returns the campaign with this chat + key (unfiltered).
 func (s *Service) FindCampaign(ctx context.Context, chatID, key string) (*Campaign, error) {
 	rows, err := s.ListingRows(ctx)
