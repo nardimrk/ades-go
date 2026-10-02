@@ -6,6 +6,8 @@
   --border: #e5e7eb;
   --accent: #8b1e3f;       /* wine */
   --accent-soft: #f6e8ed;
+  --edit-row: #fef9c3;        /* the row being edited (Clienti) */
+  --edit-row-bar: #eab308;
   --wa-dark: #075e54;
   --danger: #dc2626;
   --ok: #15803d;
@@ -51,6 +53,8 @@
   --border-strong: #3b4250;
   --accent: #e0708f;
   --accent-soft: #3a1f2a;
+  --edit-row: #3a3416;
+  --edit-row-bar: #ca8a04;
   --excel: #4caf7d;
   --wa-dark: #25d366;
   --danger: #f87171;
@@ -361,6 +365,9 @@ details.card > summary { cursor: pointer; margin-bottom: .5rem; }
 /* the row being edited stands out (accent tint + bar on the left) */
 .table.autosave tbody tr:focus-within > td { background: var(--accent-soft); }
 .table.autosave tbody tr:focus-within > td:first-child { box-shadow: inset 3px 0 0 var(--accent); }
+/* Clienti: the row being edited is yellow */
+.table.clienti tbody tr:focus-within > td { background: var(--edit-row); }
+.table.clienti tbody tr:focus-within > td:first-child { box-shadow: inset 3px 0 0 var(--edit-row-bar); }
 input.saving { opacity: .6; }
 input.save-error { border-color: var(--danger) !important; box-shadow: 0 0 0 2px var(--danger-border); }
 .add-row { display: grid; grid-template-columns: minmax(0, 4fr) minmax(0, 1fr) minmax(0, 1.5fr) auto; gap: .5rem; align-items: end; }
@@ -796,6 +803,7 @@ img { max-width: 100%; height: auto; }
   .table.autosave input:focus { background: var(--panel); }
   .table.autosave tbody tr:focus-within { background: var(--accent-soft); border-color: var(--accent); }
   .table.autosave tbody tr:focus-within > td, .table.autosave tbody tr:focus-within > td:first-child { background: transparent; box-shadow: none; }
+  .table.clienti tbody tr:focus-within { background: var(--edit-row); border-color: var(--edit-row-bar); }
 }
 
 /* Floating sections button, bottom-right on every screen size. Tapping it
