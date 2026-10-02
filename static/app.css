@@ -395,6 +395,9 @@ details > summary { cursor: pointer; user-select: none; }
 .filters { display: flex; gap: .5rem; margin-bottom: .25rem; flex-wrap: wrap; }
 .filters input[type=search] { flex: 1 1 240px; }
 .filters select { width: auto; min-width: 220px; margin-bottom: .75rem; }
+/* search and select share one height: the search field's */
+.filters input[type=search], .filters select { box-sizing: border-box; height: var(--ctl-h); padding-top: 0; padding-bottom: 0; }
+@media (pointer: coarse) { .filters input[type=search], .filters select { height: 44px; } }
 .nowrap { white-space: nowrap; }
 /* small text badges (used instead of emoji for states) */
 .badge { display: inline-block; padding: .05rem .5rem; border-radius: 999px; font-size: .78rem; font-weight: 600; white-space: nowrap; border: 1px solid; }
@@ -547,6 +550,8 @@ body:has(dialog.modal[open]) { overflow: hidden; }
 }
 .dl-item:hover { border-color: var(--border-strong); }
 .dl-item.dl-empty { opacity: .65; }
+/* Inserzioni: a campaign that received at least one order */
+.dl-item.dl-ordered { box-shadow: inset -3px 0 0 var(--ok); }
 a.dl-item { text-decoration: none; }
 a.dl-item:hover { border-color: var(--accent); }
 a.dl-item:hover .dl-title { color: var(--accent); }
@@ -567,6 +572,7 @@ a.dl-item:hover .dl-title { color: var(--accent); }
   content: ""; position: absolute; left: -8px; top: .3rem; width: 14px; height: 14px; border-radius: 50%;
   background: var(--accent); box-shadow: 0 0 0 3px var(--bg);
 }
+.dl-stats:empty { display: none; }
 .view-timeline .month-items { display: flex; flex-direction: column; gap: .4rem; }
 /* cards: a responsive grid */
 .view-cards .month-items { display: grid; grid-template-columns: repeat(auto-fill, minmax(min(240px, 100%), 1fr)); gap: .75rem; }

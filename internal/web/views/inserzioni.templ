@@ -102,7 +102,7 @@ templ InserzioniList(d InserzioniData) {
 	if len(d.Rows) == 0 {
 		@Alert("info", "Nessuna inserzione.")
 	} else {
-		<p class="muted">{ itoa(len(d.Rows)) } campagne · clicca su un'inserzione per aprire la conversazione</p>
+		<p class="muted">Clicca su un'inserzione per aprire la conversazione.</p>
 		<div class="view-timeline timeline">
 			for _, m := range service.InserzioniMonths(d.Rows) {
 				<section class="month">
@@ -114,7 +114,7 @@ templ InserzioniList(d InserzioniData) {
 					</header>
 					<div class="month-items">
 						for _, r := range m.Rows {
-							<a class={ "dl-item", "dl-link", templ.KV("dl-empty", r.Risposte == 0) } href={ templ.URL(convURL(d, r)) }>
+							<a class={ "dl-item", "dl-link", templ.KV("dl-empty", r.Risposte == 0), templ.KV("dl-ordered", r.HasOrders) } href={ templ.URL(convURL(d, r)) }>
 								<span class="dl-day">{ dayMonthShort(r.Data) }</span>
 								<span class="dl-main">
 									<b class="dl-title">{ r.DisplayTitle }</b>
@@ -126,12 +126,11 @@ templ InserzioniList(d InserzioniData) {
 									</span>
 								</span>
 								<span class="dl-stats">
-									<span>{ plural(r.Risposte, "risposta", "risposte") }</span>
+									if r.HasOrders {
+										<span class="sr-only">con ordini ricevuti</span>
+									}
 									if r.Orphan {
 										<span class="badge badge-warn">non monitorato</span>
-									}
-									if len(r.QuotationIDs) > 0 {
-										<span class="badge badge-ok">Ordine</span>
 									}
 									if r.Consegna != "" {
 										<span class="badge badge-info">Consegna { dayMonthShort(r.Consegna) }</span>

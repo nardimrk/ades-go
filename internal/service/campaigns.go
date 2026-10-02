@@ -159,8 +159,9 @@ func containsID(ids []int64, id int64) bool {
 // CampaignRow is a campaign with its group name, for the Inserzioni table.
 type CampaignRow struct {
 	Campaign
-	ChatName string
-	Orphan   bool // chat not in CHANNEL_ID
+	ChatName  string
+	Orphan    bool // chat not in CHANNEL_ID
+	HasOrders bool // at least one reply was read as an order
 }
 
 // InserzioniList returns every campaign (most recently active first),
@@ -171,6 +172,14 @@ func (s *Service) InserzioniList(ctx context.Context, search, chatID string) ([]
 		return nil, err
 	}
 	rows = FilterRows(rows, search)
+	sel, err := s.ComputeSelections(ctx)
+	if err != nil {
+		return nil, err
+	}
+	ordered := map[int64]bool{} // quotations with at least one selection
+	for _, x := range sel {
+		ordered[x.QuotationID] = true
+	}
 	names := s.GroupNames(ctx)
 	known := map[string]bool{}
 	for _, id := range s.Cfg.ChannelIDs {
@@ -185,7 +194,11 @@ func (s *Service) InserzioniList(ctx context.Context, search, chatID string) ([]
 		if name == "" {
 			name = c.ChatID
 		}
-		out = append(out, CampaignRow{Campaign: c, ChatName: name, Orphan: !known[c.ChatID]})
+		row := CampaignRow{Campaign: c, ChatName: name, Orphan: !known[c.ChatID]}
+		for _, id := range c.QuotationIDs {
+			row.HasOrders = row.HasOrders || ordered[id]
+		}
+		out = append(out, row)
 	}
 	return out, nil
 }
