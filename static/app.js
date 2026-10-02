@@ -524,4 +524,66 @@
     if (input) input.focus();
     if (max && n + 1 >= max) btn.disabled = true;
   });
+
+  // Notifications bell: a click opens the frosted preview and fires
+  // "notif-open" (htmx loads the unseen orders and the server marks them seen,
+  // resetting the badge out-of-band). Outside click or Esc closes it.
+  function notifParts() {
+    return { btn: document.querySelector("[data-notif-btn]"), panel: document.getElementById("notif-panel") };
+  }
+  function closeNotif(focus) {
+    var n = notifParts();
+    if (!n.panel || n.panel.hidden) return;
+    n.panel.hidden = true;
+    n.btn.setAttribute("aria-expanded", "false");
+    if (focus) n.btn.focus();
+  }
+  function openNotif() {
+    var n = notifParts();
+    // phones/tablets: the menu is a top bar, the panel drops down under it
+    if (window.matchMedia("(max-width: 900px)").matches) {
+      var bar = n.btn.closest(".sidebar") || n.btn;
+      n.panel.style.setProperty("--notif-top", Math.round(bar.getBoundingClientRect().bottom + 8) + "px");
+    }
+    n.panel.innerHTML = '<p class="notif-loading muted">Caricamento…</p>';
+    n.panel.hidden = false;
+    n.panel.classList.remove("in");
+    void n.panel.offsetWidth; // restart the entrance animation
+    n.panel.classList.add("in");
+    n.btn.setAttribute("aria-expanded", "true");
+    htmx.trigger(n.btn, "notif-open");
+  }
+  document.addEventListener("click", function (e) {
+    var n = notifParts();
+    if (!n.panel) return;
+    if (e.target.closest("[data-notif-btn]")) {
+      if (n.panel.hidden) openNotif(); else closeNotif(false);
+      return;
+    }
+    if (!n.panel.hidden && !e.target.closest("#notif-panel")) closeNotif(false);
+  });
+  document.addEventListener("keydown", function (e) {
+    if (e.key === "Escape") closeNotif(true);
+  });
+  // badge: pops in when the number grows; the bell rings when orders arrive
+  // while the page is open
+  var notifLast = -1;
+  document.addEventListener("htmx:load", function (e) {
+    var b = e.target;
+    if (!b || b.id !== "notif-count") return;
+    if ((b.getAttribute("hx-trigger") || "").indexOf("load") === 0) return; // placeholder of a new page
+    var c = parseInt(b.dataset.count || "0", 10);
+    if (c > 0 && c > notifLast) {
+      b.classList.add("pop");
+      var btn = b.closest("[data-notif-btn]");
+      if (btn && notifLast >= 0) {
+        btn.classList.remove("ring");
+        void btn.offsetWidth;
+        btn.classList.add("ring");
+      }
+    }
+    var btn2 = b.closest("[data-notif-btn]");
+    if (btn2) btn2.setAttribute("aria-label", c > 0 ? "Nuovi ordini: " + c : "Nuovi ordini");
+    notifLast = c;
+  });
 })();

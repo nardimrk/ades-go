@@ -815,7 +815,7 @@ func AddReplyForm(d InserzioniData) templ.Component {
 		if templ_7745c5c3_Err != nil {
 			return templ_7745c5c3_Err
 		}
-		templ_7745c5c3_Err = templruntime.WriteString(templ_7745c5c3_Buffer, 63, "\"><fieldset class=\"add-panel stack\"><legend>Risposta non arrivata da WhatsApp</legend><div class=\"add-reply-row\"><label>Cliente <input type=\"text\" name=\"cliente\" list=\"reply-clients\" placeholder=\"Scrivi per cercare un cliente...\" autocomplete=\"off\" required></label> <label>Data e ora <input type=\"datetime-local\" name=\"ora\" value=\"")
+		templ_7745c5c3_Err = templruntime.WriteString(templ_7745c5c3_Buffer, 63, "\"><fieldset class=\"add-panel stack\"><legend>Richiesta su altra chat WhatsApp</legend><div class=\"add-reply-row\"><label>Cliente <input type=\"text\" name=\"cliente\" list=\"reply-clients\" placeholder=\"Scrivi per cercare un cliente...\" autocomplete=\"off\" required></label> <label>Data e ora <input type=\"datetime-local\" name=\"ora\" value=\"")
 		if templ_7745c5c3_Err != nil {
 			return templ_7745c5c3_Err
 		}

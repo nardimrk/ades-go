@@ -101,6 +101,9 @@ func (s *Server) Handler(static fs.FS) http.Handler {
 	mux.HandleFunc("POST /whatsapp/logout", s.whatsappLogout)
 	mux.HandleFunc("POST /whatsapp/history", s.whatsappHistory)
 
+	mux.HandleFunc("GET /notifiche/count", s.notificheCount)
+	mux.HandleFunc("POST /notifiche/open", s.notificheOpen)
+
 	return s.recoverer(s.logRequests(s.requireAuth(mux)))
 }
 
@@ -154,7 +157,7 @@ func (s *Server) logRequests(next http.Handler) http.Handler {
 		start := time.Now()
 		rec := &statusRecorder{ResponseWriter: w, status: 200}
 		next.ServeHTTP(rec, r)
-		if !strings.HasPrefix(r.URL.Path, "/static/") && r.URL.Path != "/whatsapp/status" {
+		if !strings.HasPrefix(r.URL.Path, "/static/") && r.URL.Path != "/whatsapp/status" && r.URL.Path != "/notifiche/count" {
 			log.Printf("[web] %s %s %d %s", r.Method, r.URL.Path, rec.status, time.Since(start).Round(time.Millisecond))
 		}
 	})

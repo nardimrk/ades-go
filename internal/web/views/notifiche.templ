@@ -1,0 +1,157 @@
+package views
+
+import (
+	"adesgo/internal/service"
+	"strconv"
+	"strings"
+	"time"
+	"unicode"
+)
+
+// badgeText caps the bell's number like iOS does.
+func badgeText(n int) string {
+	if n > 99 {
+		return "99+"
+	}
+	return strconv.Itoa(n)
+}
+
+// initials: up to two letters of the customer's name, for the avatar.
+func initials(name string) string {
+	var out []rune
+	for _, w := range strings.Fields(noEmoji(name)) {
+		for _, r := range w {
+			if unicode.IsLetter(r) || unicode.IsDigit(r) {
+				out = append(out, unicode.ToUpper(r))
+				break
+			}
+		}
+		if len(out) == 2 {
+			break
+		}
+	}
+	if len(out) == 0 {
+		return "?"
+	}
+	return string(out)
+}
+
+func noticeURL(o service.OrderNotice) templ.SafeURL {
+	return templ.URL(previewURL(o.Preventivo) + "#" + sectionID(o.Utente))
+}
+
+func noticeLines(o service.OrderNotice) string {
+	parts := make([]string, 0, len(o.Items))
+	for _, it := range o.Items {
+		name := noEmoji(it.Vino)
+		// two options of one wine differ by vintage: show it
+		if y := strconv.Itoa(it.Vintage); it.Vintage != 0 && !strings.Contains(name, y) {
+			name += " " + y
+		}
+		parts = append(parts, strconv.Itoa(it.Qta)+" × "+name)
+	}
+	return strings.Join(parts, ", ")
+}
+
+func ordersLabel(n int) string {
+	if n == 1 {
+		return "1 nuovo ordine"
+	}
+	return strconv.Itoa(n) + " nuovi ordini"
+}
+
+// notifCountAttrs: the badge refreshes itself every minute while the tab is
+// visible; the copy in the page layout also asks right after loading.
+func notifCountAttrs(first, oob bool) templ.Attributes {
+	trigger := "every 60s [!document.hidden]"
+	if first {
+		trigger = "load, " + trigger
+	}
+	a := templ.Attributes{
+		"hx-get": "/notifiche/count", "hx-trigger": trigger,
+		"hx-target": "this", "hx-swap": "outerHTML",
+	}
+	for k, v := range oobAttrs(oob) {
+		a[k] = v
+	}
+	return a
+}
+
+// NotifCount is the red badge on the bell (empty and hidden at zero).
+templ NotifCount(n int, oob bool) {
+	@notifCount(n, false, oob)
+}
+
+templ notifCount(n int, first, oob bool) {
+	<span id="notif-count" class="notif-badge" data-count={ strconv.Itoa(n) } { notifCountAttrs(first, oob)... }>
+		if n > 0 {
+			<span aria-hidden="true">{ badgeText(n) }</span>
+			<span class="sr-only">{ ordersLabel(n) }</span>
+		}
+	</span>
+}
+
+// NotifBell sits in the menu next to the theme switch. app.js opens the
+// panel and fires "notif-open", which loads the preview into it.
+templ NotifBell() {
+	<div class="notif">
+		<button
+			type="button"
+			class="notif-btn"
+			data-notif-btn
+			aria-label="Nuovi ordini"
+			aria-haspopup="dialog"
+			aria-expanded="false"
+			aria-controls="notif-panel"
+			hx-post="/notifiche/open"
+			hx-trigger="notif-open"
+			hx-target="#notif-panel"
+			hx-swap="innerHTML"
+		>
+			@IconBell()
+			@notifCount(0, true, false)
+		</button>
+		<div id="notif-panel" class="notif-panel" role="dialog" aria-label="Nuovi ordini" hidden></div>
+	</div>
+}
+
+// NotifPanel: the preview of the orders not seen yet. Opening it marks them
+// as seen, so the badge is reset out-of-band.
+templ NotifPanel(n service.OrderNotices, now time.Time) {
+	@NotifCount(0, true)
+	<div class="notif-head">
+		<h3>Notifiche</h3>
+		if n.Count > 0 {
+			<span class="notif-sum">{ ordersLabel(n.Count) }</span>
+		}
+	</div>
+	if n.Count == 0 {
+		<div class="notif-empty">
+			<span class="notif-empty-icon">@IconBell()</span>
+			<b>Nessun nuovo ordine</b>
+			<span>Gli ordini ricevuti dai clienti appariranno qui.</span>
+		</div>
+	} else {
+		<ul class="notif-list">
+			for _, o := range n.Items {
+				<li>
+					<a class="notif-item" href={ noticeURL(o) }>
+						<span class="notif-avatar" aria-hidden="true">{ initials(o.Utente) }</span>
+						<span class="notif-body">
+							<span class="notif-top">
+								<b class="notif-name">{ noEmoji(o.Utente) }</b>
+								<time class="notif-time" datetime={ time.Unix(o.TS, 0).Format(time.RFC3339) }>{ service.RelTime(o.TS, now) }</time>
+							</span>
+							<span class="notif-sub">{ o.Preventivo } · € { money(o.Total()) }</span>
+							<span class="notif-lines">{ noticeLines(o) }</span>
+						</span>
+					</a>
+				</li>
+			}
+		</ul>
+		if n.Count > len(n.Items) {
+			<p class="notif-more">e altri { strconv.Itoa(n.Count - len(n.Items)) } ordini</p>
+		}
+	}
+	<a class="notif-foot" href="/ordini">Vedi tutti gli ordini</a>
+}

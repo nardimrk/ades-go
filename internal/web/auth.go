@@ -32,6 +32,17 @@ func (s *Server) validToken(ctx context.Context, token string) bool {
 	return err == nil
 }
 
+// userEmail is the login email of the request's session ("" if unknown).
+func (s *Server) userEmail(r *http.Request) string {
+	c, err := r.Cookie(cookieName)
+	if err != nil {
+		return ""
+	}
+	var email string
+	_ = s.store.DB.QueryRowContext(r.Context(), "SELECT email FROM auth_tokens WHERE token = ?", c.Value).Scan(&email)
+	return email
+}
+
 func (s *Server) setAuthCookie(w http.ResponseWriter, token string) {
 	http.SetCookie(w, &http.Cookie{
 		Name: cookieName, Value: token, Path: "/",

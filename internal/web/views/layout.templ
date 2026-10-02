@@ -66,6 +66,7 @@ templ Layout(title, active string) {
 					<form method="post" action="/logout" class="logout">
 						<button type="submit" class="link">Esci</button>
 					</form>
+					@NotifBell()
 					<button type="button" class="theme-toggle" data-theme-toggle title="Tema chiaro / scuro" aria-label="Cambia tema chiaro / scuro">
 						<span class="sun">@IconSun()</span>
 						<span class="moon">@IconMoon()</span>
