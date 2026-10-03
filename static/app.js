@@ -540,6 +540,48 @@
     if (sub) { e.preventDefault(); sub.click(); }
   });
 
+  // Floating button in the screen's corner. Mobile browsers (iOS Safari and
+  // Firefox, with their bottom bar) can end the area that "bottom: 0" refers
+  // to above the bottom of what is visible: a fixed probe measures that gap
+  // and --fab-lift lowers the button by it (0 where they match: desktop,
+  // Android). ?fabdebug=1 shows the numbers.
+  var fabProbe = null;
+  function placeFab() {
+    var fab = document.querySelector("[data-fab]");
+    if (!fab) return;
+    if (!fabProbe) {
+      fabProbe = document.createElement("div");
+      fabProbe.setAttribute("aria-hidden", "true");
+      fabProbe.style.cssText = "position:fixed;left:0;bottom:0;width:1px;height:1px;pointer-events:none;visibility:hidden";
+      document.body.appendChild(fabProbe);
+    }
+    var vv = window.visualViewport;
+    var visibleBottom = vv ? vv.offsetTop + vv.height : window.innerHeight;
+    var fixedBottom = fabProbe.getBoundingClientRect().bottom;
+    var gap = Math.max(0, Math.round(visibleBottom - fixedBottom));
+    if (gap > 120) gap = 0; // not a toolbar strip (e.g. the keyboard is open)
+    document.documentElement.style.setProperty("--fab-lift", gap + "px");
+    if (/[?&]fabdebug=1/.test(location.search)) {
+      var d = document.getElementById("fab-debug");
+      if (!d) {
+        d = document.createElement("div");
+        d.id = "fab-debug";
+        d.style.cssText = "position:fixed;top:0;left:0;z-index:99;background:#ff0;color:#000;font:12px monospace;padding:2px 4px";
+        document.body.appendChild(d);
+      }
+      d.textContent = "inner " + window.innerHeight + " vv " + (vv ? Math.round(vv.offsetTop) + "+" + Math.round(vv.height) : "-") +
+        " fixedBottom " + Math.round(fixedBottom) + " lift " + gap + " safe " + getComputedStyle(fab).getPropertyValue("--fab-safe");
+    }
+  }
+  placeFab();
+  window.addEventListener("resize", placeFab);
+  window.addEventListener("scroll", placeFab, { passive: true });
+  if (window.visualViewport) {
+    window.visualViewport.addEventListener("resize", placeFab);
+    window.visualViewport.addEventListener("scroll", placeFab);
+  }
+  document.addEventListener("htmx:afterSettle", placeFab);
+
   // Floating sections button (phones/tablets): fans out the main sections.
   function setFab(fab, open) {
     fab.classList.toggle("open", open);
