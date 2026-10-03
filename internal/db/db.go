@@ -190,6 +190,9 @@ var addColumns = []string{
 	// the customer's phone ("+393492869246"): filled from WhatsApp when
 	// empty (see FillPhones), editable in Clienti
 	"ALTER TABLE users ADD COLUMN telefono TEXT",
+	// the listing as first posted: edits overwrite body, this keeps the
+	// original quantities (the availability the order page compares with)
+	"ALTER TABLE listings ADD COLUMN original_body TEXT",
 }
 
 func (s *Store) migrate(ctx context.Context) error {
@@ -213,6 +216,11 @@ func (s *Store) migrate(ctx context.Context) error {
 	if _, err := s.DB.ExecContext(ctx, `
 		UPDATE listings SET quotation_id = NULL
 		WHERE quotation_id IS NOT NULL AND quotation_id NOT IN (SELECT id FROM quotations)`); err != nil {
+		return err
+	}
+	// listings stored before original_body existed: their current text is
+	// the best original there is (earlier edits are lost)
+	if _, err := s.DB.ExecContext(ctx, "UPDATE listings SET original_body = body WHERE original_body IS NULL"); err != nil {
 		return err
 	}
 	if err := s.ensureDedupIndexes(ctx); err != nil {

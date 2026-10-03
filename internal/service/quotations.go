@@ -796,11 +796,11 @@ func (c CustomerSection) Total() float64 {
 }
 
 type QuotationDetail struct {
-	Quotation  Quotation
-	Date       string
-	Sections   []CustomerSection
-	Single     bool
-	Overbooked []StockWarning // options ordered beyond what the listing offers
+	Quotation Quotation
+	Date      string
+	Sections  []CustomerSection
+	Single    bool
+	Stock     []OptionStock // per option: ordered, still available
 	// set by the page: the neighbours in the Ordini list and the listing
 	Prev, Next   *QuotationSummary
 	ListingURL   string // "" = manual order (no listing)
@@ -861,39 +861,45 @@ func (s *Service) QuotationListing(ctx context.Context, quotationID int64) (*Cam
 	return nil, nil
 }
 
-// StockWarning: an option of the listing ordered beyond its availability.
-type StockWarning struct {
-	Letter    string
-	Wine      string
-	Available int    // bottles offered by the latest post that gives a count
-	Ordered   int    // bottles ordered after that post
-	Since     string // that post's time, "02/10/2026 12:02"
+// OptionStock is one wine option of the order: the bottles ordered and,
+// when the listing gives a count, how many are left of it.
+type OptionStock struct {
+	Letter   string
+	Wine     string
+	Ordered  int  // bottles ordered by everyone, at any time (cases count their bottles)
+	HasCount bool // the listing states how many bottles it offers
+	Offered  int  // the count in the listing as first posted
 }
 
-// Excess is how many bottles are missing.
-func (w StockWarning) Excess() int { return w.Ordered - w.Available }
+// Remaining is what is left: offered minus ordered (negative = ordered
+// beyond availability).
+func (o OptionStock) Remaining() int { return o.Offered - o.Ordered }
 
-// overbooked compares, for each option, the bottles ordered with the
-// availability of the listing. The seller reposts "Disponibili: 26 x …"
-// after each round of orders, so every post already counts the orders
-// before it: only the orders after the latest post that gives a count for
-// the option are measured against that count. Cases count their bottles.
-func (s *Service) overbooked(ctx context.Context, quotationID int64, qsel []Selection) ([]StockWarning, error) {
-	rows, err := s.db().QueryContext(ctx, "SELECT COALESCE(body,''), COALESCE(timestamp,0) FROM listings WHERE quotation_id = ? ORDER BY timestamp DESC, id DESC", quotationID)
+// Excess is how many bottles were ordered beyond availability (0 if none).
+func (o OptionStock) Excess() int {
+	if !o.HasCount || o.Remaining() >= 0 {
+		return 0
+	}
+	return -o.Remaining()
+}
+
+// optionStock sums, for each option, every bottle ordered (no matter when)
+// and compares it with the quantity of the listing as first posted: later
+// edits and reposts of the listing are ignored.
+func (s *Service) optionStock(ctx context.Context, quotationID int64, qsel []Selection) ([]OptionStock, error) {
+	rows, err := s.db().QueryContext(ctx, `SELECT COALESCE(original_body, body, '') FROM listings
+		WHERE quotation_id = ? ORDER BY created_at, id`, quotationID)
 	if err != nil {
 		return nil, err
 	}
 	type stock struct {
 		wine  string
 		count int
-		ts    int64
 	}
-	latest := map[string]stock{}
-	var letters []string
+	first := map[string]stock{}
 	for rows.Next() {
 		var body string
-		var ts int64
-		if err := rows.Scan(&body, &ts); err != nil {
+		if err := rows.Scan(&body); err != nil {
 			rows.Close()
 			return nil, err
 		}
@@ -905,66 +911,60 @@ func (s *Service) overbooked(ctx context.Context, quotationID int64, qsel []Sele
 			if o.Case || o.Quantity <= 0 {
 				continue
 			}
-			if _, seen := latest[o.Letter]; !seen {
-				latest[o.Letter] = stock{o.WineName, o.Quantity, ts}
-				letters = append(letters, o.Letter)
+			if _, seen := first[o.Letter]; !seen {
+				first[o.Letter] = stock{o.WineName, o.Quantity}
 			}
 		}
 	}
 	rows.Close()
-	if err := rows.Err(); err != nil || len(latest) == 0 {
+	if err := rows.Err(); err != nil {
 		return nil, err
 	}
-	// when each reply was sent
-	var ids []any
-	for _, x := range qsel {
-		if x.ReplyID != 0 {
-			ids = append(ids, x.ReplyID)
-		}
+	if len(first) == 0 {
+		return nil, nil // no listing count to compare with (e.g. a manual order)
 	}
-	sent := map[int64]int64{}
-	if len(ids) > 0 {
-		ph := strings.TrimSuffix(strings.Repeat("?,", len(ids)), ",")
-		r, err := s.db().QueryContext(ctx, "SELECT id, COALESCE(timestamp,0) FROM replies WHERE id IN ("+ph+")", ids...)
-		if err != nil {
-			return nil, err
-		}
-		for r.Next() {
-			var id, ts int64
-			if r.Scan(&id, &ts) == nil {
-				sent[id] = ts
-			}
-		}
-		r.Close()
+	// the options of the order, named as in the order
+	names := map[string]string{}
+	letters := map[string]bool{}
+	items, err := s.quotationItems(ctx, "WHERE quotation_id = ?", quotationID)
+	if err != nil {
+		return nil, err
 	}
-	ordered := map[string]int{}
-	for _, x := range qsel {
-		letter, _ := strings.CutSuffix(x.Opzione, textutil.CaseSuffix)
-		st, ok := latest[letter]
-		if !ok || x.Qta <= 0 || x.ReplyID == 0 || sent[x.ReplyID] <= st.ts {
+	for _, it := range items {
+		letter, _ := strings.CutSuffix(strings.ToUpper(it.Option), textutil.CaseSuffix)
+		if len(letter) != 1 {
 			continue
 		}
-		ordered[letter] += x.Bottles()
-	}
-	// the wine as named in the order (the listing line may carry extra text)
-	names := map[string]string{}
-	if items, err := s.quotationItems(ctx, "WHERE quotation_id = ?", quotationID); err == nil {
-		for _, it := range items {
-			if o := strings.ToUpper(it.Option); len(o) == 1 {
-				names[o] = wineWithVintage(it.WineName, it.Vintage)
-			}
+		letters[letter] = true
+		if o := strings.ToUpper(it.Option); len(o) == 1 {
+			names[letter] = wineWithVintage(it.WineName, it.Vintage)
 		}
 	}
-	sort.Strings(letters)
-	var out []StockWarning
-	for _, l := range letters {
-		if st := latest[l]; ordered[l] > st.count {
-			wine := names[l]
-			if wine == "" {
-				wine = st.wine
-			}
-			out = append(out, StockWarning{Letter: l, Wine: wine, Available: st.count, Ordered: ordered[l], Since: FmtTS(st.ts)})
+	for l := range first {
+		letters[l] = true
+	}
+	total := map[string]int{}
+	for _, x := range qsel {
+		if x.Qta > 0 {
+			letter, _ := strings.CutSuffix(x.Opzione, textutil.CaseSuffix)
+			total[letter] += x.Bottles()
 		}
+	}
+	keys := make([]string, 0, len(letters))
+	for l := range letters {
+		keys = append(keys, l)
+	}
+	sort.Strings(keys)
+	var out []OptionStock
+	for _, l := range keys {
+		o := OptionStock{Letter: l, Wine: names[l], Ordered: total[l]}
+		if st, ok := first[l]; ok {
+			o.HasCount, o.Offered = true, st.count
+			if o.Wine == "" {
+				o.Wine = st.wine
+			}
+		}
+		out = append(out, o)
 	}
 	return out, nil
 }
@@ -1057,7 +1057,7 @@ func (s *Service) QuotationDetail(ctx context.Context, num string) (*QuotationDe
 
 	// The manual client override is a single field on the quotation, so it
 	// only stands in as default when there is exactly one customer section.
-	if d.Overbooked, err = s.overbooked(ctx, q.ID, qsel); err != nil {
+	if d.Stock, err = s.optionStock(ctx, q.ID, qsel); err != nil {
 		return nil, err
 	}
 	d.Single = len(order) == 1

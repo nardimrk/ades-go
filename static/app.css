@@ -947,9 +947,21 @@ body:has(.sel-bar:not(:empty)) .fab-menu { bottom: calc(max(.75rem, env(safe-are
 .dl-meta > span { white-space: nowrap; }
 .dl-meta > span::before { content: "·"; margin: 0 .55rem; }
 
-/* order page: options ordered beyond the listing's availability */
-.stock-warning { display: flex; flex-direction: column; gap: .35rem; margin-bottom: .75rem; }
-.stock-warning ul { margin: 0; padding-left: 1.2rem; }
+/* order page: per option, bottles ordered and still available */
+.stock-summary { margin-bottom: .75rem; padding: .55rem .8rem; background: var(--panel); border: 1px solid var(--danger); border-radius: var(--radius); }
+.stock-summary ul { list-style: none; margin: 0; padding: 0; display: flex; flex-direction: column; gap: .3rem; }
+.stock-summary li { display: flex; flex-wrap: wrap; align-items: baseline; gap: .15rem .6rem; font-size: .9rem; }
+.stock-opt { font-weight: 700; color: var(--accent); }
+.stock-wine { font-weight: 600; min-width: 0; overflow-wrap: anywhere; }
+.stock-nums { display: flex; flex-wrap: wrap; align-items: baseline; gap: .1rem .75rem; margin-left: auto; white-space: nowrap; }
+.stock-summary li.over .stock-nums b { color: var(--danger); }
+.stock-alert { display: block; margin-bottom: .35rem; color: var(--danger); font-size: .9rem; }
+/* phones: compact, so the counts and "su N dal …" fit one line (only a
+   longer line, e.g. with "14 in più", wraps; it never overflows the box) */
+@media (max-width: 720px) {
+  .stock-summary li { font-size: .8rem; }
+  .stock-nums { gap: .1rem .45rem; margin-left: 0; }
+}
 
 /* iOS Safari gives date / date-time fields a fixed minimum width (they spill
    out of narrow forms, e.g. "Data e ora" in Aggiungi risposta) and centres

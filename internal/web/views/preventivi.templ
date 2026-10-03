@@ -150,7 +150,7 @@ templ PreventivoDetail(d *service.QuotationDetail, catalog []service.CatalogEntr
 		}
 		@ProdottiDatalist(catalog)
 		@ClientiDatalist(d.Sections)
-		@StockWarnings(d.Overbooked)
+		@StockSummary(d.Stock)
 		if len(d.Sections) > 1 {
 			<div class="filters sections-filter">
 				<input type="search" placeholder="Filtra per cliente, città o provincia" data-filter=".cust-section" aria-label="Filtra per cliente, città o provincia"/>
@@ -198,19 +198,46 @@ templ orderNeighborLink(q *service.QuotationSummary, label string, left bool) {
 	}
 }
 
-// StockWarnings: options ordered beyond the bottles the listing offers.
-templ StockWarnings(ws []service.StockWarning) {
-	if len(ws) > 0 {
-		<div class="alert alert-warning stock-warning" role="alert">
-			<b>Attenzione: sono state ordinate più bottiglie di quelle disponibili.</b>
+// stockOver reports an option ordered beyond its availability.
+func stockOver(stock []service.OptionStock) bool {
+	for _, o := range stock {
+		if o.Excess() > 0 {
+			return true
+		}
+	}
+	return false
+}
+
+// StockSummary: for each wine option, the bottles ordered and how many are
+// still available (red when ordered beyond availability).
+templ StockSummary(stock []service.OptionStock) {
+	if len(stock) > 0 {
+		<section class={ "stock-summary", templ.KV("stock-over", stockOver(stock)) } aria-label="Ordinato e disponibile">
+			if stockOver(stock) {
+				<b class="stock-alert">Attenzione: alcune opzioni sono state ordinate oltre la disponibilità.</b>
+			}
 			<ul>
-				for _, w := range ws {
-					<li>
-						Opzione <b>{ w.Letter }</b> · { noEmoji(w.Wine) }: { plural(w.Ordered, "bottiglia ordinata", "bottiglie ordinate") } dopo l'ultima disponibilità del { w.Since } ({ itoa(w.Available) } disponibili), <b>{ itoa(w.Excess()) } in più</b>.
+				for _, o := range stock {
+					<li class={ templ.KV("over", o.Excess() > 0) }>
+						<span class="stock-opt">{ o.Letter }</span>
+						<span class="stock-wine">{ noEmoji(o.Wine) }</span>
+						<span class="stock-nums">
+							<span>ordinate <b>{ itoa(o.Ordered) }</b></span>
+							if o.HasCount {
+								<span>disponibili <b>{ itoa(o.Offered) }</b></span>
+								if o.Excess() > 0 {
+									<span>restano <b>0</b> · <b>{ itoa(o.Excess()) } in più</b></span>
+								} else {
+									<span>restano <b>{ itoa(o.Remaining()) }</b></span>
+								}
+							} else {
+								<span class="muted">disponibilità non indicata</span>
+							}
+						</span>
 					</li>
 				}
 			</ul>
-		</div>
+		</section>
 	}
 }
 

@@ -479,9 +479,9 @@ func TestFillPhones(t *testing.T) {
 	}
 }
 
-// Orders after the latest post beyond its count are flagged; orders before
-// it are already counted by the seller's repost.
-func TestOverbooked(t *testing.T) {
+// Per option: everything ordered (no matter when) against the quantity of
+// the listing as first posted.
+func TestOptionStock(t *testing.T) {
 	ctx := context.Background()
 	store, err := db.Open(filepath.Join(t.TempDir(), "wine.db"))
 	if err != nil {
@@ -510,7 +510,22 @@ func TestOverbooked(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	if len(d.Overbooked) != 1 || d.Overbooked[0].Letter != "A" || d.Overbooked[0].Ordered != 4 || d.Overbooked[0].Available != 3 {
-		t.Fatalf("overbooked = %+v", d.Overbooked)
+	// every reply counts, whenever it was sent: A 9 ordered of 3 offered → 6
+	// too many; B 1 of 6. An edit of the listing doesn't change the offer.
+	if len(d.Stock) != 2 {
+		t.Fatalf("stock = %+v", d.Stock)
+	}
+	a, b := d.Stock[0], d.Stock[1]
+	if a.Letter != "A" || a.Ordered != 9 || a.Offered != 3 || a.Excess() != 6 {
+		t.Fatalf("A = %+v", a)
+	}
+	if b.Letter != "B" || b.Ordered != 1 || b.Remaining() != 5 || b.Excess() != 0 {
+		t.Fatalf("B = %+v", b)
+	}
+	if err := store.UpdateListing(ctx, "L1", db.Listing{Body: "Barolo\nA. 1x Barolo 2019 a 40€\nB. 6x Barbaresco 2018 a 30€", Timestamp: 2000}); err != nil {
+		t.Fatal(err)
+	}
+	if d, _ = svc.QuotationDetail(ctx, sums[0].Number); d.Stock[0].Offered != 3 {
+		t.Fatalf("after an edit, offered = %d; want the original 3", d.Stock[0].Offered)
 	}
 }

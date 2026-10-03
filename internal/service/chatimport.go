@@ -223,9 +223,9 @@ func (s *Service) ImportGroups(ctx context.Context, groups []MergeGroup, chatID,
 			msgID := importMsgID(chatID, g.Canonical.Index, ts)
 			f := textutil.ParseImportFields(g.Canonical.Body)
 			if _, err := tx.ExecContext(ctx, `INSERT OR IGNORE INTO listings
-				(msg_id, chat_id, chat_name, author_name, body, wine_name, price, vintage, timestamp, created_at)
-				VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, datetime(?, 'unixepoch'))`,
-				msgID, chatID, chatName, g.Canonical.Author, g.Canonical.Body, f.WineName, f.Price, f.Vintage, ts, ts); err != nil {
+				(msg_id, chat_id, chat_name, author_name, body, original_body, wine_name, price, vintage, timestamp, created_at)
+				VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, datetime(?, 'unixepoch'))`,
+				msgID, chatID, chatName, g.Canonical.Author, g.Canonical.Body, g.Canonical.Body, f.WineName, f.Price, f.Vintage, ts, ts); err != nil {
 				return err
 			}
 			listings++

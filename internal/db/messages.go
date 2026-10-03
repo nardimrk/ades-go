@@ -99,10 +99,10 @@ func (s *Store) FillPhones(ctx context.Context) (int64, error) {
 func (s *Store) InsertListing(ctx context.Context, l Listing) error {
 	_, err := s.DB.ExecContext(ctx, `
 		INSERT OR IGNORE INTO listings
-		(msg_id, chat_id, chat_name, author_id, author_name, body,
+		(msg_id, chat_id, chat_name, author_id, author_name, body, original_body,
 		 wine_name, price, vintage, media_url, timestamp, created_at)
-		VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, datetime(?, 'unixepoch'))`,
-		l.MsgID, l.ChatID, l.ChatName, l.AuthorID, l.AuthorName, l.Body,
+		VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, datetime(?, 'unixepoch'))`,
+		l.MsgID, l.ChatID, l.ChatName, l.AuthorID, l.AuthorName, l.Body, l.Body,
 		l.WineName, l.Price, l.Vintage, l.MediaURL, l.Timestamp, l.Timestamp)
 	return err
 }
