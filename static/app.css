@@ -462,14 +462,9 @@ button.icon { display: inline-flex; align-items: center; justify-content: center
    the move and delete buttons fixed at the top right */
 .reply-head { display: flex; align-items: flex-start; gap: .5rem; min-height: 1.75rem; }
 .reply-who { display: flex; flex-wrap: wrap; align-items: center; align-content: center; gap: .2rem .55rem; flex: 1 1 auto; min-width: 0; min-height: 1.75rem; }
-/* hand = added by hand (blue pill) */
-.reply-flag {
-  display: inline-flex; align-items: center; justify-content: center; min-width: 1.5rem; padding: 0 .4rem;
-  font-size: 12px; font-weight: 700; line-height: 1.35; border: 1px solid; border-radius: 999px;
-}
-.reply-flag { min-height: 1.35rem; }
-.reply-flag .icon-svg { width: 13px; height: 13px; }
-.reply-flag.flag-a { color: var(--info-text); background: var(--info-bg); border-color: var(--info-border); }
+/* a hand next to the tools: the reply was added by hand */
+.reply-hand { display: inline-flex; align-items: center; color: var(--info-text); margin-right: .4rem; }
+.reply-hand .icon-svg { width: 15px; height: 15px; }
 
 .reply-tools { display: flex; align-items: center; gap: .35rem; flex: none; }
 .reply-name { font-size: 13px; min-width: 0; overflow-wrap: anywhere; }
@@ -972,12 +967,12 @@ body:has(.sel-bar:not(:empty)) .fab-menu { bottom: calc(max(.75rem, env(safe-are
    all the same pill */
 .tool-pill {
   position: relative; display: inline-flex; align-items: center; justify-content: center; gap: .15rem;
-  width: 2rem; height: 1.25rem; min-width: 0; min-height: 0; padding: 0;
+  width: 2.4rem; height: 1.5rem; min-width: 0; min-height: 0; padding: 0;
   font: inherit; cursor: pointer; border: 1px solid; border-radius: 999px;
 }
-.tool-pill .icon-svg { width: 11px; height: 11px; }
+.tool-pill .icon-svg { width: 15px; height: 15px; }
 /* small to the eye, but a finger-sized tap area around it */
-.tool-pill::after { content: ""; position: absolute; inset: -12px -3px; }
+.tool-pill::after { content: ""; position: absolute; inset: -10px -3px; }
 .tool-pill.pill-fix { color: var(--fix-text); background: var(--fix-bg); border-color: var(--fix-border); }
 .tool-pill.pill-move { color: var(--muted); background: var(--bg); border-color: var(--border-strong); }
 .tool-pill.pill-del { color: var(--danger); background: var(--danger-soft); border-color: var(--danger-border); }
@@ -986,5 +981,5 @@ body:has(.sel-bar:not(:empty)) .fab-menu { bottom: calc(max(.75rem, env(safe-are
 .tool-pill.pill-del:hover { border-color: var(--danger); }
 /* pen + x: the small x says "undo" */
 .tool-pill .fix-x { display: inline-flex; opacity: .75; }
-.tool-pill .fix-x .icon-svg { width: 8px; height: 8px; }
+.tool-pill .fix-x .icon-svg { width: 10px; height: 10px; }
 .tool-pill.pill-fix:hover .fix-x { opacity: 1; color: var(--danger); }

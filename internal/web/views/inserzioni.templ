@@ -505,12 +505,12 @@ templ ReplyItem(d InserzioniData, r service.ReplyView, oob bool) {
 				if r.Override == "-" {
 					<span class="reply-notorder">Non è un ordine</span>
 				}
-				// hand = added by hand (a correction shows as pen + x next to the icons)
-				if r.Manual {
-					<span class="reply-flag flag-a" title="Aggiunta a mano" role="img" aria-label="Aggiunta a mano">@IconHand()</span>
-				}
 			</div>
 			<div class="reply-tools">
+				// a hand: the reply was added by hand
+				if r.Manual {
+					<span class="reply-hand" title="Aggiunta a mano" role="img" aria-label="Aggiunta a mano">@IconHand()</span>
+				}
 				if r.Override != "" {
 					<form
 						class="reply-fixed"
