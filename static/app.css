@@ -941,3 +941,15 @@ body:has(.sel-bar:not(:empty)) .fab-menu { bottom: calc(max(.75rem, env(safe-are
 /* order page: options ordered beyond the listing's availability */
 .stock-warning { display: flex; flex-direction: column; gap: .35rem; margin-bottom: .75rem; }
 .stock-warning ul { margin: 0; padding-left: 1.2rem; }
+
+/* iOS Safari gives date / date-time fields a fixed minimum width (they spill
+   out of narrow forms, e.g. "Data e ora" in Aggiungi risposta) and centres
+   their text: let them take the width they are given, text on the left */
+@supports (-webkit-touch-callout: none) {
+  input[type=date], input[type=datetime-local], input[type=time] {
+    -webkit-appearance: none; appearance: none; min-width: 0; max-width: 100%;
+  }
+  input[type=date]::-webkit-date-and-time-value,
+  input[type=datetime-local]::-webkit-date-and-time-value,
+  input[type=time]::-webkit-date-and-time-value { text-align: left; }
+}
