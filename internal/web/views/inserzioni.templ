@@ -502,12 +502,9 @@ templ ReplyItem(d InserzioniData, r service.ReplyView, oob bool) {
 				if r.Reading != "" {
 					<span class="reply-reading">{ r.Reading }</span>
 				}
-				// hand = added by hand, pen = order corrected by hand
+				// hand = added by hand (a correction shows as pen + x below the text)
 				if r.Manual {
 					<span class="reply-flag flag-a" title="Aggiunta a mano" role="img" aria-label="Aggiunta a mano">@IconHand()</span>
-				}
-				if r.Override != "" {
-					<span class="reply-flag flag-c" title="Corretta a mano" role="img" aria-label="Corretta a mano">@IconPen()</span>
 				}
 			</div>
 			<div class="reply-tools">
@@ -536,14 +533,23 @@ templ ReplyItem(d InserzioniData, r service.ReplyView, oob bool) {
 			<span class="muted reply-time">{ r.Ora }</span>
 		</div>
 		if r.Override != "" {
-			<form class="reply-fixed" hx-post={ "/replies/" + i64(r.ID) + "/order" } hx-swap="none">
+			<form
+				class="reply-fixed"
+				hx-post={ "/replies/" + i64(r.ID) + "/order" }
+				hx-swap="none"
+				hx-confirm={ "Annullare la correzione a mano di " + r.Utente + "? Il messaggio verrà riletto dalle regole." }
+			>
 				<input type="hidden" name="chat" value={ d.SelChat }/>
 				<input type="hidden" name="c" value={ d.SelKey }/>
 				// the corrected order is in the green pill; only "not an order" needs words
 				if r.Override == "-" {
 					<span>Non è un ordine</span>
 				}
-				<button type="submit" class="btn small btn-fix" name="op" value="reset">Annulla correzione</button>
+				// pen + x: the order was corrected by hand; tap to undo it
+				<button type="submit" class="btn small btn-fix fix-undo" name="op" value="reset" title="Annulla correzione" aria-label="Annulla correzione">
+					@IconPen()
+					<span class="fix-x">@IconX()</span>
+				</button>
 			</form>
 		} else if r.Check.Open() && d.Review != nil {
 			@ReviewPanel(d, r)

@@ -464,7 +464,7 @@ button.icon { display: inline-flex; align-items: center; justify-content: center
 .reply-who { display: flex; flex-wrap: wrap; align-items: center; align-content: center; gap: .2rem .55rem; flex: 1 1 auto; min-width: 0; min-height: 1.75rem; }
 /* one line of the header is as tall as the icon buttons, so they line up with the name */
 @media (pointer: coarse) { .reply-who { min-height: 40px; } }
-/* hand = added by hand (blue), pen = order corrected by hand (light blue) */
+/* hand = added by hand (blue pill) */
 .reply-flag {
   display: inline-flex; align-items: center; justify-content: center; min-width: 1.5rem; padding: 0 .4rem;
   font-size: 12px; font-weight: 700; line-height: 1.35; border: 1px solid; border-radius: 999px;
@@ -472,10 +472,15 @@ button.icon { display: inline-flex; align-items: center; justify-content: center
 .reply-flag { min-height: 1.35rem; }
 .reply-flag .icon-svg { width: 13px; height: 13px; }
 .reply-flag.flag-a { color: var(--info-text); background: var(--info-bg); border-color: var(--info-border); }
-.reply-flag.flag-c { color: var(--fix-text); background: var(--fix-bg); border-color: var(--fix-border); }
-/* "Annulla correzione": the same light-blue pill as the correction's pen */
+/* the correction's light-blue pill (pen + x, under the message) */
 .btn.btn-fix { color: var(--fix-text); background: var(--fix-bg); border-color: var(--fix-border); border-radius: 999px; font-weight: 600; }
 .btn.btn-fix:hover { filter: brightness(.97); border-color: var(--fix-text); }
+/* the correction, shown as pen + x: tapping it undoes the correction */
+.btn.fix-undo { gap: .3rem; padding: .2rem .55rem; }
+.btn.fix-undo .icon-svg { width: 14px; height: 14px; }
+.btn.fix-undo .fix-x { display: inline-flex; opacity: .75; }
+.btn.fix-undo .fix-x .icon-svg { width: 11px; height: 11px; }
+.btn.fix-undo:hover .fix-x { opacity: 1; color: var(--danger); }
 .reply-tools { display: flex; align-items: center; gap: .15rem; flex: none; }
 /* the ✕ ends exactly where the time below ends: its icon sits at the right
    of its (touch-sized) button, minus the empty margin inside the drawing */
