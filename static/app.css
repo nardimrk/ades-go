@@ -456,10 +456,14 @@ button.icon { display: inline-flex; align-items: center; justify-content: center
 }
 .reply { padding: .4rem .75rem .5rem; border-top: 1px solid var(--border); }
 .reply:first-child { border-top: 0; }
-.reply-head { display: flex; align-items: center; gap: .5rem; min-height: 1.75rem; }
-.reply-ok { color: var(--ok); flex: none; }
+/* reply header: who/what/when on the left (wrapping, never overlapping),
+   the move and delete buttons fixed at the top right */
+.reply-head { display: flex; align-items: flex-start; gap: .5rem; min-height: 1.75rem; }
+.reply-who { display: flex; flex-wrap: wrap; align-items: center; gap: .2rem .55rem; flex: 1 1 auto; min-width: 0; padding-top: .15rem; }
+.reply-tools { display: flex; align-items: center; gap: .15rem; flex: none; }
+.reply-ok { color: var(--ok); flex: none; display: inline-flex; }
 .reply-name { font-size: 13px; min-width: 0; overflow-wrap: anywhere; }
-.reply-time { font-size: 12px; margin-right: auto; white-space: nowrap; }
+.reply-time { font-size: 12px; white-space: nowrap; }
 .reply-head button.icon { padding: .15rem; }
 .reply-text { font-size: 14px; line-height: 1.4; white-space: pre-wrap; overflow-wrap: anywhere; }
 
@@ -481,9 +485,11 @@ button.icon { display: inline-flex; align-items: center; justify-content: center
 .review-filter { margin-bottom: .6rem; }
 .review-filter:empty { display: none; }
 .badge-info { color: var(--info-text); background: var(--info-bg); border-color: var(--info-border); }
-/* the reading may wrap (several cases); the name never breaks letter by letter */
-.reply-reading { font-size: 12px; font-weight: 600; color: var(--ok); min-width: 0; }
-.reply-head:has(.reply-reading) .reply-name { flex: none; max-width: 55%; }
+/* the order read from the reply ("5A, 5B"): a small green pill, kept whole */
+.reply-reading {
+  font-size: 12px; font-weight: 600; color: var(--success-text); white-space: nowrap;
+  background: var(--success-bg); border: 1px solid var(--success-border); border-radius: 999px; padding: 0 .45rem;
+}
 .reply.flagged { background: var(--warning-bg); box-shadow: inset 4px 0 0 var(--warn); padding-left: 1rem; }
 .reply.flagged.flag-ambigua { background: var(--info-bg); box-shadow: inset 4px 0 0 var(--info-border); }
 .replies[data-show=open] .reply:not(.flagged) { display: none; }

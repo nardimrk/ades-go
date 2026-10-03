@@ -495,18 +495,23 @@ templ ReplyItem(d InserzioniData, r service.ReplyView, oob bool) {
 		{ oobAttrs(oob)... }
 	>
 		<div class="reply-head">
-			if r.Ordine {
-				<span class="reply-ok" title="Letto come ordine" aria-label="Letto come ordine">@IconCheck()</span>
-			}
-			<b class="reply-name">{ r.Utente }</b>
-			if r.Reading != "" {
-				<span class="reply-reading">{ r.Reading }</span>
-			}
-			<span class="muted reply-time">{ r.Ora }</span>
-			if r.Manual {
-				<span class="badge badge-info">Aggiunta a mano</span>
-			}
-			<button
+			// who, what and when: wraps onto more lines on narrow screens,
+			// each piece whole (never overlapping)
+			<div class="reply-who">
+				if r.Ordine {
+					<span class="reply-ok" title="Letto come ordine" aria-label="Letto come ordine">@IconCheck()</span>
+				}
+				<b class="reply-name">{ r.Utente }</b>
+				if r.Reading != "" {
+					<span class="reply-reading">{ r.Reading }</span>
+				}
+				<span class="muted reply-time">{ r.Ora }</span>
+				if r.Manual {
+					<span class="badge badge-info">Aggiunta a mano</span>
+				}
+			</div>
+			<div class="reply-tools">
+				<button
 				class="icon reply-move"
 				title="Sposta in un'altra inserzione"
 				aria-label="Sposta in un'altra inserzione"
@@ -523,6 +528,7 @@ templ ReplyItem(d InserzioniData, r service.ReplyView, oob bool) {
 				hx-swap="outerHTML"
 				hx-confirm="Eliminare questo messaggio?"
 			>@IconX()</button>
+			</div>
 		</div>
 		<div class="reply-text">{ compactText(r.Testo) }</div>
 		if r.Override != "" {
