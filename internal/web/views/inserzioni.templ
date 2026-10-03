@@ -505,10 +505,14 @@ templ ReplyItem(d InserzioniData, r service.ReplyView, oob bool) {
 				if r.Reading != "" {
 					<span class="reply-reading">{ r.Reading }</span>
 				}
-				<span class="muted reply-time">{ r.Ora }</span>
+				// A = added by hand, C = order corrected by hand
 				if r.Manual {
-					<span class="badge badge-info">Aggiunta a mano</span>
+					<span class="reply-flag flag-a" title="Aggiunta a mano" aria-label="Aggiunta a mano">A</span>
 				}
+				if r.Override != "" {
+					<span class="reply-flag flag-c" title="Corretta a mano" aria-label="Corretta a mano">C</span>
+				}
+				<span class="muted reply-time">{ r.Ora }</span>
 			</div>
 			<div class="reply-tools">
 				<button
@@ -535,8 +539,10 @@ templ ReplyItem(d InserzioniData, r service.ReplyView, oob bool) {
 			<form class="reply-fixed" hx-post={ "/replies/" + i64(r.ID) + "/order" } hx-swap="none">
 				<input type="hidden" name="chat" value={ d.SelChat }/>
 				<input type="hidden" name="c" value={ d.SelKey }/>
-				<span class="badge badge-ok">Corretta a mano</span>
-				<span>{ overrideLabel(r.Override) }</span>
+				// the corrected order is in the green pill; only "not an order" needs words
+				if r.Override == "-" {
+					<span>Non è un ordine</span>
+				}
 				<button type="submit" class="btn small" name="op" value="reset">Annulla correzione</button>
 			</form>
 		} else if r.Check.Open() && d.Review != nil {

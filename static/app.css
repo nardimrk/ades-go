@@ -20,6 +20,7 @@
   --on-dark: #ffffff;
   --shadow: rgba(0,0,0,.15);
   --info-bg: #eff6ff;    --info-border: #bfdbfe;    --info-text: #1e3a8a;
+  --fix-bg: #e0f2fe;     --fix-border: #7dd3fc;     --fix-text: #0369a1;   /* "C" (corrected by hand) */
   --success-bg: #f0fdf4; --success-border: #bbf7d0; --success-text: #14532d;
   --warning-bg: #fffbeb; --warning-border: #fde68a; --warning-text: #78350f;
   --error-bg: #fef2f2;   --error-border: #fecaca;   --error-text: #7f1d1d;
@@ -66,6 +67,7 @@
   --toast-bg: #2b303a;
   --shadow: rgba(0,0,0,.45);
   --info-bg: #14233d;    --info-border: #1e3a66;    --info-text: #bfdbfe;
+  --fix-bg: #0c2a3a;     --fix-border: #0e5a7a;     --fix-text: #7dd3fc;
   --success-bg: #0f2a1b; --success-border: #1d4d33; --success-text: #bbf7d0;
   --warning-bg: #2d2410; --warning-border: #5a4718; --warning-text: #fde68a;
   --error-bg: #2d1414;   --error-border: #5c2626;   --error-text: #fecaca;
@@ -459,7 +461,16 @@ button.icon { display: inline-flex; align-items: center; justify-content: center
 /* reply header: who/what/when on the left (wrapping, never overlapping),
    the move and delete buttons fixed at the top right */
 .reply-head { display: flex; align-items: flex-start; gap: .5rem; min-height: 1.75rem; }
-.reply-who { display: flex; flex-wrap: wrap; align-items: center; gap: .2rem .55rem; flex: 1 1 auto; min-width: 0; padding-top: .15rem; }
+.reply-who { display: flex; flex-wrap: wrap; align-items: center; align-content: center; gap: .2rem .55rem; flex: 1 1 auto; min-width: 0; min-height: 1.75rem; }
+/* one line of the header is as tall as the icon buttons, so they line up with the name */
+@media (pointer: coarse) { .reply-who { min-height: 40px; } }
+/* A = added by hand (blue), C = order corrected by hand (light blue) */
+.reply-flag {
+  display: inline-flex; align-items: center; justify-content: center; min-width: 1.5rem; padding: 0 .4rem;
+  font-size: 12px; font-weight: 700; line-height: 1.35; border: 1px solid; border-radius: 999px;
+}
+.reply-flag.flag-a { color: var(--info-text); background: var(--info-bg); border-color: var(--info-border); }
+.reply-flag.flag-c { color: var(--fix-text); background: var(--fix-bg); border-color: var(--fix-border); }
 .reply-tools { display: flex; align-items: center; gap: .15rem; flex: none; }
 .reply-ok { color: var(--ok); flex: none; display: inline-flex; }
 .reply-name { font-size: 13px; min-width: 0; overflow-wrap: anywhere; }
