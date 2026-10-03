@@ -59,7 +59,7 @@ func Base(title string) templ.Component {
 		if templ_7745c5c3_Err != nil {
 			return templ_7745c5c3_Err
 		}
-		templ_7745c5c3_Err = templruntime.WriteString(templ_7745c5c3_Buffer, 2, " · ADES Wine Club</title><link rel=\"icon\" href=\"data:image/svg+xml,<svg xmlns=%22http://www.w3.org/2000/svg%22 viewBox=%220 0 32 32%22><rect width=%2232%22 height=%2232%22 rx=%227%22 fill=%22%238b1e3f%22/><text x=%2216%22 y=%2222.5%22 font-family=%22system-ui,sans-serif%22 font-size=%2218%22 font-weight=%22700%22 fill=%22white%22 text-anchor=%22middle%22>A</text></svg>\"><script>\n\t\t\t\t// Apply the theme before the first paint (no light flash in dark mode).\n\t\t\t\ttry {\n\t\t\t\t\tvar t = localStorage.getItem(\"adesgo-theme\");\n\t\t\t\t\tif (!t) { t = matchMedia(\"(prefers-color-scheme: dark)\").matches ? \"dark\" : \"light\"; }\n\t\t\t\t\tdocument.documentElement.dataset.theme = t;\n\t\t\t\t} catch (e) {}\n\t\t\t</script><link rel=\"stylesheet\" href=\"/static/app.css\"><script src=\"/static/htmx.min.js\"></script><script src=\"/static/app.js\" defer></script></head><body hx-boost=\"true\">")
+		templ_7745c5c3_Err = templruntime.WriteString(templ_7745c5c3_Buffer, 2, " · ADE'S Wine Club</title><link rel=\"icon\" href=\"data:image/svg+xml,<svg xmlns=%22http://www.w3.org/2000/svg%22 viewBox=%220 0 32 32%22><rect width=%2232%22 height=%2232%22 rx=%227%22 fill=%22%238b1e3f%22/><text x=%2216%22 y=%2222.5%22 font-family=%22system-ui,sans-serif%22 font-size=%2218%22 font-weight=%22700%22 fill=%22white%22 text-anchor=%22middle%22>A</text></svg>\"><script>\n\t\t\t\t// Apply the theme before the first paint (no light flash in dark mode).\n\t\t\t\ttry {\n\t\t\t\t\tvar t = localStorage.getItem(\"adesgo-theme\");\n\t\t\t\t\tif (!t) { t = matchMedia(\"(prefers-color-scheme: dark)\").matches ? \"dark\" : \"light\"; }\n\t\t\t\t\tdocument.documentElement.dataset.theme = t;\n\t\t\t\t} catch (e) {}\n\t\t\t</script><link rel=\"stylesheet\" href=\"/static/app.css\"><script src=\"/static/htmx.min.js\"></script><script src=\"/static/app.js\" defer></script></head><body hx-boost=\"true\">")
 		if templ_7745c5c3_Err != nil {
 			return templ_7745c5c3_Err
 		}
@@ -108,7 +108,7 @@ func Layout(title, active string) templ.Component {
 				}()
 			}
 			ctx = templ.InitializeContext(ctx)
-			templ_7745c5c3_Err = templruntime.WriteString(templ_7745c5c3_Buffer, 4, "<div class=\"shell\"><aside class=\"sidebar\"><div class=\"brand\">ADES Wine Club</div><div class=\"nav-wrap\" data-nav-wrap><nav>")
+			templ_7745c5c3_Err = templruntime.WriteString(templ_7745c5c3_Buffer, 4, "<div class=\"shell\"><aside class=\"sidebar\"><div class=\"brand\">ADE'S Wine Club</div><div class=\"nav-wrap\" data-nav-wrap><nav>")
 			if templ_7745c5c3_Err != nil {
 				return templ_7745c5c3_Err
 			}

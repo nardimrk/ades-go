@@ -102,8 +102,8 @@ func (s *Server) loginSubmit(w http.ResponseWriter, r *http.Request) {
 	}
 	link := s.cfg.AppURL + "/?token=" + token
 	if s.mail.Configured() {
-		body := "Clicca il link per accedere ad ADES Wine Club (il link non scade mai):\n\n" + link
-		if err := s.mail.Send(r.Context(), email, "ADE Wine Club - Link di accesso", body); err != nil {
+		body := "Clicca il link per accedere ad ADE'S Wine Club (il link non scade mai):\n\n" + link
+		if err := s.mail.Send(r.Context(), email, "ADE'S Wine Club - Link di accesso", body); err != nil {
 			log.Printf("[auth] mailgun: %v", err)
 			render(w, r, views.Login(false, "Invio email non riuscito, riprova più tardi."))
 			return

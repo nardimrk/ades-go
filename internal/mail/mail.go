@@ -32,7 +32,7 @@ type Attachment struct {
 func (m *Mailgun) Send(ctx context.Context, to, subject, text string, attachments ...Attachment) error {
 	var body bytes.Buffer
 	w := multipart.NewWriter(&body)
-	w.WriteField("from", fmt.Sprintf("ADE Wine Club <noreply@%s>", m.Domain))
+	w.WriteField("from", fmt.Sprintf("ADE'S Wine Club <noreply@%s>", m.Domain))
 	w.WriteField("to", to)
 	w.WriteField("subject", subject)
 	w.WriteField("text", text)

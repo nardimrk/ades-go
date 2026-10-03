@@ -61,9 +61,9 @@ func main() {
 
 	if mailer.Configured() && cfg.BackupTo != "" {
 		go store.RunWeeklyBackup(ctx, func(ctx context.Context, name string, data []byte) error {
-			text := "Backup settimanale del database ADE Wine Club.\n\nFile: " + name +
+			text := "Backup settimanale del database ADE'S Wine Club.\n\nFile: " + name +
 				"\nData: " + time.Now().Format("2006-01-02 15:04")
-			return mailer.Send(ctx, cfg.BackupTo, "ADE Wine Club – Backup DB "+time.Now().Format("2006-01-02"), text,
+			return mailer.Send(ctx, cfg.BackupTo, "ADE'S Wine Club – Backup DB "+time.Now().Format("2006-01-02"), text,
 				mail.Attachment{Name: name, Data: data})
 		})
 	} else {

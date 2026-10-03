@@ -25,7 +25,7 @@ templ Base(title string) {
 			<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover"/>
 			<meta name="theme-color" content="#8b1e3f" media="(prefers-color-scheme: light)"/>
 			<meta name="theme-color" content="#111318" media="(prefers-color-scheme: dark)"/>
-			<title>{ title } · ADES Wine Club</title>
+			<title>{ title } · ADE'S Wine Club</title>
 			<link rel="icon" href="data:image/svg+xml,<svg xmlns=%22http://www.w3.org/2000/svg%22 viewBox=%220 0 32 32%22><rect width=%2232%22 height=%2232%22 rx=%227%22 fill=%22%238b1e3f%22/><text x=%2216%22 y=%2222.5%22 font-family=%22system-ui,sans-serif%22 font-size=%2218%22 font-weight=%22700%22 fill=%22white%22 text-anchor=%22middle%22>A</text></svg>"/>
 			<script>
 				// Apply the theme before the first paint (no light flash in dark mode).
@@ -50,7 +50,7 @@ templ Layout(title, active string) {
 	@Base(title) {
 		<div class="shell">
 			<aside class="sidebar">
-				<div class="brand">ADES Wine Club</div>
+				<div class="brand">ADE'S Wine Club</div>
 				<div class="nav-wrap" data-nav-wrap>
 					<nav>
 						for _, n := range nav {
