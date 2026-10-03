@@ -498,21 +498,17 @@ templ ReplyItem(d InserzioniData, r service.ReplyView, oob bool) {
 			// who, what and when: wraps onto more lines on narrow screens,
 			// each piece whole (never overlapping)
 			<div class="reply-who">
-				if r.Ordine {
-					<span class="reply-ok" title="Letto come ordine" aria-label="Letto come ordine">@IconCheck()</span>
-				}
 				<b class="reply-name">{ r.Utente }</b>
 				if r.Reading != "" {
 					<span class="reply-reading">{ r.Reading }</span>
 				}
-				// A = added by hand, C = order corrected by hand
+				// hand = added by hand, pen = order corrected by hand
 				if r.Manual {
-					<span class="reply-flag flag-a" title="Aggiunta a mano" aria-label="Aggiunta a mano">A</span>
+					<span class="reply-flag flag-a" title="Aggiunta a mano" role="img" aria-label="Aggiunta a mano">@IconHand()</span>
 				}
 				if r.Override != "" {
-					<span class="reply-flag flag-c" title="Corretta a mano" aria-label="Corretta a mano">C</span>
+					<span class="reply-flag flag-c" title="Corretta a mano" role="img" aria-label="Corretta a mano">@IconPen()</span>
 				}
-				<span class="muted reply-time">{ r.Ora }</span>
 			</div>
 			<div class="reply-tools">
 				<button
@@ -534,7 +530,11 @@ templ ReplyItem(d InserzioniData, r service.ReplyView, oob bool) {
 			>@IconX()</button>
 			</div>
 		</div>
-		<div class="reply-text">{ compactText(r.Testo) }</div>
+		// the message, and when it was sent at the bottom right of its last line
+		<div class="reply-body">
+			<div class="reply-text">{ compactText(r.Testo) }</div>
+			<span class="muted reply-time">{ r.Ora }</span>
+		</div>
 		if r.Override != "" {
 			<form class="reply-fixed" hx-post={ "/replies/" + i64(r.ID) + "/order" } hx-swap="none">
 				<input type="hidden" name="chat" value={ d.SelChat }/>
@@ -543,7 +543,7 @@ templ ReplyItem(d InserzioniData, r service.ReplyView, oob bool) {
 				if r.Override == "-" {
 					<span>Non è un ordine</span>
 				}
-				<button type="submit" class="btn small" name="op" value="reset">Annulla correzione</button>
+				<button type="submit" class="btn small btn-fix" name="op" value="reset">Annulla correzione</button>
 			</form>
 		} else if r.Check.Open() && d.Review != nil {
 			@ReviewPanel(d, r)

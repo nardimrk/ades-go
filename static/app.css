@@ -464,17 +464,28 @@ button.icon { display: inline-flex; align-items: center; justify-content: center
 .reply-who { display: flex; flex-wrap: wrap; align-items: center; align-content: center; gap: .2rem .55rem; flex: 1 1 auto; min-width: 0; min-height: 1.75rem; }
 /* one line of the header is as tall as the icon buttons, so they line up with the name */
 @media (pointer: coarse) { .reply-who { min-height: 40px; } }
-/* A = added by hand (blue), C = order corrected by hand (light blue) */
+/* hand = added by hand (blue), pen = order corrected by hand (light blue) */
 .reply-flag {
   display: inline-flex; align-items: center; justify-content: center; min-width: 1.5rem; padding: 0 .4rem;
   font-size: 12px; font-weight: 700; line-height: 1.35; border: 1px solid; border-radius: 999px;
 }
+.reply-flag { min-height: 1.35rem; }
+.reply-flag .icon-svg { width: 13px; height: 13px; }
 .reply-flag.flag-a { color: var(--info-text); background: var(--info-bg); border-color: var(--info-border); }
 .reply-flag.flag-c { color: var(--fix-text); background: var(--fix-bg); border-color: var(--fix-border); }
+/* "Annulla correzione": the same light-blue pill as the correction's pen */
+.btn.btn-fix { color: var(--fix-text); background: var(--fix-bg); border-color: var(--fix-border); border-radius: 999px; font-weight: 600; }
+.btn.btn-fix:hover { filter: brightness(.97); border-color: var(--fix-text); }
 .reply-tools { display: flex; align-items: center; gap: .15rem; flex: none; }
-.reply-ok { color: var(--ok); flex: none; display: inline-flex; }
+/* the ✕ ends exactly where the time below ends: its icon sits at the right
+   of its (touch-sized) button, minus the empty margin inside the drawing */
+.reply-tools button.icon { display: inline-flex; align-items: center; justify-content: center; }
+.reply-tools button.icon:last-child { justify-content: flex-end; padding-right: 0; margin-right: -4px; }
 .reply-name { font-size: 13px; min-width: 0; overflow-wrap: anywhere; }
-.reply-time { font-size: 12px; white-space: nowrap; }
+/* message text with the time at the bottom right, level with its last line */
+.reply-body { display: flex; align-items: flex-end; gap: .25rem .75rem; }
+.reply-body .reply-text { flex: 1 1 auto; min-width: 0; }
+.reply-time { flex: none; margin-left: auto; font-size: 12px; line-height: 1.6; white-space: nowrap; }
 .reply-head button.icon { padding: .15rem; }
 .reply-text { font-size: 14px; line-height: 1.4; white-space: pre-wrap; overflow-wrap: anywhere; }
 
