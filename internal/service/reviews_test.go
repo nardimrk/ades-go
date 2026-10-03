@@ -566,3 +566,52 @@ func TestInitialStock(t *testing.T) {
 		t.Fatalf("after setting A=200: %+v", got)
 	}
 }
+
+// A manual wine connected to a listing's option takes that listing's
+// delivery date and counts in its stock; disconnected, it is on its own again.
+func TestManualLink(t *testing.T) {
+	ctx := context.Background()
+	store, err := db.Open(filepath.Join(t.TempDir(), "wine.db"))
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer store.Close()
+	svc := New(store, &config.Config{}, nil)
+	const chat = "1@g.us"
+	if err := store.InsertListing(ctx, db.Listing{MsgID: "L1", ChatID: chat, AuthorID: "owner", Body: "Langoa\nA. 36x Langoa Barton 2022 a 47,50€", Timestamp: 1000}); err != nil {
+		t.Fatal(err)
+	}
+	lid := "L1"
+	store.InsertReply(ctx, db.Reply{MsgID: "R1", ListingMsgID: &lid, ChatID: chat, AuthorID: "u1", Body: "4A", Timestamp: 1100})
+	if _, _, _, err := svc.ImportPreventivi(ctx); err != nil {
+		t.Fatal(err)
+	}
+	rows, _ := svc.InserzioniList(ctx, "", "")
+	camp := &rows[0].Campaign
+	if err := svc.SetCampaignDelivery(ctx, camp.MsgIDs, "2026-11-20"); err != nil {
+		t.Fatal(err)
+	}
+	listQ := camp.QuotationIDs[0]
+	num, err := svc.CreateQuotation(ctx, "2026-10-01", "Mario", []NewQuotationRow{{Option: "A", WineName: "Langoa Barton 2022", Quantity: 6, Price: 47.5}})
+	if err != nil {
+		t.Fatal(err)
+	}
+	mq, _ := svc.QuotationByNumber(ctx, num)
+	if err := svc.SetItemLink(ctx, mq.ID, "A", listQ, "A"); err != nil {
+		t.Fatal(err)
+	}
+	_, del, _ := svc.manualConsegne(ctx, mq.ID)
+	if !del["A"].Linked || del["A"].Date != "2026-11-20" {
+		t.Fatalf("linked delivery = %+v", del["A"])
+	}
+	stock, _ := svc.optionStock(ctx, listQ, nil)
+	if len(stock) != 1 || stock[0].Ordered != 6 || stock[0].Remaining() != 30 {
+		t.Fatalf("stock with the manual wine = %+v", stock)
+	}
+	if err := svc.SetItemLink(ctx, mq.ID, "A", 0, ""); err != nil {
+		t.Fatal(err)
+	}
+	if _, del, _ = svc.manualConsegne(ctx, mq.ID); del["A"].Linked {
+		t.Fatalf("still linked: %+v", del["A"])
+	}
+}

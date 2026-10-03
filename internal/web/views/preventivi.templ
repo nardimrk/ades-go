@@ -151,6 +151,7 @@ templ PreventivoDetail(d *service.QuotationDetail, catalog []service.CatalogEntr
 		}
 		@ProdottiDatalist(catalog)
 		@ClientiDatalist(d.Sections)
+		@ModalSlot(false)
 		@StockSummary(d.Stock)
 		if len(d.Sections) > 1 {
 			<div class="filters sections-filter">
@@ -176,6 +177,108 @@ templ ProdottiDatalist(catalog []service.CatalogEntry) {
 			}
 		}
 	</datalist>
+}
+
+// itemDelivery: a manual wine's estimated delivery. Connected to a
+// listing's option, it shows that listing's date and a link to it;
+// otherwise its own date, and "Collega" to connect it.
+templ itemDelivery(qid int64, r service.OrderRow, d service.ItemDelivery) {
+	<div class="item-delivery">
+		if d.Linked {
+			<span class="item-date">
+				if d.Date != "" {
+					{ dateIT(d.Date) }
+				} else {
+					<span class="muted">data non indicata</span>
+				}
+			</span>
+			<a href={ templ.URL(d.LinkedURL) } class="link-pill" title={ "Collegato a: " + d.LinkedTitle + " · opzione " + d.LinkedOption }>
+				@IconMegaphone()
+				<span>{ d.LinkedOption }</span>
+			</a>
+			<button
+				type="button"
+				class="icon"
+				title="Scollega dall'inserzione"
+				aria-label="Scollega dall'inserzione"
+				hx-post="/ordini/link"
+				hx-vals={ templ.JSONString(map[string]string{"q": i64(qid), "option": r.Opzione, "to_q": "0"}) }
+				hx-swap="none"
+				hx-confirm={ "Scollegare " + r.Vino + " dall'inserzione? Tornerà ad avere la sua data di consegna." }
+			>@IconX()</button>
+		} else {
+			<input
+				type="date"
+				name="value"
+				value={ d.Date }
+				aria-label={ "Consegna stimata " + r.Vino }
+				data-autosave
+				hx-post="/ordini/consegna"
+				hx-trigger="change"
+				hx-swap="none"
+				hx-vals={ templ.JSONString(map[string]string{"q": i64(qid), "option": r.Opzione}) }
+			/>
+			<button
+				type="button"
+				class="btn small"
+				title="Collega a un vino di un'inserzione"
+				hx-get={ "/ordini/link?" + q("q", i64(qid), "option", r.Opzione, "vino", r.Vino) }
+				hx-target="#modal"
+				hx-swap="innerHTML"
+			>Collega</button>
+		}
+	</div>
+}
+
+// LinkModal: the listings with their wine options, to connect a manual wine.
+templ LinkModal(qid int64, option, wine string, camps []service.LinkCampaign) {
+	<dialog class="modal modal-move" data-modal-open aria-labelledby="link-title">
+		<div class="modal-form">
+			<div class="modal-head">
+				<div class="modal-title">
+					<h3 id="link-title">Collega a un'inserzione</h3>
+					<span class="muted">{ wine }: prende la data di consegna dell'inserzione e conta nella sua disponibilità</span>
+				</div>
+				<button type="button" class="icon" data-modal-close aria-label="Chiudi">@IconX()</button>
+			</div>
+			<div class="modal-body">
+				<input type="search" placeholder="Cerca un'inserzione o un vino…" data-filter=".link-camp" aria-label="Cerca un'inserzione o un vino"/>
+				<div class="move-list">
+					for _, c := range camps {
+						<div class="link-camp" data-name={ linkCampName(c) }>
+							<div class="link-camp-head">
+								<span class="dl-day">{ dayMonthShort(c.Published) }</span>
+								<b>{ c.Title }</b>
+							</div>
+							for _, o := range c.Options {
+								<button
+									type="button"
+									class="move-item link-opt"
+									hx-post="/ordini/link"
+									hx-vals={ templ.JSONString(map[string]string{"q": i64(qid), "option": option, "to_q": i64(o.QuotationID), "to_opt": o.Letter}) }
+									hx-swap="none"
+								>
+									<b class="stock-opt">{ o.Letter }</b>
+									<span>{ noEmoji(o.Wine) }</span>
+								</button>
+							}
+						</div>
+					}
+				</div>
+			</div>
+			<div class="modal-foot">
+				<button type="button" class="btn" data-modal-close>Annulla</button>
+			</div>
+		</div>
+	</dialog>
+}
+
+func linkCampName(c service.LinkCampaign) string {
+	n := c.Title + " " + c.ChatName
+	for _, o := range c.Options {
+		n += " " + o.Wine
+	}
+	return n
 }
 
 // orderNeighborLink: the order before/after this one in the Ordini list.
@@ -320,18 +423,8 @@ templ CustomerSection(qnum string, sec service.CustomerSection, msg, errMsg, cli
 							<td class="num">{ money(r.Totale()) }</td>
 							if sec.Manual {
 								<td class="col-consegna">
-									if _, ok := sec.Consegne[strings.ToUpper(r.Opzione)]; ok && r.Opzione != "" {
-										<input
-											type="date"
-											name="value"
-											value={ sec.Consegne[strings.ToUpper(r.Opzione)] }
-											aria-label={ "Consegna stimata " + r.Vino }
-											data-autosave
-											hx-post="/ordini/consegna"
-											hx-trigger="change"
-											hx-swap="none"
-											hx-vals={ templ.JSONString(map[string]string{"q": i64(sec.QuotationID), "option": r.Opzione}) }
-										/>
+									if d, ok := sec.Consegne[strings.ToUpper(r.Opzione)]; ok && r.Opzione != "" {
+										@itemDelivery(sec.QuotationID, r, d)
 									} else {
 										<span class="muted">–</span>
 									}

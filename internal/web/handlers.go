@@ -209,6 +209,38 @@ func (s *Server) orderItemConsegna(w http.ResponseWriter, r *http.Request) {
 	autosaveResult(w, r, err)
 }
 
+// orderLinkForm opens the list of listings to connect a manual wine to.
+func (s *Server) orderLinkForm(w http.ResponseWriter, r *http.Request) {
+	qs := r.URL.Query()
+	qid, err := strconv.ParseInt(qs.Get("q"), 10, 64)
+	if err != nil {
+		http.Error(w, "bad id", http.StatusBadRequest)
+		return
+	}
+	camps, err := s.svc.LinkCampaigns(r.Context())
+	if err != nil {
+		s.fail(w, r, err)
+		return
+	}
+	render(w, r, views.LinkModal(qid, qs.Get("option"), qs.Get("vino"), camps))
+}
+
+// orderLink connects (or, with to_q=0, disconnects) a manual wine to a
+// listing's option, then reloads the order.
+func (s *Server) orderLink(w http.ResponseWriter, r *http.Request) {
+	qid, err := strconv.ParseInt(r.FormValue("q"), 10, 64)
+	if err != nil {
+		http.Error(w, "bad id", http.StatusBadRequest)
+		return
+	}
+	to, _ := strconv.ParseInt(r.FormValue("to_q"), 10, 64)
+	if err := s.svc.SetItemLink(r.Context(), qid, r.FormValue("option"), to, r.FormValue("to_opt")); err != nil {
+		s.fail(w, r, err)
+		return
+	}
+	w.Header().Set("HX-Refresh", "true")
+}
+
 // initialStock saves the initial quantity of one option of the listing.
 func (s *Server) initialStock(w http.ResponseWriter, r *http.Request) {
 	camp, err := s.svc.FindCampaign(r.Context(), r.FormValue("chat"), r.FormValue("c"))

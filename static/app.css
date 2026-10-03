@@ -1009,3 +1009,17 @@ body:has(.sel-bar:not(:empty)) .fab-menu { bottom: calc(max(.75rem, env(safe-are
 /* manual orders: estimated delivery per wine, after Totale */
 .table td.col-consegna input[type=date] { min-width: 9.5rem; padding: .2rem .4rem; background: var(--fill); }
 @media (max-width: 720px) { .table td.col-consegna input[type=date] { min-width: 0; width: 100%; max-width: 100%; } }
+
+/* manual orders: a wine's delivery, own date or connected to a listing */
+.item-delivery { display: flex; align-items: center; gap: .4rem; flex-wrap: wrap; }
+@media (min-width: 721px) {
+  .item-delivery { flex-wrap: nowrap; }
+  .table td.col-consegna .item-delivery input[type=date] { min-width: 0; width: 9.5rem; flex: none; }
+}
+.item-date { white-space: nowrap; }
+.link-pill { display: inline-flex; align-items: center; gap: .25rem; padding: .05rem .5rem; border: 1px solid var(--accent); border-radius: 999px; color: var(--accent); background: var(--accent-soft); font-weight: 700; font-size: .8rem; text-decoration: none; }
+.link-pill .icon-svg { width: 13px; height: 13px; }
+.link-camp { display: flex; flex-direction: column; gap: .25rem; padding: .35rem 0; border-top: 1px solid var(--border); }
+.link-camp:first-child { border-top: 0; }
+.link-camp-head { display: flex; gap: .6rem; align-items: baseline; font-size: .9rem; }
+.link-opt { padding: .35rem .6rem; min-height: 0; gap: .5rem; font-size: .9rem; }

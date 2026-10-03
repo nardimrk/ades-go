@@ -202,6 +202,10 @@ var addColumns = []string{
 	"ALTER TABLE listings ADD COLUMN last_body TEXT",
 	// manual orders: the estimated delivery of each wine ("YYYY-MM-DD")
 	"ALTER TABLE quotation_items ADD COLUMN consegna_stimata TEXT",
+	// manual orders: a wine connected to an option of a listing's order (it
+	// takes that listing's estimated delivery and counts in its stock)
+	"ALTER TABLE quotation_items ADD COLUMN linked_quotation_id INTEGER",
+	"ALTER TABLE quotation_items ADD COLUMN linked_option TEXT",
 }
 
 func (s *Store) migrate(ctx context.Context) error {

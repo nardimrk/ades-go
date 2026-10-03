@@ -776,7 +776,7 @@ type CustomerSection struct {
 	// by option ("A" → "2026-11-15")
 	Manual      bool
 	QuotationID int64
-	Consegne    map[string]string
+	Consegne    map[string]ItemDelivery
 	// the customer's place in Clienti ("" = not set), shown and filtered on
 	Citta     string
 	Provincia string
@@ -943,6 +943,21 @@ func (s *Service) optionStock(ctx context.Context, quotationID int64, qsel []Sel
 			total[letter] += x.Bottles()
 		}
 	}
+	// wines of manual orders connected to this order's options
+	lrows, err := s.db().QueryContext(ctx, `SELECT UPPER(COALESCE(linked_option,'')), COALESCE(wine_name,''), quantity
+		FROM quotation_items WHERE linked_quotation_id = ?`, quotationID)
+	if err != nil {
+		return nil, err
+	}
+	for lrows.Next() {
+		var letter, wine string
+		var qty int
+		if lrows.Scan(&letter, &wine, &qty) == nil && qty > 0 {
+			total[letter] += bottles(wine, qty)
+			letters[letter] = true
+		}
+	}
+	lrows.Close()
 	keys := make([]string, 0, len(letters))
 	for l := range letters {
 		keys = append(keys, l)
@@ -1412,9 +1427,19 @@ func (s *Service) SetInitialQty(ctx context.Context, c *Campaign, letter, value 
 	return err
 }
 
+// ItemDelivery is the estimated delivery of a wine of a manual order: its
+// own date, or, when connected to a listing's option, that listing's date.
+type ItemDelivery struct {
+	Date         string // "YYYY-MM-DD", "" = not set
+	Linked       bool
+	LinkedOption string
+	LinkedTitle  string // the listing's title
+	LinkedURL    string // the listing's page
+}
+
 // manualConsegne: whether the quotation is a manual order (no listing) and,
 // if so, the estimated delivery of each of its wines, by option.
-func (s *Service) manualConsegne(ctx context.Context, quotationID int64) (bool, map[string]string, error) {
+func (s *Service) manualConsegne(ctx context.Context, quotationID int64) (bool, map[string]ItemDelivery, error) {
 	var n int
 	if err := s.db().QueryRowContext(ctx, "SELECT COUNT(*) FROM listings WHERE quotation_id = ?", quotationID).Scan(&n); err != nil {
 		return false, nil, err
@@ -1422,20 +1447,120 @@ func (s *Service) manualConsegne(ctx context.Context, quotationID int64) (bool, 
 	if n > 0 {
 		return false, nil, nil
 	}
-	rows, err := s.db().QueryContext(ctx, "SELECT UPPER(COALESCE(option,'')), COALESCE(consegna_stimata,'') FROM quotation_items WHERE quotation_id = ?", quotationID)
+	rows, err := s.db().QueryContext(ctx, `SELECT UPPER(COALESCE(qi.option,'')), COALESCE(qi.consegna_stimata,''),
+		       COALESCE(qi.linked_quotation_id, 0), COALESCE(qi.linked_option,''), COALESCE(lq.consegna_stimata,'')
+		FROM quotation_items qi LEFT JOIN quotations lq ON lq.id = qi.linked_quotation_id
+		WHERE qi.quotation_id = ?`, quotationID)
 	if err != nil {
 		return false, nil, err
 	}
-	defer rows.Close()
-	out := map[string]string{}
+	type row struct {
+		opt, own, lopt, ldate string
+		lq                    int64
+	}
+	var list []row
 	for rows.Next() {
-		var opt, d string
-		if err := rows.Scan(&opt, &d); err != nil {
+		var r row
+		if err := rows.Scan(&r.opt, &r.own, &r.lq, &r.lopt, &r.ldate); err != nil {
+			rows.Close()
 			return false, nil, err
 		}
-		out[opt] = d
+		list = append(list, r)
 	}
-	return true, out, rows.Err()
+	rows.Close()
+	if err := rows.Err(); err != nil {
+		return false, nil, err
+	}
+	out := map[string]ItemDelivery{}
+	for _, r := range list {
+		d := ItemDelivery{Date: r.own}
+		if r.lq != 0 {
+			d = ItemDelivery{Date: r.ldate, Linked: true, LinkedOption: r.lopt}
+			if c, err := s.QuotationListing(ctx, r.lq); err == nil && c != nil {
+				d.LinkedTitle, d.LinkedURL = c.DisplayTitle, CampaignURL(c.ChatID, c.Key)
+			}
+		}
+		out[r.opt] = d
+	}
+	return true, out, nil
+}
+
+// LinkTarget is a wine option of a listing's order a manual wine can be
+// connected to.
+type LinkTarget struct {
+	QuotationID int64
+	Letter      string
+	Wine        string
+}
+
+// LinkCampaign is a listing with its wine options, for the "Collega" list.
+type LinkCampaign struct {
+	Title     string
+	Published string
+	ChatName  string
+	Options   []LinkTarget
+}
+
+// LinkCampaigns returns the listings with an order and their wine options
+// (bottles, not cases), newest first.
+func (s *Service) LinkCampaigns(ctx context.Context) ([]LinkCampaign, error) {
+	camps, err := s.ConsegneCampaigns(ctx)
+	if err != nil {
+		return nil, err
+	}
+	items, err := s.quotationItems(ctx, "")
+	if err != nil {
+		return nil, err
+	}
+	byQ := map[int64][]LinkTarget{}
+	for _, it := range items {
+		if o := strings.ToUpper(strings.TrimSpace(it.Option)); len(o) == 1 {
+			byQ[it.QuotationID] = append(byQ[it.QuotationID], LinkTarget{QuotationID: it.QuotationID, Letter: o, Wine: wineWithVintage(it.WineName, it.Vintage)})
+		}
+	}
+	var out []LinkCampaign
+	for _, c := range camps {
+		if c.Manual || len(c.QuotationIDs) == 0 {
+			continue
+		}
+		opts := byQ[c.QuotationIDs[0]]
+		if len(opts) == 0 {
+			continue
+		}
+		out = append(out, LinkCampaign{Title: c.Title, Published: c.Published, ChatName: c.ChatName, Options: opts})
+	}
+	return out, nil
+}
+
+// SetItemLink connects a wine of a manual order to an option of a listing's
+// order (toQuotation 0 disconnects it).
+func (s *Service) SetItemLink(ctx context.Context, quotationID int64, option string, toQuotation int64, toOption string) error {
+	if manual, _, err := s.manualConsegne(ctx, quotationID); err != nil {
+		return err
+	} else if !manual {
+		return errors.New("si possono collegare solo i vini degli ordini manuali")
+	}
+	var q, o any
+	if toQuotation != 0 {
+		toOption = strings.ToUpper(strings.TrimSpace(toOption))
+		var n int
+		if err := s.db().QueryRowContext(ctx, `SELECT COUNT(*) FROM quotation_items WHERE quotation_id = ? AND UPPER(option) = ?
+			AND quotation_id IN (SELECT quotation_id FROM listings WHERE quotation_id IS NOT NULL)`, toQuotation, toOption).Scan(&n); err != nil {
+			return err
+		}
+		if n == 0 {
+			return errors.New("opzione dell'inserzione non trovata")
+		}
+		q, o = toQuotation, toOption
+	}
+	res, err := s.db().ExecContext(ctx, "UPDATE quotation_items SET linked_quotation_id = ?, linked_option = ? WHERE quotation_id = ? AND UPPER(option) = UPPER(?)", q, o, quotationID, option)
+	if err != nil {
+		return err
+	}
+	if n, _ := res.RowsAffected(); n == 0 {
+		return errors.New("riga dell'ordine non trovata")
+	}
+	return nil
 }
 
 // SetItemConsegna saves the estimated delivery of one wine of a manual
@@ -1451,7 +1576,7 @@ func (s *Service) SetItemConsegna(ctx context.Context, quotationID int64, option
 	if date != "" {
 		v = date
 	}
-	res, err := s.db().ExecContext(ctx, "UPDATE quotation_items SET consegna_stimata = ? WHERE quotation_id = ? AND UPPER(option) = UPPER(?)", v, quotationID, option)
+	res, err := s.db().ExecContext(ctx, "UPDATE quotation_items SET consegna_stimata = ? WHERE quotation_id = ? AND UPPER(option) = UPPER(?) AND linked_quotation_id IS NULL", v, quotationID, option)
 	if err != nil {
 		return err
 	}
