@@ -200,6 +200,15 @@ func (s *Server) addReply(w http.ResponseWriter, r *http.Request) {
 	toast(w, r, "success", "Risposta aggiunta: "+name+" · "+at.Format("02/01/2006 15:04"))
 }
 
+// orderItemConsegna autosaves the estimated delivery of a wine of a manual order.
+func (s *Server) orderItemConsegna(w http.ResponseWriter, r *http.Request) {
+	qid, err := strconv.ParseInt(r.FormValue("q"), 10, 64)
+	if err == nil {
+		err = s.svc.SetItemConsegna(r.Context(), qid, r.FormValue("option"), r.FormValue("value"))
+	}
+	autosaveResult(w, r, err)
+}
+
 // initialStock saves the initial quantity of one option of the listing.
 func (s *Server) initialStock(w http.ResponseWriter, r *http.Request) {
 	camp, err := s.svc.FindCampaign(r.Context(), r.FormValue("chat"), r.FormValue("c"))
@@ -905,7 +914,17 @@ func (s *Server) consegne(w http.ResponseWriter, r *http.Request) {
 	for _, id := range ids {
 		sel[id] = true
 	}
-	render(w, r, views.ConsegnePage(service.ConsegneMonths(camps), sel, res, ids))
+	// two tabs: the listings (default) and the manual orders
+	manual := r.URL.Query().Get("vista") == "ordini"
+	var shown, hidden []service.ConsegneCampaign
+	for _, c := range camps {
+		if c.Manual == manual {
+			shown = append(shown, c)
+		} else if sel[c.ID] {
+			hidden = append(hidden, c) // selected in the other tab: kept in the selection
+		}
+	}
+	render(w, r, views.ConsegnePage(service.ConsegneMonths(shown), sel, res, ids, manual, hidden))
 }
 
 func (s *Server) consegneResult(w http.ResponseWriter, r *http.Request) {
@@ -915,7 +934,11 @@ func (s *Server) consegneResult(w http.ResponseWriter, r *http.Request) {
 		s.fail(w, r, err)
 		return
 	}
-	w.Header().Set("HX-Replace-Url", "/consegne?"+url.Values{"sel": ids}.Encode())
+	q := url.Values{"sel": ids}
+	if r.URL.Query().Get("vista") == "ordini" {
+		q.Set("vista", "ordini")
+	}
+	w.Header().Set("HX-Replace-Url", "/consegne?"+q.Encode())
 	render(w, r, views.ConsegneSelBar(res, ids))
 }
 

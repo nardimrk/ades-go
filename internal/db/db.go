@@ -200,6 +200,8 @@ var addColumns = []string{
 	// the latest edit of the listing by the seller (the listing itself keeps
 	// its original text)
 	"ALTER TABLE listings ADD COLUMN last_body TEXT",
+	// manual orders: the estimated delivery of each wine ("YYYY-MM-DD")
+	"ALTER TABLE quotation_items ADD COLUMN consegna_stimata TEXT",
 }
 
 func (s *Store) migrate(ctx context.Context) error {

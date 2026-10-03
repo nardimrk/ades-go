@@ -583,6 +583,7 @@ body:has(dialog.modal[open]) { overflow: hidden; }
 .seg-btn { border: 0; background: none; padding: .4rem .9rem; font: inherit; cursor: pointer; color: var(--muted); }
 .seg-btn + .seg-btn { border-left: 1px solid var(--border); }
 .seg-btn.active { background: var(--accent-soft); color: var(--accent); font-weight: 600; }
+a.seg-btn { display: inline-flex; align-items: center; text-decoration: none; }
 .consegne { margin-top: .25rem; }
 /* Ordini and Consegne lists: one gap between the filter and the first month */
 input.list-filter { margin-bottom: .75rem !important; }
@@ -1004,3 +1005,7 @@ body:has(.sel-bar:not(:empty)) .fab-menu { bottom: calc(max(.75rem, env(safe-are
 .initial-wine { flex: 1 1 auto; min-width: 0; overflow-wrap: anywhere; font-size: .9rem; }
 .initial-stock .initial-row input { flex: none; width: 5.5rem; margin: 0 0 0 auto; text-align: right; background: var(--fill); }
 .initial-note { margin: .4rem 0 0; font-size: .8rem; }
+
+/* manual orders: estimated delivery per wine, after Totale */
+.table td.col-consegna input[type=date] { min-width: 9.5rem; padding: .2rem .4rem; background: var(--fill); }
+@media (max-width: 720px) { .table td.col-consegna input[type=date] { min-width: 0; width: 100%; max-width: 100%; } }

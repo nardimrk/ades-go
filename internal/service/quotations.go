@@ -772,6 +772,11 @@ type CustomerSection struct {
 	Options []string
 	Rows    []OrderRow
 	SavedOn string
+	// manual order (no listing): each wine has its estimated delivery,
+	// by option ("A" → "2026-11-15")
+	Manual      bool
+	QuotationID int64
+	Consegne    map[string]string
 	// the customer's place in Clienti ("" = not set), shown and filtered on
 	Citta     string
 	Provincia string
@@ -1072,7 +1077,10 @@ func (s *Service) BuildSection(ctx context.Context, q *Quotation, utente, client
 	if err != nil {
 		return CustomerSection{}, err
 	}
-	sec := CustomerSection{Utente: utente, Cliente: cliente, Rows: rows}
+	sec := CustomerSection{Utente: utente, Cliente: cliente, Rows: rows, QuotationID: q.ID}
+	if sec.Manual, sec.Consegne, err = s.manualConsegne(ctx, q.ID); err != nil {
+		return CustomerSection{}, err
+	}
 	seen := map[string]bool{}
 	for _, c := range append([]string{utente, cliente}, names...) {
 		if !seen[c] {
@@ -1402,4 +1410,53 @@ func (s *Service) SetInitialQty(ctx context.Context, c *Campaign, letter, value 
 	}
 	_, err = s.db().ExecContext(ctx, "UPDATE listings SET initial_qty = ? WHERE msg_id = ?", string(b), id)
 	return err
+}
+
+// manualConsegne: whether the quotation is a manual order (no listing) and,
+// if so, the estimated delivery of each of its wines, by option.
+func (s *Service) manualConsegne(ctx context.Context, quotationID int64) (bool, map[string]string, error) {
+	var n int
+	if err := s.db().QueryRowContext(ctx, "SELECT COUNT(*) FROM listings WHERE quotation_id = ?", quotationID).Scan(&n); err != nil {
+		return false, nil, err
+	}
+	if n > 0 {
+		return false, nil, nil
+	}
+	rows, err := s.db().QueryContext(ctx, "SELECT UPPER(COALESCE(option,'')), COALESCE(consegna_stimata,'') FROM quotation_items WHERE quotation_id = ?", quotationID)
+	if err != nil {
+		return false, nil, err
+	}
+	defer rows.Close()
+	out := map[string]string{}
+	for rows.Next() {
+		var opt, d string
+		if err := rows.Scan(&opt, &d); err != nil {
+			return false, nil, err
+		}
+		out[opt] = d
+	}
+	return true, out, rows.Err()
+}
+
+// SetItemConsegna saves the estimated delivery of one wine of a manual
+// order ("" clears it).
+func (s *Service) SetItemConsegna(ctx context.Context, quotationID int64, option, date string) error {
+	date = strings.TrimSpace(date)
+	if date != "" {
+		if _, err := time.Parse("2006-01-02", date); err != nil {
+			return fmt.Errorf("data non valida: %q", date)
+		}
+	}
+	var v any
+	if date != "" {
+		v = date
+	}
+	res, err := s.db().ExecContext(ctx, "UPDATE quotation_items SET consegna_stimata = ? WHERE quotation_id = ? AND UPPER(option) = UPPER(?)", v, quotationID, option)
+	if err != nil {
+		return err
+	}
+	if n, _ := res.RowsAffected(); n == 0 {
+		return errors.New("riga dell'ordine non trovata")
+	}
+	return nil
 }

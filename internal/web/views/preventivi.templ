@@ -4,6 +4,7 @@ import (
 	"adesgo/internal/service"
 	"crypto/sha1"
 	"encoding/hex"
+	"strings"
 )
 
 func sectionID(utente string) string {
@@ -296,6 +297,9 @@ templ CustomerSection(qnum string, sec service.CustomerSection, msg, errMsg, cli
 			<table class="table">
 				<thead>
 					<tr><th>Vino</th><th class="num">Qtà</th><th class="num">Prezzo (€)</th><th class="num">Totale (€)</th>
+						if sec.Manual {
+							<th class="col-consegna">Consegna stimata</th>
+						}
 						if sec.SavedOn == "" {
 							<th class="num"></th>
 						}
@@ -314,6 +318,25 @@ templ CustomerSection(qnum string, sec service.CustomerSection, msg, errMsg, cli
 							<td class="num">{ itoa(r.Qta) }</td>
 							<td class="num">{ money(r.Prezzo) }</td>
 							<td class="num">{ money(r.Totale()) }</td>
+							if sec.Manual {
+								<td class="col-consegna">
+									if _, ok := sec.Consegne[strings.ToUpper(r.Opzione)]; ok && r.Opzione != "" {
+										<input
+											type="date"
+											name="value"
+											value={ sec.Consegne[strings.ToUpper(r.Opzione)] }
+											aria-label={ "Consegna stimata " + r.Vino }
+											data-autosave
+											hx-post="/ordini/consegna"
+											hx-trigger="change"
+											hx-swap="none"
+											hx-vals={ templ.JSONString(map[string]string{"q": i64(sec.QuotationID), "option": r.Opzione}) }
+										/>
+									} else {
+										<span class="muted">–</span>
+									}
+								</td>
+							}
 							if sec.SavedOn == "" {
 								<td class="num"><button type="submit" name="op" value={ "del:" + itoa(i) } class="icon danger" title="Rimuovi riga" aria-label="Rimuovi riga">@IconX()</button></td>
 							}

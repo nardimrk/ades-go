@@ -28,6 +28,7 @@ type ConsegneCampaign struct {
 	Label        string
 	URL          string
 	QuotationIDs []int64
+	Manual       bool // a manual order (Ordini tab), not a listing
 
 	Clienti   int
 	Bottiglie int // bottles ordered (a case counts its bottles when its size is known)
@@ -72,7 +73,7 @@ func (s *Service) ConsegneCampaigns(ctx context.Context) ([]ConsegneCampaign, er
 	if err != nil {
 		return nil, err
 	}
-	sel, err := s.ComputeSelections(ctx)
+	sel, err := s.deliverySelections(ctx)
 	if err != nil {
 		return nil, err
 	}
@@ -108,8 +109,89 @@ func (s *Service) ConsegneCampaigns(ctx context.Context) ([]ConsegneCampaign, er
 		cc.Clienti, cc.Totale, cc.customers = len(clienti), round2(cc.Totale), clienti
 		out = append(out, cc)
 	}
+	// manual orders: one item each, under their order date
+	manual, err := s.manualQuotations(ctx)
+	if err != nil {
+		return nil, err
+	}
+	for _, q := range manual {
+		title := strings.TrimSpace(textutil.StripEmoji(q.ManualClientName))
+		if title == "" {
+			title = "Ordine manuale"
+		}
+		cc := ConsegneCampaign{
+			ID: "m" + campaignID("manual", q.Number), ChatName: q.Number, Key: q.Number, Title: title,
+			Published: q.Date + " 00:00:00", Data: q.Date + " 00:00:00", URL: "/ordini/view?" + url.Values{"n": {q.Number}}.Encode(),
+			QuotationIDs: []int64{q.ID}, Manual: true,
+		}
+		cc.Label = title + " " + q.Number
+		clienti := map[string]bool{}
+		for _, x := range byQuote[q.ID] {
+			clienti[x.Utente] = true
+			cc.Bottiglie += x.Bottles()
+			cc.Totale += float64(x.Qta) * x.Prezzo
+		}
+		cc.Clienti, cc.Totale, cc.customers = len(clienti), round2(cc.Totale), clienti
+		out = append(out, cc)
+	}
 	sort.SliceStable(out, func(i, j int) bool { return out[i].Published > out[j].Published })
 	return out, nil
+}
+
+// manualQuotations returns the orders created by hand (not linked to any
+// listing).
+func (s *Service) manualQuotations(ctx context.Context) ([]Quotation, error) {
+	quots, err := s.Quotations(ctx)
+	if err != nil {
+		return nil, err
+	}
+	linked := map[int64]bool{}
+	rows, err := s.db().QueryContext(ctx, "SELECT DISTINCT quotation_id FROM listings WHERE quotation_id IS NOT NULL")
+	if err != nil {
+		return nil, err
+	}
+	for rows.Next() {
+		var id int64
+		if rows.Scan(&id) == nil {
+			linked[id] = true
+		}
+	}
+	rows.Close()
+	var out []Quotation
+	for _, q := range quots {
+		if !linked[q.ID] {
+			out = append(out, q)
+		}
+	}
+	return out, nil
+}
+
+// deliverySelections: what customers ordered, for the deliveries: the
+// chat selections plus the lines of the manual orders (their own customer).
+func (s *Service) deliverySelections(ctx context.Context) ([]Selection, error) {
+	sel, err := s.ComputeSelections(ctx)
+	if err != nil {
+		return nil, err
+	}
+	manual, err := s.manualQuotations(ctx)
+	if err != nil {
+		return nil, err
+	}
+	for _, q := range manual {
+		items, err := s.quotationItems(ctx, "WHERE quotation_id = ?", q.ID)
+		if err != nil {
+			return nil, err
+		}
+		who := q.ManualClientName
+		if who == "" {
+			who = "Ordine manuale"
+		}
+		for _, it := range items {
+			sel = append(sel, Selection{Preventivo: q.Number, QuotationID: q.ID, DataPrev: q.Date, Utente: who,
+				AuthorID: q.ManualClientID, Opzione: it.Option, Vino: it.WineName, Vintage: it.Vintage, Qta: it.Quantity, Prezzo: it.Price})
+		}
+	}
+	return sel, nil
 }
 
 // ConsegneMonths groups the campaigns by month of publication, keeping the
@@ -238,7 +320,7 @@ func (s *Service) Consegne(ctx context.Context, ids []string) (*Consegne, error)
 		res.NoQuote = true
 		return res, nil
 	}
-	sel, err := s.ComputeSelections(ctx)
+	sel, err := s.deliverySelections(ctx)
 	if err != nil {
 		return nil, err
 	}
@@ -257,7 +339,11 @@ func (s *Service) Consegne(ctx context.Context, ids []string) (*Consegne, error)
 		if !ok {
 			loc = locs.byName[x.Utente]
 		}
-		l := DeliveryLine{Cliente: x.Utente, Inserzione: c.Title, URL: CampaignURL(c.ChatID, c.Key), Vino: wineWithVintage(x.Vino, x.Vintage), Qta: x.Qta, Prezzo: x.Prezzo,
+		label := c.Title
+		if c.Manual {
+			label = c.ChatName // the order number
+		}
+		l := DeliveryLine{Cliente: x.Utente, Inserzione: label, URL: CampaignURL(c.ChatID, c.Key), Vino: wineWithVintage(x.Vino, x.Vintage), Qta: x.Qta, Prezzo: x.Prezzo,
 			Provincia: loc.provincia, Citta: loc.citta}
 		lines = append(lines, l)
 		if _, seen := clienti[l.Cliente]; !seen {

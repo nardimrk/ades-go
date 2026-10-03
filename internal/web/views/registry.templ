@@ -25,27 +25,66 @@ func selURL(path string, ids []string) string {
 // ConsegnePage: campaigns grouped by month of publication, shown as a
 // timeline or as cards (toggle, remembered in the browser). Ticking campaigns
 // refreshes the summary bar; its button opens the deliveries page.
-templ ConsegnePage(months []service.ConsegneMonth, selected map[string]bool, result *service.Consegne, ids []string) {
+// consegneTabURL keeps the selection when switching tab.
+func consegneTabURL(ids []string, manual bool) string {
+	u := selURL("/consegne", ids)
+	if manual {
+		if strings.HasSuffix(u, "?") {
+			return u + "vista=ordini"
+		}
+		return u + "&vista=ordini"
+	}
+	return u
+}
+
+// ConsegnePage: the listings with an order (Inserzioni tab, default) or the
+// manual orders (Ordini tab), as a timeline to select from.
+templ ConsegnePage(months []service.ConsegneMonth, selected map[string]bool, result *service.Consegne, ids []string, manual bool, hidden []service.ConsegneCampaign) {
 	@Layout("Consegne", "consegne") {
 		<div class="row between">
 			<h2>Consegne</h2>
-			<div class="seg" role="group" aria-label="Vista">
-				<button type="button" class="seg-btn active" data-view="timeline">Timeline</button>
-				<button type="button" class="seg-btn" data-view="cards">Schede</button>
-			</div>
+			<nav class="seg" aria-label="Inserzioni o ordini manuali">
+				<a href={ templ.URL(consegneTabURL(ids, false)) } class={ "seg-btn", templ.KV("active", !manual) }
+					if !manual {
+						aria-current="page"
+					}
+				>Inserzioni</a>
+				<a href={ templ.URL(consegneTabURL(ids, true)) } class={ "seg-btn", templ.KV("active", manual) }
+					if manual {
+						aria-current="page"
+					}
+				>Ordini</a>
+			</nav>
 		</div>
 		if len(months) == 0 {
-			@Alert("info", "Nessuna inserzione con un ordine collegato.")
+			if manual {
+				@Alert("info", "Nessun ordine manuale.")
+			} else {
+				@Alert("info", "Nessuna inserzione con un ordine collegato.")
+			}
+			@ConsegneSelBar(result, ids)
 		} else {
 			<form id="consegne-form" hx-get="/consegne/result" hx-target="#sel-bar" hx-swap="outerHTML" hx-trigger="change" hx-disinherit="*">
+				if manual {
+					<input type="hidden" name="vista" value="ordini"/>
+				}
+				// selected in the other tab: stay in the selection
+				for _, c := range hidden {
+					<input type="hidden" name="sel" value={ c.ID }/>
+				}
 				<input type="search" placeholder="Filtra Consegne…" data-filter=".dl-item" class="narrow list-filter"/>
-				<div class="consegne view-timeline" data-view-root="consegne">
+				<div class="consegne view-timeline">
 					for _, m := range months {
 						<section class="month" data-filter-group=".dl-item">
 							<header class="month-head">
 								<h3>{ monthLabel(m.Year, m.Month) }</h3>
 								<span class="muted">
-									{ plural(len(m.Campaigns), "inserzione", "inserzioni") } · { plural(m.Clienti, "cliente", "clienti") } · { itoa(m.Bottiglie) } bott. · € { money(m.Totale) }
+									if manual {
+										{ plural(len(m.Campaigns), "ordine", "ordini") }
+									} else {
+										{ plural(len(m.Campaigns), "inserzione", "inserzioni") }
+									}
+									· { plural(m.Clienti, "cliente", "clienti") } · { itoa(m.Bottiglie) } bott. · € { money(m.Totale) }
 								</span>
 								<button type="button" class="btn small" data-check-all>Seleziona mese</button>
 							</header>
@@ -117,7 +156,7 @@ templ ConsegneSelBar(r *service.Consegne, ids []string) {
 	<div id="sel-bar" class="sel-bar">
 		if len(r.Selected) > 0 {
 			<span>
-				<b>{ plural(len(r.Selected), "inserzione", "inserzioni") }</b> · { plural(r.Clienti, "cliente", "clienti") } · { itoa(r.Bottiglie) } bott. · € { money(r.Totale) }
+				<b>{ plural(len(r.Selected), "selezionato", "selezionati") }</b> · { plural(r.Clienti, "cliente", "clienti") } · { itoa(r.Bottiglie) } bott. · € { money(r.Totale) }
 			</span>
 			<a href={ templ.URL(selURL("/consegne/show", ids)) } class="btn primary small">Vedi consegne →</a>
 		}
