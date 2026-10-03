@@ -521,14 +521,14 @@ templ ReplyItem(d InserzioniData, r service.ReplyView, oob bool) {
 						<input type="hidden" name="chat" value={ d.SelChat }/>
 						<input type="hidden" name="c" value={ d.SelKey }/>
 						// pen + x: the order was corrected by hand; tap to undo it
-						<button type="submit" class="btn small btn-fix fix-undo" name="op" value="reset" title="Annulla correzione" aria-label="Annulla correzione">
+						<button type="submit" class="tool-pill pill-fix fix-undo" name="op" value="reset" title="Annulla correzione" aria-label="Annulla correzione">
 							@IconPen()
 							<span class="fix-x">@IconX()</span>
 						</button>
 					</form>
 				}
 				<button
-				class="icon reply-move"
+				class="tool-pill pill-move reply-move"
 				title="Sposta in un'altra inserzione"
 				aria-label="Sposta in un'altra inserzione"
 				hx-get={ "/replies/" + i64(r.ID) + "/move?" + reviewVals(d) }
@@ -536,7 +536,7 @@ templ ReplyItem(d InserzioniData, r service.ReplyView, oob bool) {
 				hx-swap="innerHTML"
 			>@IconMove()</button>
 			<button
-				class="icon danger"
+				class="tool-pill pill-del"
 				title="Elimina messaggio"
 				aria-label="Elimina messaggio"
 				hx-delete={ "/replies/" + i64(r.ID) }
