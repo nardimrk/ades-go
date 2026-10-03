@@ -1023,3 +1023,6 @@ body:has(.sel-bar:not(:empty)) .fab-menu { bottom: calc(max(.75rem, env(safe-are
 .link-camp:first-child { border-top: 0; }
 .link-camp-head { display: flex; gap: .6rem; align-items: baseline; font-size: .9rem; }
 .link-opt { padding: .35rem .6rem; min-height: 0; gap: .5rem; font-size: .9rem; }
+
+/* the inserzione's number (INS0123) */
+.listing-number { display: inline-block; margin-right: .5rem; padding: 0 .45rem; border: 1px solid var(--border-strong); border-radius: 999px; font-size: .8rem; font-weight: 600; color: var(--muted); }

@@ -615,3 +615,58 @@ func TestManualLink(t *testing.T) {
 		t.Fatalf("still linked: %+v", del["A"])
 	}
 }
+
+// Cleanup: a message stored twice keeps one copy; reposts within 15 days are
+// merged into the first post (replies follow it); the same wine sold again
+// months later stays a separate inserzione; numbers are INS0001….
+func TestCleanupListings(t *testing.T) {
+	ctx := context.Background()
+	store, err := db.Open(filepath.Join(t.TempDir(), "wine.db"))
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer store.Close()
+	svc := New(store, &config.Config{}, nil)
+	const chat = "1@g.us"
+	day := int64(86400)
+	ins := func(id, body string, ts int64) {
+		if err := store.InsertListing(ctx, db.Listing{MsgID: id, ChatID: chat, AuthorID: "owner", Body: body, Timestamp: ts}); err != nil {
+			t.Fatal(err)
+		}
+	}
+	ins("true_"+chat+"_S1_a@c.us", "Albert Grivault Disponibili:\nA. 30 x Meursault 2023 a 67,50€", 1000)
+	ins("false_"+chat+"_S1_b@lid", "Albert Grivault Disponibili:\nA. 30 x Meursault 2023 a 67,50€", 1001) // same message
+	ins("false_"+chat+"_S2_b@lid", "Albert Grivault Disponibili:\nA. 18 x Meursault 2023 a 67,50€", 2000) // repost
+	ins("false_"+chat+"_S3_b@lid", "Albert Grivault Disponibili:\nA. 24 x Meursault 2025 a 70€", 1000+200*day) // sold again
+	lid := "false_" + chat + "_S2_b@lid"
+	store.InsertReply(ctx, db.Reply{MsgID: "R1", ListingMsgID: &lid, ChatID: chat, AuthorID: "u1", Body: "2A", Timestamp: 2100})
+
+	rep, err := svc.CleanupListings(ctx, false)
+	if err != nil || rep.Duplicates != 1 || rep.MergedGroups != 1 || rep.MergedPosts != 1 {
+		t.Fatalf("dry run = %+v, %v", rep, err)
+	}
+	if n := countRows(t, store, "SELECT COUNT(*) FROM listings"); n != 4 {
+		t.Fatalf("dry run wrote: %d listings", n)
+	}
+	if _, err := svc.CleanupListings(ctx, true); err != nil {
+		t.Fatal(err)
+	}
+	if n := countRows(t, store, "SELECT COUNT(*) FROM listings"); n != 2 {
+		t.Fatalf("listings after cleanup = %d, want 2", n)
+	}
+	if n := countRows(t, store, `SELECT COUNT(*) FROM listings WHERE listing_number = 'INS0001' AND body LIKE '%30 x%' AND last_body LIKE '%18 x%' AND initial_qty LIKE '%"A":30%'`); n != 1 {
+		t.Fatal("first post not kept with its original text, latest edit and initial quantity")
+	}
+	if n := countRows(t, store, `SELECT COUNT(*) FROM replies r JOIN listings l ON l.msg_id = r.listing_msg_id WHERE l.listing_number = 'INS0001'`); n != 1 {
+		t.Fatal("the reply did not follow the merged post")
+	}
+}
+
+func countRows(t *testing.T, st *db.Store, q string) int {
+	t.Helper()
+	var n int
+	if err := st.DB.QueryRow(q).Scan(&n); err != nil {
+		t.Fatal(err)
+	}
+	return n
+}

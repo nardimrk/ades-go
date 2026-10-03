@@ -69,6 +69,10 @@ func (c *Collector) Handle(ctx context.Context, m *Message) error {
 		sum := md5.Sum([]byte(m.Body))
 		m.ID = fmt.Sprintf("%s_%d_%s", m.ChatID, m.Timestamp, hex.EncodeToString(sum[:])[:10])
 	}
+	if c.store.HasMessage(ctx, m.ID) {
+		log.Printf("[SKIP]    message already stored under another id (%s)", m.Source)
+		return nil
+	}
 	authorName := m.Author
 	if authorName == "" {
 		authorName = m.AuthorID

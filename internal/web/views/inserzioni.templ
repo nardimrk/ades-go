@@ -124,6 +124,9 @@ templ InserzioniList(d InserzioniData) {
 								<span class="dl-main">
 									<b class="dl-title" title={ r.DisplayTitle }>{ r.DisplayTitle }</b>
 									<span class="muted dl-group">
+										if r.Number != "" {
+											{ r.Number } ·
+										}
 										{ r.ChatName }
 										if r.LastData != "" && dateIT(r.LastData) != dateIT(r.Data) {
 											· agg. { dateIT(r.LastData) }
@@ -224,6 +227,9 @@ templ Conversation(d InserzioniData) {
 				</form>
 				@deliveryField(d)
 				<div class="listing-box">
+					if d.Selected.Number != "" {
+						<span class="listing-number">{ d.Selected.Number }</span>
+					}
 					<strong>{ noEmoji(d.Selected.Venditore) }</strong> · { d.Selected.Data }
 					<div class="listing-text">{ noEmoji(d.Selected.Testo) }</div>
 				</div>

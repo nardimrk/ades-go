@@ -221,6 +221,16 @@ func (s *Service) ImportGroups(ctx context.Context, groups []MergeGroup, chatID,
 		for _, g := range groups {
 			ts := importTS(g.Canonical)
 			msgID := importMsgID(chatID, g.Canonical.Index, ts)
+			// already stored (received live, or a previous import, whose
+			// times may be off by the time zone): its replies go there
+			if id, ok := existingListing(ctx, tx, chatID, g.Canonical.Body, ts); ok {
+				for _, r := range append(append([]ImportItem(nil), g.Duplicates...), g.Replies...) {
+					if err := insertReply(r, id); err != nil {
+						return err
+					}
+				}
+				continue
+			}
 			f := textutil.ParseImportFields(g.Canonical.Body)
 			if _, err := tx.ExecContext(ctx, `INSERT OR IGNORE INTO listings
 				(msg_id, chat_id, chat_name, author_name, body, original_body, wine_name, price, vintage, timestamp, created_at)
@@ -242,7 +252,29 @@ func (s *Service) ImportGroups(ctx context.Context, groups []MergeGroup, chatID,
 		}
 		return nil
 	})
+	if err == nil {
+		err = s.Store.AssignListingNumbers(ctx)
+	}
 	return listings, replies, err
+}
+
+// existingListing finds a listing of the chat with the same text posted
+// within 3 hours of ts (an import may be shifted by the time zone).
+func existingListing(ctx context.Context, tx *sql.Tx, chatID, body string, ts int64) (string, bool) {
+	rows, err := tx.QueryContext(ctx, `SELECT msg_id, COALESCE(original_body, body, '') FROM listings
+		WHERE chat_id = ? AND CAST(strftime('%s', created_at) AS INTEGER) BETWEEN ? AND ?`, chatID, ts-3*3600, ts+3*3600)
+	if err != nil {
+		return "", false
+	}
+	defer rows.Close()
+	want := strings.Join(strings.Fields(body), " ")
+	for rows.Next() {
+		var id, b string
+		if rows.Scan(&id, &b) == nil && strings.Join(strings.Fields(b), " ") == want {
+			return id, true
+		}
+	}
+	return "", false
 }
 
 // resolveImportAuthor finds a user by display name, or creates a stable

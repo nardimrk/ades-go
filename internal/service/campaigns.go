@@ -28,6 +28,7 @@ type ListingRow struct {
 	Consegna    string // estimated delivery "YYYY-MM-DD" ("" = not set)
 	Risposte    int
 	Campaign    string
+	Number      string // listing_number, "INS0123"
 }
 
 type Campaign struct {
@@ -45,6 +46,7 @@ type Campaign struct {
 	DisplayTitle string
 	MaxTS        int64
 	QuotationIDs []int64
+	Number       string // the first post's listing_number
 }
 
 func (c Campaign) Time() time.Time {
@@ -59,7 +61,7 @@ func (s *Service) ListingRows(ctx context.Context) ([]ListingRow, error) {
 	rows, err := s.db().QueryContext(ctx, `
 		SELECT l.msg_id, COALESCE(l.timestamp,0), COALESCE(l.created_at,''), COALESCE(l.chat_id,''),
 		       COALESCE(l.author_name,''), COALESCE(l.body,''), l.quotation_id, COALESCE(l.title,''),
-		       COALESCE(l.consegna_stimata,''), COUNT(r.id)
+		       COALESCE(l.consegna_stimata,''), COUNT(r.id), COALESCE(l.listing_number,'')
 		FROM listings l
 		LEFT JOIN replies r ON r.listing_msg_id = l.msg_id
 		GROUP BY l.id ORDER BY l.timestamp ASC, l.id ASC`)
@@ -71,7 +73,7 @@ func (s *Service) ListingRows(ctx context.Context) ([]ListingRow, error) {
 	for rows.Next() {
 		var r ListingRow
 		var qid sql.NullInt64
-		if err := rows.Scan(&r.MsgID, &r.TS, &r.Data, &r.ChatID, &r.Venditore, &r.Testo, &qid, &r.Title, &r.Consegna, &r.Risposte); err != nil {
+		if err := rows.Scan(&r.MsgID, &r.TS, &r.Data, &r.ChatID, &r.Venditore, &r.Testo, &qid, &r.Title, &r.Consegna, &r.Risposte, &r.Number); err != nil {
 			return nil, err
 		}
 		if qid.Valid {
@@ -111,7 +113,7 @@ func GroupCampaigns(rows []ListingRow) []Campaign {
 		if !ok {
 			i = len(out)
 			idx[k] = i
-			out = append(out, Campaign{ChatID: r.ChatID, Key: r.Campaign, Data: r.Data, Venditore: r.Venditore})
+			out = append(out, Campaign{ChatID: r.ChatID, Key: r.Campaign, Data: r.Data, Venditore: r.Venditore, Number: r.Number})
 		}
 		c := &out[i]
 		c.MsgIDs = append(c.MsgIDs, r.MsgID)

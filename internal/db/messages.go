@@ -105,7 +105,10 @@ func (s *Store) InsertListing(ctx context.Context, l Listing) error {
 		VALUES (?, ?, ?, ?, ?, ?, ?, NULLIF(?, ''), ?, ?, ?, ?, ?, datetime(?, 'unixepoch'))`,
 		l.MsgID, l.ChatID, l.ChatName, l.AuthorID, l.AuthorName, l.Body, l.Body, l.InitialQty,
 		l.WineName, l.Price, l.Vintage, l.MediaURL, l.Timestamp, l.Timestamp)
-	return err
+	if err != nil {
+		return err
+	}
+	return s.AssignListingNumbers(ctx)
 }
 
 // UpdateListing records the seller's edit of a listing ("Disponibili: 11 x
@@ -190,7 +193,7 @@ func (s *Store) BodyMentionsQuotation(ctx context.Context, body string) bool {
 func (s *Store) RecentOwnListings(ctx context.Context, chatID, authorID string, beforeTS int64, maxDays int) ([]Candidate, error) {
 	cutoff := beforeTS - int64(maxDays)*86400
 	return s.candidates(ctx, `
-		SELECT msg_id, COALESCE(body,''), timestamp, '' FROM listings
+		SELECT msg_id, COALESCE(last_body, body, ''), timestamp, '' FROM listings
 		WHERE chat_id = ? AND author_id = ? AND timestamp BETWEEN ? AND ?
 		ORDER BY timestamp DESC`, chatID, authorID, cutoff, beforeTS)
 }
@@ -336,4 +339,23 @@ func (s *Store) OldestMessageID(ctx context.Context, chatID string) (string, int
 			SELECT msg_id, timestamp FROM replies WHERE chat_id = ? AND (msg_id LIKE 'true\_%' ESCAPE '\' OR msg_id LIKE 'false\_%' ESCAPE '\')
 		) ORDER BY timestamp ASC LIMIT 1`, chatID, chatID).Scan(&id, &ts)
 	return id, ts, err == nil
+}
+
+// stanzaRe finds the WhatsApp message id inside a stored id
+// ("false_<chat>_<id>_<author>").
+var stanzaRe = regexp.MustCompile(`^(?:true|false)_[^_]+_([^_]+)_`)
+
+// HasMessage reports whether the WhatsApp message with this stored id is
+// already saved as a listing or a reply, under any author or "from me" flag:
+// the same message can arrive twice (sent from the phone and received).
+func (s *Store) HasMessage(ctx context.Context, msgID string) bool {
+	m := stanzaRe.FindStringSubmatch(msgID)
+	if m == nil {
+		return false
+	}
+	pat := "%\\_" + likeEscape(m[1]) + "\\_%"
+	var n int
+	s.DB.QueryRowContext(ctx, `SELECT (SELECT COUNT(*) FROM listings WHERE msg_id != ? AND msg_id LIKE ? ESCAPE '\')
+		+ (SELECT COUNT(*) FROM replies WHERE msg_id != ? AND msg_id LIKE ? ESCAPE '\')`, msgID, pat, msgID, pat).Scan(&n)
+	return n > 0
 }

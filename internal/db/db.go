@@ -206,6 +206,8 @@ var addColumns = []string{
 	// takes that listing's estimated delivery and counts in its stock)
 	"ALTER TABLE quotation_items ADD COLUMN linked_quotation_id INTEGER",
 	"ALTER TABLE quotation_items ADD COLUMN linked_option TEXT",
+	// the inserzione's number ("INS0123"), unique, in posting order
+	"ALTER TABLE listings ADD COLUMN listing_number TEXT",
 }
 
 func (s *Store) migrate(ctx context.Context) error {
@@ -234,6 +236,12 @@ func (s *Store) migrate(ctx context.Context) error {
 	// listings stored before original_body existed: their current text is
 	// the best original there is (earlier edits are lost)
 	if _, err := s.DB.ExecContext(ctx, "UPDATE listings SET original_body = body WHERE original_body IS NULL"); err != nil {
+		return err
+	}
+	if err := s.AssignListingNumbers(ctx); err != nil {
+		return err
+	}
+	if _, err := s.DB.ExecContext(ctx, "CREATE UNIQUE INDEX IF NOT EXISTS idx_listings_number ON listings(listing_number)"); err != nil {
 		return err
 	}
 	if err := s.ensureDedupIndexes(ctx); err != nil {
@@ -357,4 +365,35 @@ func (s *Store) SetMeta(ctx context.Context, key, value string) error {
 	_, err := s.DB.ExecContext(ctx, `INSERT INTO app_meta (key, value) VALUES (?, ?)
 		ON CONFLICT(key) DO UPDATE SET value = excluded.value`, key, value)
 	return err
+}
+
+// AssignListingNumbers gives the listings without a number the next ones
+// ("INS0001", "INS0002", …), in posting order.
+func (s *Store) AssignListingNumbers(ctx context.Context) error {
+	var max int
+	if err := s.DB.QueryRowContext(ctx, `SELECT COALESCE(MAX(CAST(substr(listing_number, 4) AS INTEGER)), 0)
+		FROM listings WHERE listing_number LIKE 'INS%'`).Scan(&max); err != nil {
+		return err
+	}
+	rows, err := s.DB.QueryContext(ctx, "SELECT id FROM listings WHERE listing_number IS NULL ORDER BY created_at, id")
+	if err != nil {
+		return err
+	}
+	var ids []int64
+	for rows.Next() {
+		var id int64
+		if err := rows.Scan(&id); err != nil {
+			rows.Close()
+			return err
+		}
+		ids = append(ids, id)
+	}
+	rows.Close()
+	for _, id := range ids {
+		max++
+		if _, err := s.DB.ExecContext(ctx, "UPDATE listings SET listing_number = ? WHERE id = ?", fmt.Sprintf("INS%04d", max), id); err != nil {
+			return err
+		}
+	}
+	return nil
 }
