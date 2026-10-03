@@ -3,6 +3,7 @@ package service
 import (
 	"context"
 	"database/sql"
+	"encoding/json"
 	"errors"
 	"fmt"
 	"sort"
@@ -868,7 +869,7 @@ type OptionStock struct {
 	Wine     string
 	Ordered  int  // bottles ordered by everyone, at any time (cases count their bottles)
 	HasCount bool // the listing states how many bottles it offers
-	Offered  int  // the count in the listing as first posted
+	Offered  int  // the initial quantity of the listing
 }
 
 // Remaining is what is left: offered minus ordered (negative = ordered
@@ -884,41 +885,28 @@ func (o OptionStock) Excess() int {
 }
 
 // optionStock sums, for each option, every bottle ordered (no matter when)
-// and compares it with the quantity of the listing as first posted: later
-// edits and reposts of the listing are ignored.
+// and compares it with the initial quantity of the order's first listing
+// (as first posted, or as corrected on the listing page).
 func (s *Service) optionStock(ctx context.Context, quotationID int64, qsel []Selection) ([]OptionStock, error) {
-	rows, err := s.db().QueryContext(ctx, `SELECT COALESCE(original_body, body, '') FROM listings
-		WHERE quotation_id = ? ORDER BY created_at, id`, quotationID)
-	if err != nil {
-		return nil, err
-	}
 	type stock struct {
 		wine  string
 		count int
 	}
 	first := map[string]stock{}
-	for rows.Next() {
-		var body string
-		if err := rows.Scan(&body); err != nil {
-			rows.Close()
+	ids, err := s.postIDs(ctx, "SELECT msg_id FROM listings WHERE quotation_id = ? ORDER BY created_at, id", quotationID)
+	if err != nil {
+		return nil, err
+	}
+	if len(ids) > 0 {
+		opts, err := s.initialOptions(ctx, ids)
+		if err != nil {
 			return nil, err
 		}
-		opts := textutil.ParseOptions(body)
-		if len(opts) == 0 {
-			opts, _ = textutil.ParseSingleWine(body)
-		}
 		for _, o := range opts {
-			if o.Case || o.Quantity <= 0 {
-				continue
-			}
-			if _, seen := first[o.Letter]; !seen {
-				first[o.Letter] = stock{o.WineName, o.Quantity}
+			if o.HasQty {
+				first[o.Letter] = stock{o.Wine, o.Qty}
 			}
 		}
-	}
-	rows.Close()
-	if err := rows.Err(); err != nil {
-		return nil, err
 	}
 	if len(first) == 0 {
 		return nil, nil // no listing count to compare with (e.g. a manual order)
@@ -1273,4 +1261,145 @@ func (s *Service) CreateQuotation(ctx context.Context, date, clientName string, 
 		return err
 	})
 	return num, err
+}
+
+// InitialOption is an option of a listing with the bottles it offered when
+// first posted (or as corrected by hand).
+type InitialOption struct {
+	Letter string
+	Wine   string
+	Qty    int
+	HasQty bool // a quantity is known (from the listing or set by hand)
+}
+
+// initialOptions returns the options of a campaign's posts (msgIDs, oldest
+// first) with their initial quantity: set by hand on the first post
+// (initial_qty), else the first count the seller gave for that option, in the
+// earliest post that has one (a listing may start without counts). Later
+// counts, and edits of a post, are ignored.
+func (s *Service) initialOptions(ctx context.Context, msgIDs []string) ([]InitialOption, error) {
+	var out []InitialOption
+	idx := map[string]int{}
+	var manual map[string]int
+	for i, id := range msgIDs {
+		var body, saved string
+		if err := s.db().QueryRowContext(ctx, `SELECT COALESCE(original_body, body, ''), COALESCE(initial_qty, '')
+			FROM listings WHERE msg_id = ?`, id).Scan(&body, &saved); err != nil {
+			if errors.Is(err, sql.ErrNoRows) {
+				continue
+			}
+			return nil, err
+		}
+		if i == 0 && saved != "" {
+			json.Unmarshal([]byte(saved), &manual)
+		}
+		opts := textutil.ParseOptions(body)
+		if len(opts) == 0 {
+			opts, _ = textutil.ParseSingleWine(body)
+		}
+		for _, o := range opts {
+			if o.Case {
+				continue
+			}
+			k, ok := idx[o.Letter]
+			if !ok {
+				k = len(out)
+				idx[o.Letter] = k
+				out = append(out, InitialOption{Letter: o.Letter, Wine: o.WineName})
+			}
+			if !out[k].HasQty && o.Quantity > 0 {
+				out[k].Qty, out[k].HasQty = o.Quantity, true
+			}
+		}
+	}
+	for k := range out {
+		if n, ok := manual[out[k].Letter]; ok {
+			out[k].Qty, out[k].HasQty = n, true
+		}
+	}
+	return out, nil
+}
+
+// campaignPosts returns the campaign's posts, oldest first.
+func (s *Service) campaignPosts(ctx context.Context, c *Campaign) ([]string, error) {
+	if c == nil || len(c.MsgIDs) == 0 {
+		return nil, nil
+	}
+	ph := strings.TrimSuffix(strings.Repeat("?,", len(c.MsgIDs)), ",")
+	args := make([]any, len(c.MsgIDs))
+	for i, id := range c.MsgIDs {
+		args[i] = id
+	}
+	return s.postIDs(ctx, "SELECT msg_id FROM listings WHERE msg_id IN ("+ph+") ORDER BY created_at, id", args...)
+}
+
+func (s *Service) postIDs(ctx context.Context, q string, args ...any) ([]string, error) {
+	rows, err := s.db().QueryContext(ctx, q, args...)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+	var ids []string
+	for rows.Next() {
+		var id string
+		if err := rows.Scan(&id); err != nil {
+			return nil, err
+		}
+		ids = append(ids, id)
+	}
+	return ids, rows.Err()
+}
+
+// CampaignInitialStock returns the initial quantity of each option of the
+// campaign (shown and editable on the listing page).
+func (s *Service) CampaignInitialStock(ctx context.Context, c *Campaign) ([]InitialOption, error) {
+	ids, err := s.campaignPosts(ctx, c)
+	if err != nil || len(ids) == 0 {
+		return nil, err
+	}
+	return s.initialOptions(ctx, ids)
+}
+
+// SetInitialQty corrects by hand the initial quantity of one option of the
+// campaign's listing; an empty value clears it.
+func (s *Service) SetInitialQty(ctx context.Context, c *Campaign, letter, value string) error {
+	ids, err := s.campaignPosts(ctx, c)
+	if err != nil {
+		return err
+	}
+	if len(ids) == 0 {
+		return errors.New("inserzione non trovata")
+	}
+	id := ids[0]
+	opts, err := s.initialOptions(ctx, ids)
+	if err != nil {
+		return err
+	}
+	qty := map[string]int{}
+	found := false
+	for _, o := range opts {
+		if o.HasQty {
+			qty[o.Letter] = o.Qty
+		}
+		found = found || o.Letter == letter
+	}
+	if !found {
+		return fmt.Errorf("opzione %q non trovata nell'inserzione", letter)
+	}
+	value = strings.TrimSpace(value)
+	if value == "" {
+		delete(qty, letter)
+	} else {
+		n, err := strconv.Atoi(value)
+		if err != nil || n < 0 || n > 9999 {
+			return fmt.Errorf("quantità non valida: %q", value)
+		}
+		qty[letter] = n
+	}
+	b, err := json.Marshal(qty)
+	if err != nil {
+		return err
+	}
+	_, err = s.db().ExecContext(ctx, "UPDATE listings SET initial_qty = ? WHERE msg_id = ?", string(b), id)
+	return err
 }

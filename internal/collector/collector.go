@@ -7,6 +7,7 @@ import (
 	"context"
 	"crypto/md5"
 	"encoding/hex"
+	"encoding/json"
 	"fmt"
 	"log"
 	"strings"
@@ -90,8 +91,15 @@ func (c *Collector) Handle(ctx context.Context, m *Message) error {
 	switch kind {
 	case classify.Create:
 		f := c.llm.ParseListing(ctx, m.Body)
+		initial := ""
+		if q := textutil.InitialQuantities(m.Body); len(q) > 0 {
+			if b, err := json.Marshal(q); err == nil {
+				initial = string(b)
+			}
+		}
 		if err := c.store.InsertListing(ctx, db.Listing{
-			MsgID: m.ID, ChatID: m.ChatID, ChatName: m.ChatName,
+			InitialQty: initial,
+			MsgID:      m.ID, ChatID: m.ChatID, ChatName: m.ChatName,
 			AuthorID: m.AuthorID, AuthorName: authorName, Body: m.Body,
 			WineName: f.WineName, Price: f.Price, Vintage: f.Vintage,
 			MediaURL: m.MediaURL, Timestamp: m.Timestamp,

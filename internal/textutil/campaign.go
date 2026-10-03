@@ -562,3 +562,22 @@ var quotRe = pyRe(`\b\d{2}S\d{4}\b`)
 
 // MentionsQuotationNumber reports a quotation number like 26S0001 in body.
 func MentionsQuotationNumber(body string) bool { return quotRe.MatchString(body) }
+
+// InitialQuantities reads how many bottles a listing offers for each option
+// ("A. 36 x Château Langoa Barton 2022 a 47,50€" → A: 36). Options without a
+// count, and case options, are left out.
+func InitialQuantities(body string) map[string]int {
+	opts := ParseOptions(body)
+	if len(opts) == 0 {
+		opts, _ = ParseSingleWine(body)
+	}
+	out := map[string]int{}
+	for _, o := range opts {
+		if !o.Case && o.Quantity > 0 {
+			if _, seen := out[o.Letter]; !seen {
+				out[o.Letter] = o.Quantity
+			}
+		}
+	}
+	return out
+}

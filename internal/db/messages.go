@@ -21,6 +21,7 @@ type Listing struct {
 	Vintage    *int
 	MediaURL   *string
 	Timestamp  int64
+	InitialQty string // JSON {"A":36}: bottles offered per option, "" = none
 }
 
 type Reply struct {
@@ -99,24 +100,25 @@ func (s *Store) FillPhones(ctx context.Context) (int64, error) {
 func (s *Store) InsertListing(ctx context.Context, l Listing) error {
 	_, err := s.DB.ExecContext(ctx, `
 		INSERT OR IGNORE INTO listings
-		(msg_id, chat_id, chat_name, author_id, author_name, body, original_body,
+		(msg_id, chat_id, chat_name, author_id, author_name, body, original_body, initial_qty,
 		 wine_name, price, vintage, media_url, timestamp, created_at)
-		VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, datetime(?, 'unixepoch'))`,
-		l.MsgID, l.ChatID, l.ChatName, l.AuthorID, l.AuthorName, l.Body, l.Body,
+		VALUES (?, ?, ?, ?, ?, ?, ?, NULLIF(?, ''), ?, ?, ?, ?, ?, datetime(?, 'unixepoch'))`,
+		l.MsgID, l.ChatID, l.ChatName, l.AuthorID, l.AuthorName, l.Body, l.Body, l.InitialQty,
 		l.WineName, l.Price, l.Vintage, l.MediaURL, l.Timestamp, l.Timestamp)
 	return err
 }
 
-// UpdateListing refreshes a listing in place when the owner reposts/edits it,
-// keeping the replies already linked to it. media_url keeps the old value when
-// the repost has none.
+// UpdateListing records the seller's edit of a listing ("Disponibili: 11 x
+// …" during the sale). The listing keeps its original text, wine and
+// quantities: the edit only goes to last_body, and the time of the edit is
+// kept (it orders the campaigns). media_url keeps the old value when the
+// edit has none.
 func (s *Store) UpdateListing(ctx context.Context, listingMsgID string, l Listing) error {
 	_, err := s.DB.ExecContext(ctx, `
 		UPDATE listings
-		SET body = ?, wine_name = ?, price = ?, vintage = ?,
-		    media_url = COALESCE(?, media_url), timestamp = ?
+		SET last_body = ?, media_url = COALESCE(?, media_url), timestamp = ?
 		WHERE msg_id = ?`,
-		l.Body, l.WineName, l.Price, l.Vintage, l.MediaURL, l.Timestamp, listingMsgID)
+		l.Body, l.MediaURL, l.Timestamp, listingMsgID)
 	return err
 }
 

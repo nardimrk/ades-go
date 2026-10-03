@@ -63,8 +63,13 @@ func TestPipeline(t *testing.T) {
 	if n := count(t, st, "SELECT COUNT(*) FROM listings"); n != 1 {
 		t.Errorf("listings = %d, want 1", n)
 	}
-	if n := count(t, st, "SELECT COUNT(*) FROM listings WHERE body LIKE '%4x Pinot%' AND timestamp = 2000"); n != 1 {
-		t.Errorf("listing not updated in place")
+	// the seller's edit is recorded, but the listing keeps its original text
+	// and initial quantities
+	if n := count(t, st, "SELECT COUNT(*) FROM listings WHERE body LIKE '%6x Pinot%' AND last_body LIKE '%4x Pinot%' AND timestamp = 2000"); n != 1 {
+		t.Errorf("edit not recorded, or the original text was overwritten")
+	}
+	if n := count(t, st, `SELECT COUNT(*) FROM listings WHERE initial_qty LIKE '%"A":6%'`); n != 1 {
+		t.Errorf("initial quantity of A not saved as 6")
 	}
 	if n := count(t, st, "SELECT COUNT(*) FROM replies"); n != 3 {
 		t.Errorf("replies = %d, want 3", n)

@@ -529,3 +529,40 @@ func TestOptionStock(t *testing.T) {
 		t.Fatalf("after an edit, offered = %d; want the original 3", d.Stock[0].Offered)
 	}
 }
+
+// Initial quantity: the first count the seller gave for each option (the
+// first post may have none), later counts ignored; a value set by hand wins.
+func TestInitialStock(t *testing.T) {
+	ctx := context.Background()
+	store, err := db.Open(filepath.Join(t.TempDir(), "wine.db"))
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer store.Close()
+	svc := New(store, &config.Config{}, nil)
+	const chat = "1@g.us"
+	for i, body := range []string{
+		"Disponibili:\nA. Champagne Theophile a 33€\nB. 12x Brut a 30€",
+		"Disponibili:\nA. 174 x Champagne Theophile a 33€\nB. 12x Brut a 30€",
+		"Disponibili:\nA. 71 x Champagne Theophile a 33€\nB. 3x Brut a 30€",
+	} {
+		if err := store.InsertListing(ctx, db.Listing{MsgID: "L" + itoa(i), ChatID: chat, AuthorID: "owner", Body: body, Timestamp: int64(1000 + i*100)}); err != nil {
+			t.Fatal(err)
+		}
+	}
+	rows, _ := svc.InserzioniList(ctx, "", "")
+	if len(rows) != 1 {
+		t.Fatalf("campaigns = %d, want 1", len(rows))
+	}
+	camp := &rows[0].Campaign
+	got, err := svc.CampaignInitialStock(ctx, camp)
+	if err != nil || len(got) != 2 || got[0].Qty != 174 || got[1].Qty != 12 {
+		t.Fatalf("initial = %+v, %v", got, err)
+	}
+	if err := svc.SetInitialQty(ctx, camp, "A", "200"); err != nil {
+		t.Fatal(err)
+	}
+	if got, _ = svc.CampaignInitialStock(ctx, camp); got[0].Qty != 200 || got[1].Qty != 12 {
+		t.Fatalf("after setting A=200: %+v", got)
+	}
+}

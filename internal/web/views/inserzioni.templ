@@ -14,6 +14,7 @@ type InserzioniData struct {
 	Replies  []service.ReplyView
 	Clients  []string // customer names for "Aggiungi risposta"
 	Catalog  []service.CatalogEntry // Prodotti, for new options in the confirm modal
+	Initial  []service.InitialOption // the listing's initial quantity per option
 
 	TitleJob   service.TitleStatus
 	LLMEnabled bool
@@ -226,6 +227,7 @@ templ Conversation(d InserzioniData) {
 					<strong>{ noEmoji(d.Selected.Venditore) }</strong> · { d.Selected.Data }
 					<div class="listing-text">{ noEmoji(d.Selected.Testo) }</div>
 				</div>
+				@InitialStock(d)
 			</section>
 			<section class="conv-replies">
 				@OrderMismatch(d.Review)
@@ -327,6 +329,41 @@ templ OrderMismatch(rv *service.CampaignReview) {
 			</ul>
 			<span>Le risposte confermate userebbero le opzioni e i prezzi dell'ordine: non confermare finché l'ordine non è corretto.</span>
 		</div>
+	}
+}
+
+// InitialStock: the bottles the listing offered at first, per option; every
+// field saves by itself (the order page compares the orders with these).
+templ InitialStock(d InserzioniData) {
+	if len(d.Initial) > 0 {
+		<fieldset class="initial-stock" data-autosave-who={ d.Selected.DisplayTitle }>
+			<legend>Quantità iniziale disponibile</legend>
+			for _, o := range d.Initial {
+				<label class="initial-row">
+					<span class="initial-opt">{ o.Letter }</span>
+					<span class="initial-wine">{ noEmoji(o.Wine) }</span>
+					<input
+						type="number"
+						name="value"
+						min="0"
+						max="9999"
+						step="1"
+						inputmode="numeric"
+						if o.HasQty {
+							value={ itoa(o.Qty) }
+						}
+						placeholder="–"
+						aria-label={ "Quantità iniziale " + o.Letter }
+						data-autosave
+						hx-post="/inserzioni/stock"
+						hx-trigger="change"
+						hx-swap="none"
+						hx-vals={ templ.JSONString(map[string]string{"chat": d.SelChat, "c": d.SelKey, "letter": o.Letter}) }
+					/>
+				</label>
+			}
+			<p class="muted initial-note">Le modifiche di Ale durante la vendita non cambiano queste quantità. Si salvano da sole quando esci dal campo.</p>
+		</fieldset>
 	}
 }
 

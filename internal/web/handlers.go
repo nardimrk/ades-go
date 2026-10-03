@@ -41,6 +41,9 @@ func (s *Server) loadSelection(r *http.Request, d *views.InserzioniData) error {
 	if _, d.Clients, err = s.svc.ClientOptions(r.Context()); err != nil {
 		return err
 	}
+	if d.Initial, err = s.svc.CampaignInitialStock(r.Context(), camp); err != nil {
+		return err
+	}
 	d.LLMEnabled = s.reviews.Enabled()
 	d.ReviewJob = s.reviews.Status()
 	d.Review, err = s.svc.CampaignReview(r.Context(), camp)
@@ -195,6 +198,18 @@ func (s *Server) addReply(w http.ResponseWriter, r *http.Request) {
 	}
 	render(w, r, views.Conversation(d))
 	toast(w, r, "success", "Risposta aggiunta: "+name+" · "+at.Format("02/01/2006 15:04"))
+}
+
+// initialStock saves the initial quantity of one option of the listing.
+func (s *Server) initialStock(w http.ResponseWriter, r *http.Request) {
+	camp, err := s.svc.FindCampaign(r.Context(), r.FormValue("chat"), r.FormValue("c"))
+	if err == nil && camp == nil {
+		err = fmt.Errorf("inserzione non trovata")
+	}
+	if err == nil {
+		err = s.svc.SetInitialQty(r.Context(), camp, r.FormValue("letter"), r.FormValue("value"))
+	}
+	autosaveResult(w, r, err)
 }
 
 // moveReplyForm opens the "Sposta in un'altra inserzione" modal.

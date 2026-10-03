@@ -193,6 +193,13 @@ var addColumns = []string{
 	// the listing as first posted: edits overwrite body, this keeps the
 	// original quantities (the availability the order page compares with)
 	"ALTER TABLE listings ADD COLUMN original_body TEXT",
+	// the bottles offered per option when the listing was first posted
+	// ({"A":36,"B":12}), editable on the listing page; NULL = read them from
+	// original_body
+	"ALTER TABLE listings ADD COLUMN initial_qty TEXT",
+	// the latest edit of the listing by the seller (the listing itself keeps
+	// its original text)
+	"ALTER TABLE listings ADD COLUMN last_body TEXT",
 }
 
 func (s *Store) migrate(ctx context.Context) error {
