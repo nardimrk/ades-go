@@ -552,7 +552,9 @@ button.icon { display: inline-flex; align-items: center; justify-content: center
 /* suggestions inside a modal push the content (no clipping in the scrolling body) */
 .modal-body .combo-list { position: static; margin-top: .35rem; box-shadow: none; flex-basis: 100%; }
 .review-actions { display: flex; gap: .5rem; flex-wrap: wrap; }
-.reply-fixed { display: flex; align-items: center; gap: .5rem; flex-wrap: wrap; margin-top: .35rem; font-size: .9rem; }
+/* the undo-correction button, in the header next to move and delete */
+.reply-fixed { display: inline-flex; align-items: center; margin: 0 .25rem 0 0; }
+.reply-notorder { font-size: 12px; font-weight: 600; color: var(--muted); white-space: nowrap; border: 1px solid var(--border); border-radius: 999px; padding: 0 .45rem; }
 
 .reply-actions { margin-top: .35rem; }
 /* "Conferma come ordine": a centred dialog; on phones a sheet from the bottom */

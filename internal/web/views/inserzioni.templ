@@ -502,12 +502,31 @@ templ ReplyItem(d InserzioniData, r service.ReplyView, oob bool) {
 				if r.Reading != "" {
 					<span class="reply-reading">{ r.Reading }</span>
 				}
-				// hand = added by hand (a correction shows as pen + x below the text)
+				if r.Override == "-" {
+					<span class="reply-notorder">Non è un ordine</span>
+				}
+				// hand = added by hand (a correction shows as pen + x next to the icons)
 				if r.Manual {
 					<span class="reply-flag flag-a" title="Aggiunta a mano" role="img" aria-label="Aggiunta a mano">@IconHand()</span>
 				}
 			</div>
 			<div class="reply-tools">
+				if r.Override != "" {
+					<form
+						class="reply-fixed"
+						hx-post={ "/replies/" + i64(r.ID) + "/order" }
+						hx-swap="none"
+						hx-confirm={ "Annullare la correzione a mano di " + r.Utente + "? Il messaggio verrà riletto dalle regole." }
+					>
+						<input type="hidden" name="chat" value={ d.SelChat }/>
+						<input type="hidden" name="c" value={ d.SelKey }/>
+						// pen + x: the order was corrected by hand; tap to undo it
+						<button type="submit" class="btn small btn-fix fix-undo" name="op" value="reset" title="Annulla correzione" aria-label="Annulla correzione">
+							@IconPen()
+							<span class="fix-x">@IconX()</span>
+						</button>
+					</form>
+				}
 				<button
 				class="icon reply-move"
 				title="Sposta in un'altra inserzione"
@@ -533,24 +552,7 @@ templ ReplyItem(d InserzioniData, r service.ReplyView, oob bool) {
 			<span class="muted reply-time">{ r.Ora }</span>
 		</div>
 		if r.Override != "" {
-			<form
-				class="reply-fixed"
-				hx-post={ "/replies/" + i64(r.ID) + "/order" }
-				hx-swap="none"
-				hx-confirm={ "Annullare la correzione a mano di " + r.Utente + "? Il messaggio verrà riletto dalle regole." }
-			>
-				<input type="hidden" name="chat" value={ d.SelChat }/>
-				<input type="hidden" name="c" value={ d.SelKey }/>
-				// the corrected order is in the green pill; only "not an order" needs words
-				if r.Override == "-" {
-					<span>Non è un ordine</span>
-				}
-				// pen + x: the order was corrected by hand; tap to undo it
-				<button type="submit" class="btn small btn-fix fix-undo" name="op" value="reset" title="Annulla correzione" aria-label="Annulla correzione">
-					@IconPen()
-					<span class="fix-x">@IconX()</span>
-				</button>
-			</form>
+			// corrected by hand: the undo button is in the header
 		} else if r.Check.Open() && d.Review != nil {
 			@ReviewPanel(d, r)
 		} else if !r.Ordine && d.Review != nil && d.Review.Orderable && !d.Review.SellerIDs[r.AuthorID] {
