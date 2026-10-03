@@ -3,6 +3,8 @@ package web
 
 import (
 	"context"
+	"crypto/sha1"
+	"encoding/hex"
 	"io/fs"
 	"log"
 	"net/http"
@@ -22,12 +24,12 @@ import (
 )
 
 type Server struct {
-	cfg    *config.Config
-	store  *db.Store
-	svc    *service.Service
-	wa     *wa.Manager
-	mail   *mail.Mailgun
-	llm    *llm.Client
+	cfg     *config.Config
+	store   *db.Store
+	svc     *service.Service
+	wa      *wa.Manager
+	mail    *mail.Mailgun
+	llm     *llm.Client
 	titles  *service.TitleJob
 	reviews *service.ReviewJob
 
@@ -40,6 +42,7 @@ func New(cfg *config.Config, store *db.Store, svc *service.Service, waMgr *wa.Ma
 }
 
 func (s *Server) Handler(static fs.FS) http.Handler {
+	views.AssetVersion = assetVersion(static)
 	mux := http.NewServeMux()
 	mux.Handle("GET /static/", http.StripPrefix("/static/", http.FileServerFS(static)))
 	mux.HandleFunc("GET /healthz", func(w http.ResponseWriter, _ *http.Request) { w.Write([]byte("ok")) })
@@ -196,4 +199,17 @@ func (s *Server) CleanupLoop(ctx context.Context) {
 			s.uploadsMu.Unlock()
 		}
 	}
+}
+
+// assetVersion is a short hash of the CSS and JS: their links carry it
+// ("/static/app.js?v=…"), so a browser fetches them again after an update
+// instead of keeping an old cached copy.
+func assetVersion(static fs.FS) string {
+	h := sha1.New()
+	for _, name := range []string{"app.css", "app.js"} {
+		if b, err := fs.ReadFile(static, name); err == nil {
+			h.Write(b)
+		}
+	}
+	return hex.EncodeToString(h.Sum(nil))[:10]
 }
