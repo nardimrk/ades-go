@@ -860,7 +860,7 @@ body:has(.sel-bar:not(:empty)) .fab-btn { bottom: calc(max(.75rem, env(safe-area
 /* the items sit on the button's centre and move out along the arc */
 .fab-menu { position: fixed; z-index: 41; right: max(var(--fab-edge), env(safe-area-inset-right)); bottom: calc(var(--fab-edge) - var(--fab-lift, 0px)); width: 60px; height: 60px; pointer-events: none; transition: bottom .2s; }
 body:has(.sel-bar:not(:empty)) .fab-menu { bottom: calc(max(.75rem, env(safe-area-inset-bottom)) + 5.25rem); }
-/* every round is the button's size and colour; the label sits under it */
+/* every round is the button's size and colour (only "Crea ordine" has a label, under it) */
 .fab-item {
   position: absolute; right: 0; bottom: 0; width: 60px; height: 60px; border-radius: 50%;
   display: flex; align-items: center; justify-content: center; text-decoration: none;
@@ -879,10 +879,11 @@ body:has(.sel-bar:not(:empty)) .fab-menu { bottom: calc(max(.75rem, env(safe-are
   text-shadow: 0 1px 3px rgba(0, 0, 0, .6);
 }
 .fab.open .fab-item { opacity: 1; visibility: visible; pointer-events: auto; }
-/* an arc from up to left, lifted so the lowest label stays on screen */
+/* a quarter circle (radius 150px) from up to left: Inserzioni above the
+   button, Ordini at 45°, Consegne level with it */
 .fab.open .fab-item:nth-child(1) { transform: translate(0, -150px); }
-.fab.open .fab-item:nth-child(2) { transform: translate(-110px, -110px); transition-delay: .03s; }
-.fab.open .fab-item:nth-child(3) { transform: translate(-140px, -25px); transition-delay: .06s; }
+.fab.open .fab-item:nth-child(2) { transform: translate(-106px, -106px); transition-delay: .03s; }
+.fab.open .fab-item:nth-child(3) { transform: translate(-150px, 0); transition-delay: .06s; }
 /* "Crea ordine": a smaller round on the same 45° line as Ordini, further out;
    centred on the button's centre like the others (offset by half the size
    difference), so dx = dy keeps it exactly on the diagonal */
@@ -1044,14 +1045,14 @@ body:has(.sel-bar:not(:empty)) .fab-menu { bottom: calc(max(.75rem, env(safe-are
 /* the inserzione's number (INS0123) */
 .link-group { display: inline-flex; align-items: center; gap: .35rem; white-space: nowrap; }
 
-/* Consegne: wines that come from a manual order */
-.table.deliveries tr.manual-line > td { background: var(--info-bg); }
-.table.deliveries tr.manual-line > td:first-child { box-shadow: inset 3px 0 0 var(--info-border); }
+/* Consegne and an order's page: wines that come from a manual order */
+.table tr.manual-line > td { background: var(--info-bg); }
+.table tr.manual-line > td:first-child { box-shadow: inset 3px 0 0 var(--info-border); }
 .manual-badge { display: inline-flex; align-items: center; gap: .25rem; margin-left: .5rem; padding: 0 .5rem; border: 1px solid var(--info-border); border-radius: 999px; background: var(--panel); color: var(--info-text); font-size: .75rem; font-weight: 600; text-decoration: none; white-space: nowrap; }
 .manual-badge .icon-svg { width: 13px; height: 13px; }
 @media (max-width: 720px) {
-  .table.deliveries tr.manual-line { background: var(--info-bg); border-color: var(--info-border); }
-  .table.deliveries tr.manual-line > td { background: transparent; box-shadow: none; }
+  .table tr.manual-line { background: var(--info-bg); border-color: var(--info-border); }
+  .table tr.manual-line > td { background: transparent; box-shadow: none; }
   .manual-badge { margin: .2rem 0 0; }
 }
 /* unlink: the same colours as the link pill next to it */

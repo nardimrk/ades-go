@@ -457,7 +457,7 @@ func TestFillPhones(t *testing.T) {
 	for _, u := range []string{"111@lid", "222@lid", "333@lid", "393471112222@c.us"} {
 		store.UpsertUser(ctx, u, "x")
 	}
-	if err := svc.SetUserField(ctx, "222@lid", "telefono", "+39 333 999 8888"); err != nil {
+	if _, err := svc.SetUserField(ctx, "222@lid", "telefono", "+39 333 999 8888"); err != nil {
 		t.Fatal(err)
 	}
 	n, err := store.FillPhones(ctx)

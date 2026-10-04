@@ -177,6 +177,42 @@ templ PreventivoDetail(d *service.QuotationDetail, catalog []service.CatalogEntr
 		for _, sec := range d.Sections {
 			@CustomerSection(d.Quotation.Number, sec, "", "", "")
 		}
+		@LinkedManualLines(d.Linked)
+	}
+}
+
+// LinkedManualLines: wines of manual orders connected to this order's
+// options (already counted in "ordinate"), in blue as in Consegne; each
+// links to its manual order, where it is edited.
+templ LinkedManualLines(lines []service.LinkedLine) {
+	if len(lines) > 0 {
+		<section class="card linked-manual">
+			<div class="card-head">
+				<b>Da ordini manuali</b>
+				<span class="muted">{ plural(len(lines), "vino collegato", "vini collegati") } a questo ordine · si modificano nel loro ordine</span>
+			</div>
+			<table class="table">
+				<thead><tr><th>Cliente</th><th>Opzione</th><th>Vino</th><th class="num">Qtà</th><th class="num">Prezzo (€)</th><th class="num">Totale (€)</th></tr></thead>
+				<tbody>
+					for _, l := range lines {
+						<tr class="manual-line">
+							<td class="title-cell">
+								{ l.Cliente }
+								<a href={ templ.URL(previewURL(l.Order)) } class="manual-badge" title="Apri l'ordine manuale">
+									@IconHand()
+									<span>Ordine manuale { l.Order }</span>
+								</a>
+							</td>
+							<td>{ l.Opzione }</td>
+							<td>{ noEmoji(l.Vino) }</td>
+							<td class="num">{ itoa(l.Qta) }</td>
+							<td class="num">{ money(l.Prezzo) }</td>
+							<td class="num">{ money(l.Totale()) }</td>
+						</tr>
+					}
+				</tbody>
+			</table>
+		</section>
 	}
 }
 
@@ -328,7 +364,8 @@ templ NewCustomerModal(id string) {
 				<label class="span2">Telefono <input type="tel" name="telefono" autocomplete="off" placeholder="+39…"/></label>
 				<label class="span2">Indirizzo <input type="text" name="indirizzo" autocomplete="off"/></label>
 				<label>Città <input type="text" name="citta" autocomplete="off"/></label>
-				<label>Provincia <input type="text" name="provincia" autocomplete="off"/></label>
+				<label>Provincia <input type="text" name="provincia" autocomplete="off" list="province-list"/></label>
+				@PlaceDatalists()
 				<label>CAP <input type="text" name="cap" autocomplete="off" inputmode="numeric"/></label>
 			</div>
 			<div class="modal-foot">

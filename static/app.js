@@ -348,6 +348,9 @@
       if (!xhr || xhr.status === 0) showToast("Non salvato: connessione assente. Riprova.", "error");
       return;
     }
+    // the server saved it normalized ("pd" → "Padova"): show that
+    var saved = xhr && xhr.getResponseHeader("X-Autosave-Value");
+    if (saved !== null && saved !== undefined) el.value = decodeURIComponent(saved);
     showToast("Salvato: " + autosaveLabel(el));
     // the same field elsewhere in the row (Clienti: the table and the
     // phone's "Dettagli" dialog) shows the new value too

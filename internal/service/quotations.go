@@ -808,6 +808,7 @@ type QuotationDetail struct {
 	Sections  []CustomerSection
 	Single    bool
 	Stock     []OptionStock // per option: ordered, still available
+	Linked    []LinkedLine  // wines of manual orders connected to this order's options
 	// set by the page: the neighbours in the Ordini list and the listing
 	Prev, Next   *QuotationSummary
 	ListingURL   string // "" = manual order (no listing)
@@ -1070,6 +1071,9 @@ func (s *Service) QuotationDetail(ctx context.Context, num string) (*QuotationDe
 	if d.Stock, err = s.optionStock(ctx, q.ID, qsel); err != nil {
 		return nil, err
 	}
+	if d.Linked, err = s.linkedLines(ctx, q.ID); err != nil {
+		return nil, err
+	}
 	d.Single = len(order) == 1
 	for _, utente := range order {
 		sec, err := s.BuildSection(ctx, q, utente, s.DefaultCliente(q, utente, d.Single), rowsBy[utente])
@@ -1079,6 +1083,67 @@ func (s *Service) QuotationDetail(ctx context.Context, num string) (*QuotationDe
 		d.Sections = append(d.Sections, sec)
 	}
 	return d, nil
+}
+
+// LinkedLine: a wine of a manual order connected to an option of a
+// listing's order (counted in that option's stock, delivered with it).
+type LinkedLine struct {
+	Order   string // the manual order, "IMP0553"
+	Cliente string
+	Opzione string // the listing order's option it is connected to
+	Vino    string
+	Qta     int
+	Prezzo  float64
+}
+
+func (l LinkedLine) Totale() float64 { return float64(l.Qta) * l.Prezzo }
+
+// linkedLines returns the wines of manual orders connected to quotationID,
+// by option then order, read from the same lines as Consegne.
+func (s *Service) linkedLines(ctx context.Context, quotationID int64) ([]LinkedLine, error) {
+	type itemKey struct {
+		q   int64
+		opt string
+	}
+	linkedOpt := map[itemKey]string{}
+	rows, err := s.db().QueryContext(ctx, `SELECT quotation_id, UPPER(COALESCE(option,'')), UPPER(COALESCE(linked_option,''))
+		FROM quotation_items WHERE linked_quotation_id = ?`, quotationID)
+	if err != nil {
+		return nil, err
+	}
+	for rows.Next() {
+		var q int64
+		var opt, lopt string
+		if rows.Scan(&q, &opt, &lopt) == nil {
+			linkedOpt[itemKey{q, opt}] = lopt
+		}
+	}
+	if err := rows.Close(); err != nil {
+		return nil, err
+	}
+	if len(linkedOpt) == 0 {
+		return nil, nil
+	}
+	all, err := s.deliverySelections(ctx)
+	if err != nil {
+		return nil, err
+	}
+	var out []LinkedLine
+	for _, x := range all {
+		lopt, ok := linkedOpt[itemKey{x.QuotationID, strings.ToUpper(x.Opzione)}]
+		if !ok || x.Qta <= 0 || x.QuotationID == quotationID {
+			continue
+		}
+		out = append(out, LinkedLine{Order: x.Preventivo, Cliente: x.Utente, Opzione: lopt,
+			Vino: wineWithVintage(x.Vino, x.Vintage), Qta: x.Qta, Prezzo: x.Prezzo})
+	}
+	sort.SliceStable(out, func(i, j int) bool {
+		if out[i].Opzione != out[j].Opzione {
+			return out[i].Opzione < out[j].Opzione
+		}
+		return out[i].Order < out[j].Order
+	})
+	return out, nil
 }
 
 func (s *Service) DefaultCliente(q *Quotation, utente string, single bool) string {

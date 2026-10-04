@@ -3,6 +3,7 @@ package views
 import (
 	"adesgo/internal/service"
 	"fmt"
+	"sort"
 	"strings"
 )
 
@@ -172,6 +173,7 @@ templ ConsegneResult(r *service.Consegne, ids []string) {
 		case len(r.Customers) == 0:
 			@Alert("info", "Nessun vino selezionato dai clienti per le inserzioni scelte.")
 		default:
+			@PlaceDatalists()
 			<div class="row between">
 				<h3>Riepilogo</h3>
 				<a href={ templ.URL(selURL("/consegne/excel", ids)) } hx-boost="false" download class="btn icon-btn" title="Scarica Excel" aria-label="Scarica Excel">@IconExcel()</a>
@@ -245,7 +247,7 @@ templ deliveryAddressModal(c service.CustomerDelivery) {
 				</label>
 				<label>
 					Provincia
-					@autosaveField("/clienti/field", c.UserID, "provincia", c.Provincia, "Provincia", "", false)
+					@autosaveInput("/clienti/field", c.UserID, "provincia", c.Provincia, "Provincia", "", false, provinciaAttrs)
 				</label>
 				<label>
 					CAP
@@ -317,6 +319,8 @@ templ ClientiPage(users []service.User) {
 			</div>
 			<span class="muted">Le modifiche si salvano da sole quando esci dal campo.</span>
 		</div>
+		@PlaceDatalists()
+		@CittaDatalist(users)
 		<div class="table-wrap sticky-head">
 			<table class="table edit autosave clienti">
 				<thead>
@@ -324,12 +328,12 @@ templ ClientiPage(users []service.User) {
 						@filterTh("Codice / ID")
 						@filterTh("Nome")
 						@filterTh("Telefono")
+						@filterTh("Partita IVA")
 						@filterTh("Indirizzo")
 						@filterTh("Città")
 						@filterTh("Provincia")
 						@filterTh("Regione")
 						@filterTh("CAP")
-						@filterTh("Partita IVA")
 						<th class="num col-del"></th>
 						<th class="col-more"></th>
 					</tr>
@@ -486,12 +490,12 @@ templ ClienteRow(u service.User, focus bool) {
 				}
 			</span>
 		</td>
-		<td class="wide col-extra">@autosaveField("/clienti/field", u.ID, "indirizzo", u.Indirizzo, "Indirizzo", "", false)</td>
-		<td class="col-extra">@autosaveField("/clienti/field", u.ID, "citta", u.Citta, "Città", "", false)</td>
-		<td class="col-extra">@autosaveField("/clienti/field", u.ID, "provincia", u.Provincia, "Provincia", "", false)</td>
-		<td class="col-extra">@autosaveField("/clienti/field", u.ID, "regione", u.Regione, "Regione", "", false)</td>
-		<td class="col-extra">@autosaveField("/clienti/field", u.ID, "cap", u.CAP, "CAP", "short", false)</td>
 		<td class="col-extra col-piva">@autosaveField("/clienti/field", u.ID, "piva", u.PIVA, "Partita IVA", "", false)</td>
+		<td class="wide col-extra">@autosaveField("/clienti/field", u.ID, "indirizzo", u.Indirizzo, "Indirizzo", "", false)</td>
+		<td class="col-extra">@autosaveInput("/clienti/field", u.ID, "citta", u.Citta, "Città", "", false, cittaAttrs)</td>
+		<td class="col-extra">@autosaveInput("/clienti/field", u.ID, "provincia", u.Provincia, "Provincia", "", false, provinciaAttrs)</td>
+		<td class="col-extra">@autosaveInput("/clienti/field", u.ID, "regione", u.Regione, "Regione", "", false, regioneAttrs)</td>
+		<td class="col-extra">@autosaveField("/clienti/field", u.ID, "cap", u.CAP, "CAP", "short", false)</td>
 		<td class="num col-del col-extra">
 			@deleteRowButton("/clienti/delete", u.ID, deleteUserConfirm(u))
 		</td>
@@ -546,15 +550,15 @@ templ clienteDetailsModal(u service.User) {
 				</label>
 				<label>
 					Città
-					@autosaveField("/clienti/field", u.ID, "citta", u.Citta, "Città", "", false)
+					@autosaveInput("/clienti/field", u.ID, "citta", u.Citta, "Città", "", false, cittaAttrs)
 				</label>
 				<label>
 					Provincia
-					@autosaveField("/clienti/field", u.ID, "provincia", u.Provincia, "Provincia", "", false)
+					@autosaveInput("/clienti/field", u.ID, "provincia", u.Provincia, "Provincia", "", false, provinciaAttrs)
 				</label>
 				<label>
 					Regione
-					@autosaveField("/clienti/field", u.ID, "regione", u.Regione, "Regione", "", false)
+					@autosaveInput("/clienti/field", u.ID, "regione", u.Regione, "Regione", "", false, regioneAttrs)
 				</label>
 				<label>
 					CAP
@@ -579,6 +583,56 @@ templ clienteDetailsModal(u service.User) {
 			</div>
 		</div>
 	</dialog>
+}
+
+// provinciaAttrs / regioneAttrs: the fields suggest the dictionary entries
+// (PlaceDatalists, on the page); the server accepts only those.
+var provinciaAttrs = templ.Attributes{"list": "province-list", "autocomplete": "off"}
+var regioneAttrs = templ.Attributes{"list": "regioni-list", "autocomplete": "off"}
+
+// cittaAttrs: Città suggests the cities already used in Clienti
+// (CittaDatalist) but takes anything typed.
+var cittaAttrs = templ.Attributes{"list": "citta-list", "autocomplete": "off"}
+
+// CittaDatalist: the customers' cities, once each (case and spaces ignored),
+// in alphabetical order.
+templ CittaDatalist(users []service.User) {
+	<datalist id="citta-list">
+		for _, c := range distinctCities(users) {
+			<option value={ c }></option>
+		}
+	</datalist>
+}
+
+func distinctCities(users []service.User) []string {
+	seen := map[string]bool{}
+	var out []string
+	for _, u := range users {
+		c := strings.Join(strings.Fields(u.Citta), " ")
+		k := strings.ToLower(c)
+		if c == "" || seen[k] {
+			continue
+		}
+		seen[k] = true
+		out = append(out, c)
+	}
+	sort.Slice(out, func(i, j int) bool { return strings.ToLower(out[i]) < strings.ToLower(out[j]) })
+	return out
+}
+
+// PlaceDatalists: the provinces ("Vicenza", with "VI · Veneto") and regions
+// suggested by the provincia / regione fields.
+templ PlaceDatalists() {
+	<datalist id="province-list">
+		for _, p := range service.Province() {
+			<option value={ p.Nome }>{ p.Sigla } · { p.Regione }</option>
+		}
+	</datalist>
+	<datalist id="regioni-list">
+		for _, r := range service.Regioni() {
+			<option value={ r }></option>
+		}
+	</datalist>
 }
 
 // filterTh is a column title with a filter box under it: rows whose value in

@@ -54,3 +54,25 @@ func TestNormalizePartitaIVA(t *testing.T) {
 		}
 	}
 }
+
+func TestNormalizePlaces(t *testing.T) {
+	for in, want := range map[string]string{"": "", "vi": "Vicenza", " VICENZA ": "Vicenza", "forli cesena": "Forlì-Cesena", "l'aquila": "L'Aquila", "MB": "Monza e della Brianza"} {
+		if got, err := NormalizeProvincia(in); err != nil || got != want {
+			t.Errorf("provincia %q = %q, %v; want %q", in, got, err, want)
+		}
+	}
+	for in, want := range map[string]string{"veneto": "Veneto", "Friuli Venezia Giulia": "Friuli-Venezia Giulia", "trentino alto adige": "Trentino-Alto Adige"} {
+		if got, err := NormalizeRegione(in); err != nil || got != want {
+			t.Errorf("regione %q = %q, %v; want %q", in, got, err, want)
+		}
+	}
+	if _, err := NormalizeProvincia("Vicenz"); err == nil {
+		t.Error("unknown provincia accepted")
+	}
+	if _, err := NormalizeRegione("Vicenza"); err == nil {
+		t.Error("a provincia accepted as regione")
+	}
+	if len(Province()) != 107 || len(Regioni()) != 20 {
+		t.Errorf("%d province, %d regioni", len(Province()), len(Regioni()))
+	}
+}

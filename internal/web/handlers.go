@@ -1085,8 +1085,14 @@ func autosaveResult(w http.ResponseWriter, r *http.Request, err error) {
 }
 
 // clienteField saves one field of one customer (autosave from the Clienti page).
+// A value saved differently from how it was typed ("pd" → "Padova") is sent
+// back in X-Autosave-Value, and app.js shows it in the field.
 func (s *Server) clienteField(w http.ResponseWriter, r *http.Request) {
-	autosaveResult(w, r, s.svc.SetUserField(r.Context(), r.FormValue("id"), r.FormValue("field"), r.FormValue("value")))
+	saved, err := s.svc.SetUserField(r.Context(), r.FormValue("id"), r.FormValue("field"), r.FormValue("value"))
+	if err == nil && saved != r.FormValue("value") {
+		w.Header().Set("X-Autosave-Value", url.PathEscape(saved))
+	}
+	autosaveResult(w, r, err)
 }
 
 // clienteNew creates an empty customer and returns its row (prepended to the

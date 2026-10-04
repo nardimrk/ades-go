@@ -216,6 +216,8 @@ var addColumns = []string{
 	// the customer's VAT number ("01234567890", or "DE123456789" abroad),
 	// editable in Clienti
 	"ALTER TABLE users ADD COLUMN partita_iva TEXT",
+	// the customer's country (not used yet; "" = Italia)
+	"ALTER TABLE users ADD COLUMN stato TEXT",
 }
 
 func (s *Store) migrate(ctx context.Context) error {
@@ -226,6 +228,9 @@ func (s *Store) migrate(ctx context.Context) error {
 		if _, err := s.DB.ExecContext(ctx, stmt); err != nil && !strings.Contains(err.Error(), "duplicate column") {
 			return fmt.Errorf("%s: %w", stmt, err)
 		}
+	}
+	if err := s.seedPlaces(ctx); err != nil {
+		return fmt.Errorf("regioni/province: %w", err)
 	}
 	// Link listings to the quotation created from them, and clear links to
 	// quotations that were deleted.

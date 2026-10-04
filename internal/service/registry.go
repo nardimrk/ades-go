@@ -98,6 +98,9 @@ func (s *Service) CreateCustomer(ctx context.Context, u User) (User, error) {
 	if u.Telefono, err = NormalizePhone(u.Telefono); err != nil {
 		return User{}, err
 	}
+	if u.Provincia, err = NormalizeProvincia(u.Provincia); err != nil {
+		return User{}, err
+	}
 	b := make([]byte, 6)
 	if _, err := rand.Read(b); err != nil {
 		return User{}, err
@@ -218,11 +221,12 @@ func NormalizePhone(v string) (string, error) {
 	return "+" + digits, nil
 }
 
-// SetUserField updates one field of one customer.
-func (s *Service) SetUserField(ctx context.Context, id, field, value string) error {
+// SetUserField updates one field of one customer and returns the value
+// saved (normalized: phone, partita IVA, provincia, regione).
+func (s *Service) SetUserField(ctx context.Context, id, field, value string) (string, error) {
 	col, ok := userColumns[field]
 	if !ok {
-		return fmt.Errorf("campo %q non valido", field)
+		return "", fmt.Errorf("campo %q non valido", field)
 	}
 	var err error
 	switch field {
@@ -230,19 +234,24 @@ func (s *Service) SetUserField(ctx context.Context, id, field, value string) err
 		value, err = NormalizePhone(value)
 	case "piva":
 		value, err = NormalizePartitaIVA(value)
+	case "provincia":
+		value, err = NormalizeProvincia(value)
+	case "regione":
+		value, err = NormalizeRegione(value)
 	}
 	if err != nil {
-		return err
+		return "", err
 	}
+	value = strings.TrimSpace(value)
 	res, err := s.db().ExecContext(ctx,
-		`UPDATE users SET "`+col+`" = ?, updated_at = datetime('now') WHERE id = ?`, strings.TrimSpace(value), id)
+		`UPDATE users SET "`+col+`" = ?, updated_at = datetime('now') WHERE id = ?`, value, id)
 	if err != nil {
-		return err
+		return "", err
 	}
 	if n, _ := res.RowsAffected(); n == 0 {
-		return fmt.Errorf("cliente non trovato")
+		return "", fmt.Errorf("cliente non trovato")
 	}
-	return nil
+	return value, nil
 }
 
 // ── Prodotti ─────────────────────────────────────────────────────────────────
