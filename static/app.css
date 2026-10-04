@@ -1079,3 +1079,6 @@ body:has(.sel-bar:not(:empty)) .fab-menu { bottom: calc(max(.75rem, env(safe-are
 .combo-list li.combo-new:hover { background: var(--accent-soft); }
 .move-item:disabled { opacity: .5; cursor: not-allowed; }
 .move-item:disabled:hover { border-color: var(--border); }
+
+/* Statistiche: the most active customers, the rank column as narrow as it can be */
+.active-users .table .rank { width: 1%; white-space: nowrap; }

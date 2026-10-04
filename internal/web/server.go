@@ -106,6 +106,7 @@ func (s *Server) Handler(static fs.FS) http.Handler {
 	mux.HandleFunc("POST /prodotti/new", s.prodottoNew)
 	mux.HandleFunc("POST /prodotti/delete", s.prodottoDelete)
 	mux.HandleFunc("GET /statistiche", s.statistiche)
+	mux.HandleFunc("GET /statistiche/attivi", s.statisticheAttivi)
 
 	mux.HandleFunc("GET /importa", s.importa)
 	mux.HandleFunc("POST /importa", s.importaUpload)

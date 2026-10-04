@@ -1250,5 +1250,24 @@ func (s *Server) statistiche(w http.ResponseWriter, r *http.Request) {
 		s.fail(w, r, err)
 		return
 	}
-	render(w, r, views.StatistichePage(st))
+	p := service.ActivePeriodFor(r.URL.Query().Get("periodo"))
+	users, err := s.svc.ActiveUsers(r.Context(), p.Months)
+	if err != nil {
+		s.fail(w, r, err)
+		return
+	}
+	render(w, r, views.StatistichePage(st, p, users))
+}
+
+// statisticheAttivi: the most active customers for another period (the
+// section only; the address bar keeps the period).
+func (s *Server) statisticheAttivi(w http.ResponseWriter, r *http.Request) {
+	p := service.ActivePeriodFor(r.URL.Query().Get("periodo"))
+	users, err := s.svc.ActiveUsers(r.Context(), p.Months)
+	if err != nil {
+		s.fail(w, r, err)
+		return
+	}
+	w.Header().Set("HX-Replace-Url", "/statistiche?periodo="+p.Key)
+	render(w, r, views.ActiveUsersSection(p, users))
 }

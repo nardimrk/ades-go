@@ -418,7 +418,6 @@ type Stats struct {
 	Risposte     int
 	Utenti       int
 	PiuDiscusse  []DiscussedListing
-	UtentiAttivi []ActiveUser
 }
 
 func (s *Service) Stats(ctx context.Context) (*Stats, error) {
@@ -461,20 +460,56 @@ func (s *Service) Stats(ctx context.Context) (*Stats, error) {
 	s.db().QueryRowContext(ctx, "SELECT COUNT(*) FROM replies").Scan(&st.Risposte)
 	s.db().QueryRowContext(ctx, "SELECT COUNT(*) FROM users").Scan(&st.Utenti)
 
-	urows, err := s.db().QueryContext(ctx, `
-		SELECT COALESCE(u.name,''), COUNT(r.id) AS n FROM replies r
-		JOIN users u ON u.id = r.author_id
-		GROUP BY r.author_id ORDER BY n DESC LIMIT 20`)
+	return st, nil
+}
+
+// ActivePeriod: a time span offered for the most active customers.
+type ActivePeriod struct {
+	Key, Label string
+	Months     int
+	Span       string // "negli ultimi 3 mesi"
+}
+
+var ActivePeriods = []ActivePeriod{
+	{"3m", "3 mesi", 3, "negli ultimi 3 mesi"},
+	{"6m", "6 mesi", 6, "negli ultimi 6 mesi"},
+	{"12m", "1 anno", 12, "nell'ultimo anno"},
+}
+
+// ActivePeriodFor returns the period with that key, the first (3 months)
+// when unknown.
+func ActivePeriodFor(key string) ActivePeriod {
+	for _, p := range ActivePeriods {
+		if p.Key == key {
+			return p
+		}
+	}
+	return ActivePeriods[0]
+}
+
+// ActiveUsers returns the 20 customers who wrote the most messages in the
+// groups in the last months: merged ids count for their customer, sellers
+// are left out.
+func (s *Service) ActiveUsers(ctx context.Context, months int) ([]ActiveUser, error) {
+	since := time.Now().AddDate(0, -months, 0).Unix()
+	rows, err := s.db().QueryContext(ctx, `
+		SELECT COALESCE(NULLIF(TRIM(m.name),''), m.id), COUNT(*) AS n FROM replies r
+		JOIN users a ON a.id = r.author_id
+		JOIN users m ON m.id = COALESCE(a.merged_into, a.id)
+		WHERE r.timestamp >= ? AND COALESCE(a.is_seller,0) = 0 AND COALESCE(m.is_seller,0) = 0 AND m.id NOT LIKE '%@g.us'
+		GROUP BY m.id ORDER BY n DESC, 1 LIMIT 20`, since)
 	if err != nil {
 		return nil, err
 	}
-	defer urows.Close()
-	for urows.Next() {
+	defer rows.Close()
+	var out []ActiveUser
+	for rows.Next() {
 		var a ActiveUser
-		if urows.Scan(&a.Utente, &a.Risposte) == nil {
-			a.Utente = textutil.StripEmoji(a.Utente)
-			st.UtentiAttivi = append(st.UtentiAttivi, a)
+		if err := rows.Scan(&a.Utente, &a.Risposte); err != nil {
+			return nil, err
 		}
+		a.Utente = textutil.StripEmoji(a.Utente)
+		out = append(out, a)
 	}
-	return st, urows.Err()
+	return out, rows.Err()
 }

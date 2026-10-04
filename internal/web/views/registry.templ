@@ -745,7 +745,7 @@ templ ProdottoRow(it service.Item, focus bool) {
 
 // ── Statistiche ──────────────────────────────────────────────────────────────
 
-templ StatistichePage(st *service.Stats) {
+templ StatistichePage(st *service.Stats, p service.ActivePeriod, users []service.ActiveUser) {
 	@Layout("Statistiche", "statistiche") {
 		<h2>Statistiche</h2>
 		<div class="metrics">
@@ -767,14 +767,42 @@ templ StatistichePage(st *service.Stats) {
 				</tbody>
 			</table>
 		}
-		<h3>Utenti più attivi</h3>
-		<table class="table">
-			<thead><tr><th>Utente</th><th class="num">Risposte</th></tr></thead>
-			<tbody>
-				for _, u := range st.UtentiAttivi {
-					<tr><td class="title-cell">{ u.Utente }</td><td class="num">{ itoa(u.Risposte) }</td></tr>
-				}
-			</tbody>
-		</table>
+		@ActiveUsersSection(p, users)
 	}
+}
+
+// ActiveUsersSection: the customers who wrote the most in the groups in the
+// chosen period (3 months, 6 months, 1 year); the period buttons reload only
+// this section.
+templ ActiveUsersSection(p service.ActivePeriod, users []service.ActiveUser) {
+	<section id="utenti-attivi" class="active-users">
+		<div class="row between">
+			<h3>Clienti più attivi</h3>
+			<div class="seg" role="group" aria-label="Periodo">
+				for _, o := range service.ActivePeriods {
+					<button
+						type="button"
+						class={ "seg-btn", templ.KV("active", o.Key == p.Key) }
+						aria-pressed={ fmt.Sprint(o.Key == p.Key) }
+						hx-get={ "/statistiche/attivi?periodo=" + o.Key }
+						hx-target="#utenti-attivi"
+						hx-swap="outerHTML"
+					>{ o.Label }</button>
+				}
+			</div>
+		</div>
+		if len(users) == 0 {
+			@Alert("info", "Nessun messaggio dei clienti "+p.Span+".")
+		} else {
+			<p class="muted">Messaggi scritti nei gruppi { p.Span } (venditori esclusi).</p>
+			<table class="table">
+				<thead><tr><th class="num rank">#</th><th>Cliente</th><th class="num">Messaggi</th></tr></thead>
+				<tbody>
+					for i, u := range users {
+						<tr><td class="num rank">{ itoa(i + 1) }</td><td class="title-cell">{ u.Utente }</td><td class="num">{ itoa(u.Risposte) }</td></tr>
+					}
+				</tbody>
+			</table>
+		}
+	</section>
 }
