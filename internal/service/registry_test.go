@@ -76,3 +76,16 @@ func TestNormalizePlaces(t *testing.T) {
 		t.Errorf("%d province, %d regioni", len(Province()), len(Regioni()))
 	}
 }
+
+func TestNormalizeEmail(t *testing.T) {
+	for in, want := range map[string]string{"": "", " Mario.Rossi@Example.IT ": "mario.rossi@example.it", "a+b@x.co": "a+b@x.co"} {
+		if got, err := NormalizeEmail(in); err != nil || got != want {
+			t.Errorf("%q = %q, %v; want %q", in, got, err, want)
+		}
+	}
+	for _, in := range []string{"mario", "mario@", "@x.it", "mario@x", "Mario <m@x.it>", "m@x.it.", "a b@x.it"} {
+		if got, err := NormalizeEmail(in); err == nil {
+			t.Errorf("%q accepted as %q", in, got)
+		}
+	}
+}

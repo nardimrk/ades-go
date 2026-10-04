@@ -352,6 +352,13 @@
     var saved = xhr && xhr.getResponseHeader("X-Autosave-Value");
     if (saved !== null && saved !== undefined) el.value = decodeURIComponent(saved);
     showToast("Salvato: " + autosaveLabel(el));
+    // a new value of a field with suggestions (Città) is suggested from now on
+    var dl = el.list, v = el.value.trim();
+    if (dl && v && !Array.prototype.some.call(dl.options, function (o) { return o.value.toLowerCase() === v.toLowerCase(); })) {
+      var opt = document.createElement("option");
+      opt.value = v;
+      dl.appendChild(opt);
+    }
     // the same field elsewhere in the row (Clienti: the table and the
     // phone's "Dettagli" dialog) shows the new value too
     var row = el.closest("tr");

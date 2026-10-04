@@ -329,6 +329,7 @@ templ ClientiPage(users []service.User) {
 						@filterTh("Nome")
 						@filterTh("Telefono")
 						@filterTh("Partita IVA")
+						@filterTh("Email")
 						@filterTh("Indirizzo")
 						@filterTh("Città")
 						@filterTh("Provincia")
@@ -477,7 +478,7 @@ func deleteUserConfirm(u service.User) string {
 
 // ClienteRow is one customer; focus=true for a just-created one (cursor in Nome).
 templ ClienteRow(u service.User, focus bool) {
-	<tr class="user-row" data-name={ u.Name + " " + u.ID + " " + u.Citta + " " + u.Telefono + " " + u.PIVA }>
+	<tr class="user-row" data-name={ u.Name + " " + u.ID + " " + u.Citta + " " + u.Telefono + " " + u.PIVA + " " + u.Email }>
 		<td class="mono title-cell col-id col-extra" title={ customerIDsTitle(u) }>
 			@customerIDs(u)
 		</td>
@@ -491,6 +492,7 @@ templ ClienteRow(u service.User, focus bool) {
 			</span>
 		</td>
 		<td class="col-extra col-piva">@autosaveField("/clienti/field", u.ID, "piva", u.PIVA, "Partita IVA", "", false)</td>
+		<td class="col-extra col-email">@autosaveInput("/clienti/field", u.ID, "email", u.Email, "Email", "", false, emailAttrs)</td>
 		<td class="wide col-extra">@autosaveField("/clienti/field", u.ID, "indirizzo", u.Indirizzo, "Indirizzo", "", false)</td>
 		<td class="col-extra">@autosaveInput("/clienti/field", u.ID, "citta", u.Citta, "Città", "", false, cittaAttrs)</td>
 		<td class="col-extra">@autosaveInput("/clienti/field", u.ID, "provincia", u.Provincia, "Provincia", "", false, provinciaAttrs)</td>
@@ -568,6 +570,10 @@ templ clienteDetailsModal(u service.User) {
 					Partita IVA
 					@autosaveField("/clienti/field", u.ID, "piva", u.PIVA, "Partita IVA", "", false)
 				</label>
+				<label class="span2">
+					Email
+					@autosaveInput("/clienti/field", u.ID, "email", u.Email, "Email", "", false, emailAttrs)
+				</label>
 			</div>
 			<div class="modal-foot">
 				<button
@@ -589,6 +595,9 @@ templ clienteDetailsModal(u service.User) {
 // (PlaceDatalists, on the page); the server accepts only those.
 var provinciaAttrs = templ.Attributes{"list": "province-list", "autocomplete": "off"}
 var regioneAttrs = templ.Attributes{"list": "regioni-list", "autocomplete": "off"}
+
+// emailAttrs: the email keyboard on phones, no autocapitalization.
+var emailAttrs = templ.Attributes{"inputmode": "email", "autocapitalize": "off", "autocomplete": "off", "spellcheck": "false"}
 
 // cittaAttrs: Città suggests the cities already used in Clienti
 // (CittaDatalist) but takes anything typed.

@@ -933,6 +933,7 @@ body:has(.sel-bar:not(:empty)) .fab-menu { bottom: calc(max(.75rem, env(safe-are
 /* room for a whole number ("+39 349 286 9246") next to the call button */
 @media (min-width: 721px) {
   .table td.col-tel { min-width: 13rem; }
+  .table.clienti td.col-email { min-width: 15rem; }
   /* Clienti: long ids (old imports: "import:<full name>") are cut, the whole id is in the tooltip */
   .table.clienti td.col-id { max-width: 12rem; overflow: hidden; text-overflow: ellipsis; }
 }

@@ -218,6 +218,8 @@ var addColumns = []string{
 	"ALTER TABLE users ADD COLUMN partita_iva TEXT",
 	// the customer's country (not used yet; "" = Italia)
 	"ALTER TABLE users ADD COLUMN stato TEXT",
+	// the customer's email address, editable in Clienti
+	"ALTER TABLE users ADD COLUMN email TEXT",
 }
 
 func (s *Store) migrate(ctx context.Context) error {

@@ -6,6 +6,7 @@ import (
 	"database/sql"
 	"encoding/hex"
 	"fmt"
+	"net/mail"
 	"sort"
 	"strings"
 	"time"
@@ -26,6 +27,7 @@ type User struct {
 	CAP       string
 	Telefono  string // "+393492869246", "" = unknown
 	PIVA      string // partita IVA: "01234567890" (Italy) or "DE123456789"
+	Email     string
 	Replies   int    // messages written in the groups (all its ids)
 	Code      string // "CLI0012"
 	Aliases   []string // other ids merged into this customer
@@ -34,7 +36,7 @@ type User struct {
 func (s *Service) Users(ctx context.Context) ([]User, error) {
 	rows, err := s.db().QueryContext(ctx, `
 		SELECT id, COALESCE(name,''), COALESCE(indirizzo,''), COALESCE(città,''),
-		       COALESCE(provincia,''), COALESCE(regione,''), COALESCE(cap,''), COALESCE(telefono,''), COALESCE(partita_iva,''),
+		       COALESCE(provincia,''), COALESCE(regione,''), COALESCE(cap,''), COALESCE(telefono,''), COALESCE(partita_iva,''), COALESCE(email,''),
 		       (SELECT COUNT(*) FROM replies r WHERE r.author_id = users.id OR r.author_id IN (SELECT a.id FROM users a WHERE a.merged_into = users.id)),
 		       COALESCE(customer_code,''), COALESCE((SELECT group_concat(a.id, char(10)) FROM users a WHERE a.merged_into = users.id), '')
 		FROM users WHERE id NOT LIKE '%@g.us' AND merged_into IS NULL AND COALESCE(is_seller,0) = 0 ORDER BY name`)
@@ -46,7 +48,7 @@ func (s *Service) Users(ctx context.Context) ([]User, error) {
 	for rows.Next() {
 		var u User
 		var aliases string
-		if err := rows.Scan(&u.ID, &u.Name, &u.Indirizzo, &u.Citta, &u.Provincia, &u.Regione, &u.CAP, &u.Telefono, &u.PIVA, &u.Replies, &u.Code, &aliases); err != nil {
+		if err := rows.Scan(&u.ID, &u.Name, &u.Indirizzo, &u.Citta, &u.Provincia, &u.Regione, &u.CAP, &u.Telefono, &u.PIVA, &u.Email, &u.Replies, &u.Code, &aliases); err != nil {
 			return nil, err
 		}
 		if aliases != "" {
@@ -143,7 +145,22 @@ func (s *Service) DeleteUser(ctx context.Context, id string) error {
 var userColumns = map[string]string{
 	"name": "name", "indirizzo": "indirizzo", "citta": "città",
 	"provincia": "provincia", "regione": "regione", "cap": "cap", "telefono": "telefono",
-	"piva": "partita_iva",
+	"piva": "partita_iva", "email": "email",
+}
+
+// NormalizeEmail checks a typed email address and returns it trimmed and in
+// lowercase; "" stays "".
+func NormalizeEmail(v string) (string, error) {
+	v = strings.ToLower(strings.TrimSpace(v))
+	if v == "" {
+		return "", nil
+	}
+	a, err := mail.ParseAddress(v)
+	at := strings.LastIndex(v, "@")
+	if err != nil || a.Address != v || at < 1 || !strings.Contains(v[at+1:], ".") || strings.HasSuffix(v, ".") {
+		return "", fmt.Errorf("email non valida: %q", v)
+	}
+	return v, nil
 }
 
 // NormalizePartitaIVA checks a typed VAT number: spaces, dots and dashes are
@@ -238,6 +255,8 @@ func (s *Service) SetUserField(ctx context.Context, id, field, value string) (st
 		value, err = NormalizeProvincia(value)
 	case "regione":
 		value, err = NormalizeRegione(value)
+	case "email":
+		value, err = NormalizeEmail(value)
 	}
 	if err != nil {
 		return "", err
