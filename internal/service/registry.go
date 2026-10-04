@@ -9,6 +9,7 @@ import (
 	"sort"
 	"strings"
 	"time"
+	"unicode/utf8"
 
 	"adesgo/internal/textutil"
 )
@@ -239,6 +240,9 @@ var itemColumns = map[string]string{
 	"alias": "itemCodeAlias", "description": "description", "winery": "winery", "area": "area",
 }
 
+// MaxERPCodeLen is the longest "Codice ERP" (itemCodeAlias) the ERP accepts.
+const MaxERPCodeLen = 12
+
 // CreateItem adds an empty product with the next ITMnnnn code.
 func (s *Service) CreateItem(ctx context.Context) (Item, error) {
 	var it Item
@@ -293,6 +297,9 @@ func (s *Service) SetItemField(ctx context.Context, id int64, field, value strin
 	value = strings.TrimSpace(value)
 	if field == "description" && value == "" {
 		return fmt.Errorf("la descrizione è obbligatoria")
+	}
+	if field == "alias" && utf8.RuneCountInString(value) > MaxERPCodeLen {
+		return fmt.Errorf("il codice ERP può avere al massimo %d caratteri", MaxERPCodeLen)
 	}
 	res, err := s.db().ExecContext(ctx, `UPDATE items SET "`+col+`" = ?, updated_at = ? WHERE id = ? AND deleted_at IS NULL`,
 		value, time.Now().Format("2006-01-02T15:04:05.000000"), id)

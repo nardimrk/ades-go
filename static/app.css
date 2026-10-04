@@ -881,8 +881,15 @@ body:has(.sel-bar:not(:empty)) .fab-menu { bottom: calc(max(.75rem, env(safe-are
 .fab.open .fab-item { opacity: 1; visibility: visible; pointer-events: auto; }
 /* an arc from up to left, lifted so the lowest label stays on screen */
 .fab.open .fab-item:nth-child(1) { transform: translate(0, -150px); }
-.fab.open .fab-item:nth-child(2) { transform: translate(-92px, -122px); transition-delay: .03s; }
-.fab.open .fab-item:nth-child(3) { transform: translate(-130px, -30px); transition-delay: .06s; }
+.fab.open .fab-item:nth-child(2) { transform: translate(-110px, -110px); transition-delay: .03s; }
+.fab.open .fab-item:nth-child(3) { transform: translate(-140px, -25px); transition-delay: .06s; }
+/* "Crea ordine": a smaller round on the same 45° line as Ordini, further out;
+   centred on the button's centre like the others (offset by half the size
+   difference), so dx = dy keeps it exactly on the diagonal */
+.fab-sub { width: 46px; height: 46px; right: 7px; bottom: 7px; }
+.fab-sub .icon-svg { width: 22px; height: 22px; }
+.fab-sub .fab-label { font-size: .72rem; }
+.fab.open .fab-sub { transform: translate(-190px, -190px); transition-delay: .09s; }
 @media (prefers-reduced-motion: reduce) {
   .fab-btn, .fab-item, .fab-backdrop, .fab-menu { transition: none; }
 }
@@ -1027,7 +1034,6 @@ body:has(.sel-bar:not(:empty)) .fab-menu { bottom: calc(max(.75rem, env(safe-are
 .link-opt { padding: .35rem .6rem; min-height: 0; gap: .5rem; font-size: .9rem; }
 
 /* the inserzione's number (INS0123) */
-.listing-number { display: inline-block; margin-right: .5rem; padding: 0 .45rem; border: 1px solid var(--border-strong); border-radius: 999px; font-size: .8rem; font-weight: 600; color: var(--muted); }
 .link-group { display: inline-flex; align-items: center; gap: .35rem; white-space: nowrap; }
 
 /* Consegne: wines that come from a manual order */

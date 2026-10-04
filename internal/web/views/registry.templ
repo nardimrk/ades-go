@@ -519,12 +519,18 @@ templ filterTh(title string) {
 // autosaveField posts only this field to url when it changes (fired on
 // leaving it), with the row id and the field name.
 templ autosaveField(url, id, field, value, label, class string, focus bool) {
+	@autosaveInput(url, id, field, value, label, class, focus, nil)
+}
+
+// autosaveInput is autosaveField with extra attributes (e.g. maxlength).
+templ autosaveInput(url, id, field, value, label, class string, focus bool, attrs templ.Attributes) {
 	<input
 		name="value"
 		value={ value }
 		class={ class }
 		aria-label={ label }
 		autofocus?={ focus }
+		{ attrs... }
 		data-autosave
 		hx-post={ url }
 		hx-trigger="change"
@@ -590,7 +596,7 @@ templ ProdottoRow(it service.Item, focus bool) {
 				<span class="muted">—</span>
 			}
 		</td>
-		<td class="col-erp code-cell">@autosaveField("/prodotti/field", i64(it.ID), "alias", it.CodeAlias, "Codice ERP", "", false)</td>
+		<td class="col-erp code-cell">@autosaveInput("/prodotti/field", i64(it.ID), "alias", it.CodeAlias, "Codice ERP", "", false, templ.Attributes{"maxlength": fmt.Sprint(service.MaxERPCodeLen)})</td>
 		<td class="wide">@autosaveField("/prodotti/field", i64(it.ID), "description", it.Description, "Descrizione", "", focus)</td>
 		<td>@autosaveField("/prodotti/field", i64(it.ID), "winery", it.Winery, "Cantina", "", false)</td>
 		<td>@autosaveField("/prodotti/field", i64(it.ID), "area", it.Area, "Area", "", false)</td>

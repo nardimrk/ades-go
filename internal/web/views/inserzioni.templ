@@ -159,7 +159,11 @@ templ InserzioneDetail(d InserzioniData) {
 			<a href={ templ.URL("/inserzioni" + d.listQuery()) } class="btn icon-btn" title="Elenco" aria-label="Elenco">@IconList()</a>
 			<h2>
 				if d.Selected != nil {
-					{ d.Selected.DisplayTitle }
+					if d.Selected.Number != "" {
+						{ d.Selected.Number } · { d.Selected.DisplayTitle }
+					} else {
+						{ d.Selected.DisplayTitle }
+					}
 				} else {
 					Conversazione
 				}
@@ -227,9 +231,6 @@ templ Conversation(d InserzioniData) {
 				</form>
 				@deliveryField(d)
 				<div class="listing-box">
-					if d.Selected.Number != "" {
-						<span class="listing-number">{ d.Selected.Number }</span>
-					}
 					<strong>{ noEmoji(d.Selected.Venditore) }</strong> · { d.Selected.Data }
 					<div class="listing-text">{ noEmoji(d.Selected.Testo) }</div>
 				</div>

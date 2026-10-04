@@ -123,6 +123,11 @@ templ SectionFab(active string) {
 					<span class="fab-label" aria-hidden="true">{ n.Label }</span>
 				</a>
 			}
+			// a smaller shortcut further out on Ordini's 45° line
+			<a href="/ordini/nuovo" class="fab-item fab-sub" aria-label="Crea ordine">
+				@IconPlus()
+				<span class="fab-label" aria-hidden="true">Crea ordine</span>
+			</a>
 		</nav>
 		<button type="button" class="fab-btn" data-fab-toggle aria-expanded="false" aria-controls="fab-menu" aria-label="Sezioni">
 			<span class="fab-open">@IconGrid()</span>
