@@ -203,12 +203,13 @@
       li.textContent = note;
       combo.list.appendChild(li);
     }
-    // a customer field can create the customer that isn't there
-    if (!total && inp.dataset.newCustomer && inp.value.trim()) {
+    // a customer / wine field can create the one that isn't there
+    var newKind = inp.dataset.newCustomer ? "cliente" : inp.dataset.newProduct ? "prodotto" : "";
+    if (!total && newKind && inp.value.trim()) {
       var add = document.createElement("li");
       add.className = "combo-new";
       add.setAttribute("role", "option");
-      add.textContent = "+ Nuovo cliente «" + inp.value.trim() + "»";
+      add.textContent = "+ Nuovo " + newKind + " «" + inp.value.trim() + "»";
       combo.list.appendChild(add);
     }
   }
@@ -257,19 +258,20 @@
     var add = e.target.closest && e.target.closest(".combo-list li.combo-new");
     if (!add || !combo) return;
     var inp = combo.input;
-    var dlg = document.getElementById(inp.dataset.newCustomer);
+    var dlg = document.getElementById(inp.dataset.newCustomer || inp.dataset.newProduct);
     closeCombo();
     if (!dlg) return;
     newCustomerFor = inp;
     var f = dlg.querySelector("form");
     if (f) f.reset();
-    dlg.querySelector("[name=name]").value = inp.value.trim();
+    var first = dlg.querySelector("[name=name], [name=description]");
+    first.value = inp.value.trim();
     dlg.showModal();
-    var tel = dlg.querySelector("[name=telefono]");
-    if (tel && !matchMedia("(pointer: coarse)").matches) tel.focus();
+    var next = dlg.querySelector("[name=telefono], [name=winery]");
+    if (next && !matchMedia("(pointer: coarse)").matches) next.focus();
   });
   // created: it joins the suggestions and becomes the field's value
-  document.body.addEventListener("clienteCreato", function (e) {
+  function onCreated(e) {
     var name = e.detail && e.detail.name;
     if (!name) return;
     var inp = newCustomerFor;
@@ -282,7 +284,9 @@
     var dlg = e.target.closest && e.target.closest("dialog");
     if (dlg && dlg.open) dlg.close();
     newCustomerFor = null;
-  });
+  }
+  document.body.addEventListener("clienteCreato", onCreated);
+  document.body.addEventListener("prodottoCreato", onCreated);
 
   document.addEventListener("click", function (e) {
     if (!combo) return;

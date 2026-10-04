@@ -97,6 +97,7 @@ func (s *Server) Handler(static fs.FS) http.Handler {
 	mux.HandleFunc("POST /clienti/new", s.clienteNew)
 	mux.HandleFunc("POST /clienti/delete", s.clienteDelete)
 	mux.HandleFunc("POST /clienti/create", s.customerCreate)
+	mux.HandleFunc("POST /prodotti/create", s.productCreate)
 	mux.HandleFunc("GET /clienti/unisci", s.mergePage)
 	mux.HandleFunc("POST /clienti/unisci", s.mergeCustomers)
 	mux.HandleFunc("POST /clienti/separa", s.unmergeCustomer)

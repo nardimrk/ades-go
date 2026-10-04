@@ -813,3 +813,26 @@ func TestMoveQuotation(t *testing.T) {
 		t.Fatalf("order now on %q, want L2", on)
 	}
 }
+
+// "Nuovo prodotto" from an order: created with the next ITM code; a name
+// that's already a product's is refused.
+func TestCreateProduct(t *testing.T) {
+	ctx := context.Background()
+	store, err := db.Open(filepath.Join(t.TempDir(), "wine.db"))
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer store.Close()
+	svc := New(store, &config.Config{}, nil)
+	it, err := svc.CreateProduct(ctx, Item{Description: " Nellino  2023 ", Winery: "Cantina X", Area: "cha"})
+	if err != nil || it.Description != "Nellino 2023" || it.Code == "" {
+		t.Fatalf("created = %+v, %v", it, err)
+	}
+	cat, _ := svc.Catalog(ctx)
+	if len(cat) != 1 || cat[0].Label() != "Nellino 2023 — Cantina X" {
+		t.Fatalf("catalog = %+v", cat)
+	}
+	if _, err := svc.CreateProduct(ctx, Item{Description: "nellino 2023"}); err == nil {
+		t.Fatal("same name accepted")
+	}
+}

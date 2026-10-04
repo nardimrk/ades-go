@@ -255,6 +255,34 @@ func (s *Service) CreateItem(ctx context.Context) (Item, error) {
 	return it, err
 }
 
+// CreateProduct adds a product typed in by hand (e.g. from "Nuovo ordine")
+// with the next ITMnnnn code: a description is required and must not be
+// another product's, since orders pick products by description.
+func (s *Service) CreateProduct(ctx context.Context, it Item) (Item, error) {
+	it.Description = strings.Join(strings.Fields(textutil.StripEmoji(it.Description)), " ")
+	if it.Description == "" {
+		return Item{}, fmt.Errorf("scrivi il nome del vino")
+	}
+	err := s.inTx(ctx, func(tx *sql.Tx) error {
+		var n int
+		if err := tx.QueryRowContext(ctx, "SELECT COUNT(*) FROM items WHERE deleted_at IS NULL AND LOWER(TRIM(description)) = LOWER(?)", it.Description).Scan(&n); err != nil {
+			return err
+		}
+		if n > 0 {
+			return fmt.Errorf("esiste già il prodotto «%s»: sceglilo dall'elenco", it.Description)
+		}
+		it.Code = nextItemCode(ctx, tx)
+		res, err := tx.ExecContext(ctx, "INSERT INTO items (itemCode, description, winery, area, created_at) VALUES (?, ?, NULLIF(?,''), NULLIF(?,''), ?)",
+			it.Code, it.Description, strings.TrimSpace(it.Winery), strings.ToUpper(strings.TrimSpace(it.Area)), time.Now().Format("2006-01-02T15:04:05.000000"))
+		if err != nil {
+			return err
+		}
+		it.ID, err = res.LastInsertId()
+		return err
+	})
+	return it, err
+}
+
 // SetItemField updates one field of one product. The description can't be
 // emptied once set (it names the product in orders).
 func (s *Service) SetItemField(ctx context.Context, id int64, field, value string) error {

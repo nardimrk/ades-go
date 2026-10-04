@@ -406,6 +406,31 @@ func hasOrder(x service.CampaignRow, num string, quotNum map[int64]string) bool 
 	return false
 }
 
+// NewProductModal: creates a product without leaving the page; opened from
+// a wine field's suggestions ("+ Nuovo prodotto") with the typed name.
+templ NewProductModal(id string) {
+	<dialog id={ id } class="modal modal-address" data-modal-keep aria-labelledby={ id + "-title" }>
+		<form class="modal-form" hx-post="/prodotti/create" hx-swap="none">
+			<div class="modal-head">
+				<div class="modal-title">
+					<h3 id={ id + "-title" }>Nuovo prodotto</h3>
+					<span class="muted">Solo il nome è obbligatorio; il resto si può completare in Prodotti.</span>
+				</div>
+				<button type="button" class="icon" data-modal-close aria-label="Chiudi">@IconX()</button>
+			</div>
+			<div class="modal-body address-fields">
+				<label class="span2">Vino (con l'annata) <input type="text" name="description" required autocomplete="off" placeholder="Es. Château Langoa Barton 2022"/></label>
+				<label>Cantina <input type="text" name="winery" autocomplete="off"/></label>
+				<label>Area <input type="text" name="area" autocomplete="off" placeholder="Es. PAU, CHA"/></label>
+			</div>
+			<div class="modal-foot">
+				<button type="button" class="btn" data-modal-close>Annulla</button>
+				<button type="submit" class="btn primary">Crea prodotto</button>
+			</div>
+		</form>
+	</dialog>
+}
+
 // orderNeighborLink: the order before/after this one in the Ordini list.
 templ orderNeighborLink(q *service.QuotationSummary, label string, left bool) {
 	if q != nil {
@@ -687,6 +712,7 @@ templ NuovoPreventivo(d NuovoPreventivoData) {
 			@Alert("error", d.Error)
 		}
 		@NewCustomerModal("np-new-client")
+		@NewProductModal("np-new-product")
 		<form method="post" action="/ordini/nuovo" class="stack" id="np-form">
 			<div class="np-head">
 				<div class="np-number"><b>Numero ordine:</b> <code>{ d.Number }</code></div>
@@ -714,7 +740,7 @@ templ NuovoPreventivo(d NuovoPreventivoData) {
 					for i, r := range d.Rows {
 						<tr>
 							<td><b>{ itoa(i + 1) }</b></td>
-							<td><input type="text" name="vino" list="catalog" value={ r.WineName } placeholder="Scegli o scrivi un nuovo vino..."/></td>
+							<td><input type="text" name="vino" list="catalog" value={ r.WineName } placeholder="Scegli o scrivi un nuovo vino..." data-new-product="np-new-product"/></td>
 							<td><input type="number" name="qta" min="1" step="1" value={ itoa(r.Quantity) }/></td>
 							<td><input type="number" name="prezzo" min="0" step="0.5" value={ money(r.Price) }/></td>
 						</tr>
@@ -722,7 +748,7 @@ templ NuovoPreventivo(d NuovoPreventivoData) {
 					<template>
 						<tr>
 							<td><b>__N__</b></td>
-							<td><input type="text" name="vino" list="catalog" placeholder="Scegli o scrivi un nuovo vino..."/></td>
+							<td><input type="text" name="vino" list="catalog" placeholder="Scegli o scrivi un nuovo vino..." data-new-product="np-new-product"/></td>
 							<td><input type="number" name="qta" min="1" step="1" value="1"/></td>
 							<td><input type="number" name="prezzo" min="0" step="0.5" value="0.00"/></td>
 						</tr>

@@ -1117,6 +1117,22 @@ func (s *Server) customerCreate(w http.ResponseWriter, r *http.Request) {
 	toast(w, r, "success", "Nuovo cliente aggiunto: "+u.Name)
 }
 
+// productCreate adds a product from the "Nuovo prodotto" modal; the page
+// picks it up (event prodottoCreato) and puts it in the wine field.
+func (s *Server) productCreate(w http.ResponseWriter, r *http.Request) {
+	it, err := s.svc.CreateProduct(r.Context(), service.Item{
+		Description: r.FormValue("description"), Winery: r.FormValue("winery"), Area: r.FormValue("area"),
+	})
+	if err != nil {
+		s.fail(w, r, err)
+		return
+	}
+	label := service.CatalogEntry{Description: it.Description, Winery: it.Winery}.Label()
+	ev, _ := json.Marshal(map[string]any{"prodottoCreato": map[string]string{"name": label}})
+	w.Header().Set("HX-Trigger", string(ev))
+	toast(w, r, "success", "Nuovo prodotto aggiunto: "+it.Description+" ("+it.Code+")")
+}
+
 // mergePage shows the possible duplicates among the customers.
 func (s *Server) mergePage(w http.ResponseWriter, r *http.Request) {
 	ctx := r.Context()
