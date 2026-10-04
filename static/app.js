@@ -642,6 +642,14 @@
     window.visualViewport.addEventListener("scroll", placeFab);
   }
   document.addEventListener("htmx:afterSettle", placeFab);
+  // Clienti, Prodotti: a new page of rows starts from the top of the table
+  document.addEventListener("htmx:afterSwap", function (e) {
+    var t = e.detail.target;
+    if (!t || !/^(clienti|prodotti)-body$/.test(t.id || "") || e.detail.requestConfig.verb !== "get") return;
+    var body = document.getElementById(t.id);
+    var wrap = body && body.closest(".table-wrap");
+    if (wrap) wrap.scrollTop = 0;
+  });
 
   // Floating sections button (phones/tablets): fans out the main sections.
   function setFab(fab, open) {

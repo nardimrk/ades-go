@@ -34,6 +34,10 @@ type Service struct {
 	selOK     bool
 	selCache  []Selection
 	selParsed map[string]parsedBody
+
+	// the Clienti and Prodotti lists, until their DB counters change
+	usersCache versioned[[]User]
+	itemsCache versioned[[]Item]
 }
 
 func New(store *db.Store, cfg *config.Config, groups GroupNamer) *Service {

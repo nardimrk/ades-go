@@ -3,7 +3,8 @@ package views
 import (
 	"adesgo/internal/service"
 	"fmt"
-	"sort"
+	"net/url"
+	"strconv"
 	"strings"
 )
 
@@ -295,9 +296,97 @@ templ deliveryCustomer(c service.CustomerDelivery) {
 
 // ── Clienti ──────────────────────────────────────────────────────────────────
 
+// ListView: the search, column filters and page of a paginated list
+// (Clienti, Prodotti), filtered on the server.
+type ListView struct {
+	Q    string
+	F    map[string]string // column filters by key
+	Page service.Page
+	All  int // rows without filters
+}
+
+// listQuery is the query string of a list view on another page ("" = none).
+func (v ListView) query(page int) string {
+	q := url.Values{}
+	if v.Q != "" {
+		q.Set("q", v.Q)
+	}
+	for k, val := range v.F {
+		if val != "" {
+			q.Set("f_"+k, val)
+		}
+	}
+	if page > 1 {
+		q.Set("page", strconv.Itoa(page))
+	}
+	return q.Encode()
+}
+
+// countText: "280 clienti", or "12 di 280 clienti" when filtered.
+func (v ListView) countText(noun string) string {
+	if v.Page.Total == v.All {
+		return fmt.Sprintf("%d %s", v.All, noun)
+	}
+	return fmt.Sprintf("%d di %d %s", v.Page.Total, v.All, noun)
+}
+
+// listFilterAttrs: a search box or column filter of a list reloads its rows
+// (page 1) as you type, with every other filter of the list (.lf-<name>).
+func listFilterAttrs(name string) templ.Attributes {
+	return templ.Attributes{
+		"hx-get":       "/" + name + "/list",
+		"hx-trigger":   "input changed delay:300ms, search",
+		"hx-target":    "#" + name + "-body",
+		"hx-swap":      "outerHTML",
+		"hx-include":   ".lf-" + name,
+		"autocomplete": "off",
+	}
+}
+
+// ListPager: "1–25 di 280" with previous / next page; with oob it replaces
+// the pager already on the page (list fragments).
+templ ListPager(name string, v ListView, oob bool) {
+	<nav id={ name + "-pager" } class="pager" aria-label="Pagine" { oobAttrs(oob)... }>
+		if v.Page.Total > 0 {
+			<span class="muted">{ itoa(v.Page.From) }–{ itoa(v.Page.To) } di { itoa(v.Page.Total) }</span>
+		}
+		if v.Page.Pages > 1 {
+			<span class="pager-btns">
+				<button
+					type="button"
+					class="btn icon-btn"
+					aria-label="Pagina precedente"
+					disabled?={ v.Page.Num <= 1 }
+					hx-get={ "/" + name + "/list?" + v.query(v.Page.Num-1) }
+					hx-target={ "#" + name + "-body" }
+					hx-swap="outerHTML"
+				>@IconChevronLeft()</button>
+				<span class="pager-num">Pagina { itoa(v.Page.Num) } di { itoa(v.Page.Pages) }</span>
+				<button
+					type="button"
+					class="btn icon-btn"
+					aria-label="Pagina successiva"
+					disabled?={ v.Page.Num >= v.Page.Pages }
+					hx-get={ "/" + name + "/list?" + v.query(v.Page.Num+1) }
+					hx-target={ "#" + name + "-body" }
+					hx-swap="outerHTML"
+				>@IconChevronRight()</button>
+			</span>
+		}
+	</nav>
+}
+
+// ClientiData: one page of Clienti.
+type ClientiData struct {
+	ListView
+	Rows   []service.User
+	Cities []string // every customer's city, for the Città suggestions
+}
+
 // ClientiPage: every field saves by itself when you leave it (if changed),
-// see autosaveField + app.js [data-autosave]. No "Salva" button.
-templ ClientiPage(users []service.User) {
+// see autosaveField + app.js [data-autosave]. No "Salva" button. The list
+// is filtered and paginated on the server (25 rows a page).
+templ ClientiPage(d ClientiData) {
 	@Layout("Clienti", "clienti") {
 		<div class="row between">
 			<h2>Clienti</h2>
@@ -314,39 +403,55 @@ templ ClientiPage(users []service.User) {
 		</div>
 		<div class="row between">
 			<div class="row">
-				<input type="search" placeholder="Cerca cliente…" data-filter=".user-row" class="narrow"/>
-				<span class="muted" data-filter-count=".user-row" data-noun="clienti">{ fmt.Sprint(len(users)) } clienti</span>
+				<input type="search" name="q" value={ d.Q } placeholder="Cerca cliente…" class="narrow lf-clienti" { listFilterAttrs("clienti")... }/>
+				@listCount("clienti", d.ListView, "clienti", false)
 			</div>
 			<span class="muted">Le modifiche si salvano da sole quando esci dal campo.</span>
 		</div>
 		@PlaceDatalists()
-		@CittaDatalist(users)
+		@cittaDatalist(d.Cities)
 		<div class="table-wrap sticky-head">
 			<table class="table edit autosave clienti">
 				<thead>
 					<tr>
-						@filterTh("Codice / ID")
-						@filterTh("Nome")
-						@filterTh("Telefono")
-						@filterTh("Partita IVA")
-						@filterTh("Email")
-						@filterTh("Indirizzo")
-						@filterTh("Città")
-						@filterTh("Provincia")
-						@filterTh("Regione")
-						@filterTh("CAP")
+						for _, f := range service.ClientiFilters {
+							<th>
+								{ f.Title }
+								<input type="search" name={ "f_" + f.Key } value={ d.F[f.Key] } class="col-filter lf-clienti" placeholder="Filtra" aria-label={ "Filtra " + f.Title } { listFilterAttrs("clienti")... }/>
+							</th>
+						}
 						<th class="num col-del"></th>
 						<th class="col-more"></th>
 					</tr>
 				</thead>
-				<tbody id="clienti-body">
-					for _, u := range users {
-						@ClienteRow(u, false)
-					}
-				</tbody>
+				@ClientiBody(d)
 			</table>
 		</div>
+		@ListPager("clienti", d.ListView, false)
 	}
+}
+
+// ClientiBody: the rows of the current page.
+templ ClientiBody(d ClientiData) {
+	<tbody id="clienti-body">
+		for _, u := range d.Rows {
+			@ClienteRow(u, false)
+		}
+		if len(d.Rows) == 0 {
+			<tr class="list-empty"><td colspan="12" class="muted">Nessun cliente trovato.</td></tr>
+		}
+	</tbody>
+}
+
+// ClientiList: the fragment for a search, filter or page change.
+templ ClientiList(d ClientiData) {
+	@ClientiBody(d)
+	@ListPager("clienti", d.ListView, true)
+	@listCount("clienti", d.ListView, "clienti", true)
+}
+
+templ listCount(name string, v ListView, noun string, oob bool) {
+	<span id={ name + "-count" } class="muted" { oobAttrs(oob)... }>{ v.countText(noun) }</span>
 }
 
 // customerIDsTitle: all the ids of a customer, for the tooltip.
@@ -502,8 +607,15 @@ templ ClienteRow(u service.User, focus bool) {
 			@deleteRowButton("/clienti/delete", u.ID, deleteUserConfirm(u))
 		</td>
 		<td class="col-more">
-			<button type="button" class="btn" data-modal-show={ "cli-" + sectionID(u.ID) }>Dettagli</button>
-			@clienteDetailsModal(u)
+			// the dialog is loaded when opened (it'd be most of the page), into
+			// this cell so it belongs to the row
+			<button
+				type="button"
+				class="btn"
+				hx-get={ "/clienti/dettagli?" + q("id", u.ID) }
+				hx-target="closest td"
+				hx-swap="beforeend"
+			>Dettagli</button>
 		</td>
 	</tr>
 }
@@ -524,12 +636,13 @@ templ customerIDs(u service.User) {
 	}
 }
 
-// clienteDetailsModal: on phones the Clienti cards show only Nome and
-// Telefono; "Dettagli" opens the other fields here. They autosave like the
+// ClienteDetailsModal: on phones the Clienti cards show only Nome and
+// Telefono; "Dettagli" loads and opens the other fields here (removed again
+// when closed). They autosave like the
 // table's (app.js copies a saved value to the same field in the table), and
 // the dialog sits inside the row so "Elimina" removes the row.
-templ clienteDetailsModal(u service.User) {
-	<dialog id={ "cli-" + sectionID(u.ID) } class="modal modal-address" data-modal-keep aria-labelledby={ "cli-" + sectionID(u.ID) + "-title" }>
+templ ClienteDetailsModal(u service.User) {
+	<dialog id={ "cli-" + sectionID(u.ID) } class="modal modal-address" data-modal-open aria-labelledby={ "cli-" + sectionID(u.ID) + "-title" }>
 		<div class="modal-form">
 			<div class="modal-head">
 				<div class="modal-title">
@@ -603,30 +716,13 @@ var emailAttrs = templ.Attributes{"inputmode": "email", "autocapitalize": "off",
 // (CittaDatalist) but takes anything typed.
 var cittaAttrs = templ.Attributes{"list": "citta-list", "autocomplete": "off"}
 
-// CittaDatalist: the customers' cities, once each (case and spaces ignored),
-// in alphabetical order.
-templ CittaDatalist(users []service.User) {
+// cittaDatalist: the customers' cities (service.DistinctCities).
+templ cittaDatalist(cities []string) {
 	<datalist id="citta-list">
-		for _, c := range distinctCities(users) {
+		for _, c := range cities {
 			<option value={ c }></option>
 		}
 	</datalist>
-}
-
-func distinctCities(users []service.User) []string {
-	seen := map[string]bool{}
-	var out []string
-	for _, u := range users {
-		c := strings.Join(strings.Fields(u.Citta), " ")
-		k := strings.ToLower(c)
-		if c == "" || seen[k] {
-			continue
-		}
-		seen[k] = true
-		out = append(out, c)
-	}
-	sort.Slice(out, func(i, j int) bool { return strings.ToLower(out[i]) < strings.ToLower(out[j]) })
-	return out
 }
 
 // PlaceDatalists: the provinces ("Vicenza", with "VI · Veneto") and regions
@@ -642,17 +738,6 @@ templ PlaceDatalists() {
 			<option value={ r }></option>
 		}
 	</datalist>
-}
-
-// filterTh is a column title with a filter box under it: rows whose value in
-// this column doesn't contain the typed text are hidden (app.js
-// [data-col-filter], combined with the page's search box). Phones hide the
-// table header, so there only the search box filters.
-templ filterTh(title string) {
-	<th>
-		{ title }
-		<input type="search" class="col-filter" data-col-filter placeholder="Filtra" aria-label={ "Filtra " + title }/>
-	</th>
 }
 
 // autosaveField posts only this field to url when it changes (fired on
@@ -697,7 +782,13 @@ templ deleteRowButton(url, id, confirm string) {
 
 // ProdottiPage: same autosave as Clienti; "+ Aggiungi" creates the product
 // right away (next ITM code) with the cursor in Descrizione.
-templ ProdottiPage(items []service.Item) {
+// ProdottiData: one page of Prodotti.
+type ProdottiData struct {
+	ListView
+	Rows []service.Item
+}
+
+templ ProdottiPage(d ProdottiData) {
 	@Layout("Prodotti", "prodotti") {
 		<div class="row between">
 			<h2>Prodotti</h2>
@@ -710,20 +801,38 @@ templ ProdottiPage(items []service.Item) {
 			>＋ Aggiungi</button>
 		</div>
 		<div class="row between">
-			<input type="search" placeholder="Cerca prodotto…" data-filter=".item-row" class="narrow"/>
+			<div class="row">
+				<input type="search" name="q" value={ d.Q } placeholder="Cerca prodotto…" class="narrow lf-prodotti" { listFilterAttrs("prodotti")... }/>
+				@listCount("prodotti", d.ListView, "prodotti", false)
+			</div>
 			<span class="muted">Le modifiche si salvano da sole quando esci dal campo.</span>
 		</div>
 		<div class="table-wrap sticky-head">
 			<table class="table edit autosave">
 				<thead><tr><th>Codice</th><th class="col-erp">Codice ERP</th><th>Descrizione</th><th>Cantina</th><th>Area</th><th class="num"></th></tr></thead>
-				<tbody id="prodotti-body">
-					for _, it := range items {
-						@ProdottoRow(it, false)
-					}
-				</tbody>
+				@ProdottiBody(d)
 			</table>
 		</div>
+		@ListPager("prodotti", d.ListView, false)
 	}
+}
+
+templ ProdottiBody(d ProdottiData) {
+	<tbody id="prodotti-body">
+		for _, it := range d.Rows {
+			@ProdottoRow(it, false)
+		}
+		if len(d.Rows) == 0 {
+			<tr class="list-empty"><td colspan="6" class="muted">Nessun prodotto trovato.</td></tr>
+		}
+	</tbody>
+}
+
+// ProdottiList: the fragment for a search or page change.
+templ ProdottiList(d ProdottiData) {
+	@ProdottiBody(d)
+	@ListPager("prodotti", d.ListView, true)
+	@listCount("prodotti", d.ListView, "prodotti", true)
 }
 
 templ ProdottoRow(it service.Item, focus bool) {

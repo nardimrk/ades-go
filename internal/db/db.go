@@ -268,7 +268,57 @@ func (s *Store) migrate(ctx context.Context) error {
 	if err := s.ensureDedupIndexes(ctx); err != nil {
 		return err
 	}
-	return s.ensureSelectionsTriggers(ctx)
+	if err := s.ensureSelectionsTriggers(ctx); err != nil {
+		return err
+	}
+	return s.ensureListTriggers(ctx)
+}
+
+// Counters for the Clienti and Prodotti lists (see Version), bumped by
+// triggers on every write that changes what those pages show.
+const (
+	ClientiVersionKey  = "clienti_version"
+	ProdottiVersionKey = "prodotti_version"
+)
+
+var listTriggers = map[string][]string{
+	ClientiVersionKey: {
+		"trg_cli_users_ins AFTER INSERT ON users",
+		"trg_cli_users_upd AFTER UPDATE ON users",
+		"trg_cli_users_del AFTER DELETE ON users",
+		// the replies count shown per customer
+		"trg_cli_replies_ins AFTER INSERT ON replies",
+		"trg_cli_replies_upd AFTER UPDATE OF author_id ON replies",
+		"trg_cli_replies_del AFTER DELETE ON replies",
+	},
+	ProdottiVersionKey: {
+		"trg_prod_items_ins AFTER INSERT ON items",
+		"trg_prod_items_upd AFTER UPDATE ON items",
+		"trg_prod_items_del AFTER DELETE ON items",
+	},
+}
+
+func (s *Store) ensureListTriggers(ctx context.Context) error {
+	for key, defs := range listTriggers {
+		if _, err := s.DB.ExecContext(ctx, "INSERT OR IGNORE INTO app_meta (key, value) VALUES (?, '0')", key); err != nil {
+			return err
+		}
+		bump := "BEGIN UPDATE app_meta SET value = CAST(value AS INTEGER) + 1 WHERE key = '" + key + "'; END"
+		for _, d := range defs {
+			if _, err := s.DB.ExecContext(ctx, "CREATE TRIGGER IF NOT EXISTS "+d+" "+bump); err != nil {
+				return fmt.Errorf("%s: %w", d, err)
+			}
+		}
+	}
+	return nil
+}
+
+// Version reads an app_meta counter (e.g. ClientiVersionKey): it changes
+// whenever the data behind it does, so callers can cache what they derive.
+func (s *Store) Version(ctx context.Context, key string) (string, error) {
+	var v string
+	err := s.DB.QueryRowContext(ctx, "SELECT value FROM app_meta WHERE key = ?", key).Scan(&v)
+	return v, err
 }
 
 // selectionsVersionKey is the app_meta counter bumped by triggers on every

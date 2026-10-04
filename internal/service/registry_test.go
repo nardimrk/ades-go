@@ -137,3 +137,47 @@ func TestActiveUsersSkipSellers(t *testing.T) {
 		t.Fatalf("restored: %+v", users)
 	}
 }
+
+func TestPaginate(t *testing.T) {
+	for _, c := range []struct{ total, num, wantNum, wantPages, lo, hi int }{
+		{280, 1, 1, 12, 0, 25}, {280, 12, 12, 12, 275, 280}, {280, 99, 12, 12, 275, 280},
+		{280, 0, 1, 12, 0, 25}, {0, 1, 1, 1, 0, 0}, {25, 2, 1, 1, 0, 25},
+	} {
+		p, lo, hi := Paginate(c.total, c.num, 25)
+		if p.Num != c.wantNum || p.Pages != c.wantPages || lo != c.lo || hi != c.hi {
+			t.Errorf("Paginate(%d, %d) = %+v, %d, %d", c.total, c.num, p, lo, hi)
+		}
+	}
+}
+
+func TestFilterUsersAndCache(t *testing.T) {
+	ctx := context.Background()
+	store, err := db.Open(filepath.Join(t.TempDir(), "wine.db"))
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer store.Close()
+	svc := New(store, &config.Config{}, nil)
+	for _, u := range [][3]string{{"a@lid", "Mario Rossi", "Città di Castello"}, {"b@lid", "Bruno", "Vicenza"}} {
+		if _, err := store.DB.Exec("INSERT INTO users (id, name, città) VALUES (?, ?, ?)", u[0], u[1], u[2]); err != nil {
+			t.Fatal(err)
+		}
+	}
+	users, err := svc.UsersCached(ctx)
+	if err != nil || len(users) != 2 {
+		t.Fatalf("users = %+v, %v", users, err)
+	}
+	if got := FilterUsers(users, "citta di", nil); len(got) != 1 || got[0].Name != "Mario Rossi" {
+		t.Errorf("search = %+v", got)
+	}
+	if got := FilterUsers(users, "", map[string]string{"citta": "vic", "nome": "bru"}); len(got) != 1 || got[0].Name != "Bruno" {
+		t.Errorf("columns = %+v", got)
+	}
+	// a write anywhere refreshes the cached list
+	if _, err := svc.SetUserField(ctx, "b@lid", "name", "Bruno Bianchi"); err != nil {
+		t.Fatal(err)
+	}
+	if users, _ = svc.UsersCached(ctx); FilterUsers(users, "bianchi", nil) == nil {
+		t.Error("cache not refreshed after a change")
+	}
+}

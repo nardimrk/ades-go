@@ -1097,13 +1097,91 @@ func (s *Server) consegneExcel(w http.ResponseWriter, r *http.Request) {
 
 // ── Clienti / Prodotti / Statistiche ─────────────────────────────────────────
 
+// listView reads a list's search (q), column filters (f_<key>) and page.
+func listView(r *http.Request, keys ...string) views.ListView {
+	q := r.URL.Query()
+	v := views.ListView{Q: strings.TrimSpace(q.Get("q")), F: map[string]string{}}
+	for _, k := range keys {
+		if f := strings.TrimSpace(q.Get("f_" + k)); f != "" {
+			v.F[k] = f
+		}
+	}
+	return v
+}
+
+func listPage(r *http.Request) int {
+	n, _ := strconv.Atoi(r.URL.Query().Get("page"))
+	return n
+}
+
+func (s *Server) clientiData(r *http.Request) (views.ClientiData, error) {
+	all, err := s.svc.UsersCached(r.Context())
+	if err != nil {
+		return views.ClientiData{}, err
+	}
+	keys := make([]string, len(service.ClientiFilters))
+	for i, f := range service.ClientiFilters {
+		keys[i] = f.Key
+	}
+	d := views.ClientiData{ListView: listView(r, keys...), Cities: service.DistinctCities(all)}
+	rows := service.FilterUsers(all, d.Q, d.F)
+	p, lo, hi := service.Paginate(len(rows), listPage(r), service.ListPerPage)
+	d.Page, d.All, d.Rows = p, len(all), rows[lo:hi]
+	return d, nil
+}
+
+// clienti: one page of customers (25), filtered on the server; the cached
+// list is rebuilt only when customers or replies change.
 func (s *Server) clienti(w http.ResponseWriter, r *http.Request) {
-	users, err := s.svc.Users(r.Context())
+	d, err := s.clientiData(r)
 	if err != nil {
 		s.fail(w, r, err)
 		return
 	}
-	render(w, r, views.ClientiPage(users))
+	render(w, r, views.ClientiPage(d))
+}
+
+// clientiList: the rows, pager and count for a search, filter or page
+// change; the address bar keeps them.
+func (s *Server) clientiList(w http.ResponseWriter, r *http.Request) {
+	d, err := s.clientiData(r)
+	if err != nil {
+		s.fail(w, r, err)
+		return
+	}
+	w.Header().Set("HX-Replace-Url", listURL("/clienti", r))
+	render(w, r, views.ClientiList(d))
+}
+
+// clienteDettagli: the "Dettagli" dialog of one customer (phones).
+func (s *Server) clienteDettagli(w http.ResponseWriter, r *http.Request) {
+	all, err := s.svc.UsersCached(r.Context())
+	if err != nil {
+		s.fail(w, r, err)
+		return
+	}
+	id := r.URL.Query().Get("id")
+	for _, u := range all {
+		if u.ID == id {
+			render(w, r, views.ClienteDetailsModal(u))
+			return
+		}
+	}
+	s.fail(w, r, fmt.Errorf("cliente non trovato"))
+}
+
+// listURL: the page's address with the list's query (empty values dropped).
+func listURL(path string, r *http.Request) string {
+	q := url.Values{}
+	for k, vs := range r.URL.Query() {
+		if len(vs) > 0 && strings.TrimSpace(vs[0]) != "" && (k == "q" || k == "page" || strings.HasPrefix(k, "f_")) {
+			q.Set(k, strings.TrimSpace(vs[0]))
+		}
+	}
+	if len(q) == 0 {
+		return path
+	}
+	return path + "?" + q.Encode()
 }
 
 // autosaveResult answers an autosave request: 204 when saved; on error a 200
@@ -1237,13 +1315,37 @@ func (s *Server) clienteDelete(w http.ResponseWriter, r *http.Request) {
 	toast(w, r, "success", "Cliente eliminato.")
 }
 
+func (s *Server) prodottiData(r *http.Request) (views.ProdottiData, error) {
+	all, err := s.svc.ItemsCached(r.Context())
+	if err != nil {
+		return views.ProdottiData{}, err
+	}
+	d := views.ProdottiData{ListView: listView(r)}
+	rows := service.FilterItems(all, d.Q)
+	p, lo, hi := service.Paginate(len(rows), listPage(r), service.ListPerPage)
+	d.Page, d.All, d.Rows = p, len(all), rows[lo:hi]
+	return d, nil
+}
+
+// prodotti: one page of products (25), searched on the server; the cached
+// list is rebuilt only when a product changes.
 func (s *Server) prodotti(w http.ResponseWriter, r *http.Request) {
-	items, err := s.svc.Items(r.Context())
+	d, err := s.prodottiData(r)
 	if err != nil {
 		s.fail(w, r, err)
 		return
 	}
-	render(w, r, views.ProdottiPage(items))
+	render(w, r, views.ProdottiPage(d))
+}
+
+func (s *Server) prodottiList(w http.ResponseWriter, r *http.Request) {
+	d, err := s.prodottiData(r)
+	if err != nil {
+		s.fail(w, r, err)
+		return
+	}
+	w.Header().Set("HX-Replace-Url", listURL("/prodotti", r))
+	render(w, r, views.ProdottiList(d))
 }
 
 // prodottoField saves one field of one product (autosave from Prodotti).

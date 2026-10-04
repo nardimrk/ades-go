@@ -94,6 +94,8 @@ func (s *Server) Handler(static fs.FS) http.Handler {
 	mux.HandleFunc("GET /consegne/excel", s.consegneExcel)
 
 	mux.HandleFunc("GET /clienti", s.clienti)
+	mux.HandleFunc("GET /clienti/list", s.clientiList)
+	mux.HandleFunc("GET /clienti/dettagli", s.clienteDettagli)
 	mux.HandleFunc("POST /clienti/field", s.clienteField)
 	mux.HandleFunc("POST /clienti/new", s.clienteNew)
 	mux.HandleFunc("POST /clienti/delete", s.clienteDelete)
@@ -103,6 +105,7 @@ func (s *Server) Handler(static fs.FS) http.Handler {
 	mux.HandleFunc("POST /clienti/unisci", s.mergeCustomers)
 	mux.HandleFunc("POST /clienti/separa", s.unmergeCustomer)
 	mux.HandleFunc("GET /prodotti", s.prodotti)
+	mux.HandleFunc("GET /prodotti/list", s.prodottiList)
 	mux.HandleFunc("POST /prodotti/field", s.prodottoField)
 	mux.HandleFunc("POST /prodotti/new", s.prodottoNew)
 	mux.HandleFunc("POST /prodotti/delete", s.prodottoDelete)
