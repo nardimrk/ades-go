@@ -277,7 +277,8 @@ func (s *Server) orderLinkForm(w http.ResponseWriter, r *http.Request) {
 		http.Error(w, "bad id", http.StatusBadRequest)
 		return
 	}
-	camps, err := s.svc.LinkCampaigns(r.Context())
+	// inserzioni published from 6 months before the order date
+	camps, err := s.svc.LinkCampaigns(r.Context(), s.svc.LinkWindowStart(r.Context(), qid))
 	if err != nil {
 		s.fail(w, r, err)
 		return

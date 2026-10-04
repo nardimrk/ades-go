@@ -259,13 +259,16 @@ templ LinkModal(qid int64, option, wine string, camps []service.LinkCampaign) {
 			<div class="modal-head">
 				<div class="modal-title">
 					<h3 id="link-title">Collega a un'inserzione</h3>
-					<span class="muted">{ wine }: prende la data di consegna dell'inserzione e conta nella sua disponibilità</span>
+					<span class="muted">{ wine }: prende la data di consegna dell'inserzione e conta nella sua disponibilità. Inserzioni dai 6 mesi prima dell'ordine.</span>
 				</div>
 				<button type="button" class="icon" data-modal-close aria-label="Chiudi">@IconX()
 </button>
 			</div>
 			<div class="modal-body">
 				<input type="search" placeholder="Cerca un'inserzione o un vino…" data-filter=".link-camp" aria-label="Cerca un'inserzione o un vino"/>
+				if len(camps) == 0 {
+					@Alert("info", "Nessuna inserzione con un ordine nei 6 mesi prima di questo ordine.")
+				}
 				<div class="move-list">
 					for _, c := range camps {
 						<div class="link-camp" data-name={ linkCampName(c) }>

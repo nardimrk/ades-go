@@ -1505,8 +1505,9 @@ type LinkCampaign struct {
 }
 
 // LinkCampaigns returns the listings with an order and their wine options
-// (bottles, not cases), newest first.
-func (s *Service) LinkCampaigns(ctx context.Context) ([]LinkCampaign, error) {
+// (bottles, not cases), newest first, published since `since` ("YYYY-MM-DD",
+// "" = all).
+func (s *Service) LinkCampaigns(ctx context.Context, since string) ([]LinkCampaign, error) {
 	camps, err := s.ConsegneCampaigns(ctx)
 	if err != nil {
 		return nil, err
@@ -1523,7 +1524,7 @@ func (s *Service) LinkCampaigns(ctx context.Context) ([]LinkCampaign, error) {
 	}
 	var out []LinkCampaign
 	for _, c := range camps {
-		if c.Manual || len(c.QuotationIDs) == 0 {
+		if c.Manual || len(c.QuotationIDs) == 0 || (since != "" && c.Published < since) {
 			continue
 		}
 		opts := byQ[c.QuotationIDs[0]]
@@ -1620,4 +1621,16 @@ func (s *Service) MoveQuotation(ctx context.Context, quotationID int64, to *Camp
 		_, err := tx.ExecContext(ctx, "UPDATE quotations SET msg_id = ? WHERE id = ?", ids[0], quotationID)
 		return err
 	})
+}
+
+// LinkWindowStart is the earliest publication date of the listings a manual
+// order's wines can be connected to: 6 months before the order date.
+func (s *Service) LinkWindowStart(ctx context.Context, quotationID int64) string {
+	var d string
+	s.db().QueryRowContext(ctx, "SELECT COALESCE(quotation_date,'') FROM quotations WHERE id = ?", quotationID).Scan(&d)
+	t, err := time.Parse("2006-01-02", d)
+	if err != nil {
+		return ""
+	}
+	return t.AddDate(0, -6, 0).Format("2006-01-02")
 }
