@@ -1,6 +1,7 @@
 package service
 
 import (
+	"adesgo/internal/db"
 	"context"
 	"database/sql"
 	"encoding/json"
@@ -18,7 +19,7 @@ type CleanupReport struct {
 	MergedGroups  int      // inserzioni whose reposts were merged into the first post
 	MergedPosts   int      // repost rows merged (deleted)
 	RepliesMoved  int      // replies re-linked to the kept listing
-	Numbered      int      // listings numbered INS0001…
+	Numbered      int      // listings numbered INS260001… (by year)
 	Examples      []string // a few lines to show the user
 	RemainingRows int
 }
@@ -54,7 +55,7 @@ func (r cleanRow) score() int {
 // within 15 days, of the same order) into its first post: replies move to
 // it, the latest text becomes its latest edit, its initial quantities are
 // the first counts the seller gave. Then the listings are numbered again
-// INS0001… in posting order. Without apply nothing is written.
+// by year in posting order (INS260001…). Without apply nothing is written.
 func (s *Service) CleanupListings(ctx context.Context, apply bool) (*CleanupReport, error) {
 	rows, err := s.db().QueryContext(ctx, `SELECT l.id, l.msg_id, COALESCE(l.chat_id,''), COALESCE(l.original_body, l.body, ''),
 		       COALESCE(l.last_body,''), COALESCE(l.title,''), COALESCE(l.consegna_stimata,''),
@@ -294,30 +295,11 @@ func (s *Service) CleanupListings(ctx context.Context, apply bool) (*CleanupRepo
 	return rep, tx.Commit()
 }
 
-// renumberListings numbers every listing again INS0001… in posting order.
+// renumberListings numbers every listing again by year, in posting order
+// (INS260001…, see db.RenumberListings).
 func renumberListings(ctx context.Context, tx *sql.Tx, rep *CleanupReport) error {
-	if _, err := tx.ExecContext(ctx, "UPDATE listings SET listing_number = NULL"); err != nil {
+	if _, err := db.RenumberListings(ctx, tx); err != nil {
 		return err
 	}
-	rows, err := tx.QueryContext(ctx, "SELECT id FROM listings ORDER BY created_at, id")
-	if err != nil {
-		return err
-	}
-	var ids []int64
-	for rows.Next() {
-		var id int64
-		if err := rows.Scan(&id); err != nil {
-			rows.Close()
-			return err
-		}
-		ids = append(ids, id)
-	}
-	rows.Close()
-	for i, id := range ids {
-		if _, err := tx.ExecContext(ctx, "UPDATE listings SET listing_number = ? WHERE id = ?", fmt.Sprintf("INS%04d", i+1), id); err != nil {
-			return err
-		}
-	}
-	rep.Numbered = len(ids)
-	return nil
+	return tx.QueryRowContext(ctx, "SELECT COUNT(*) FROM listings").Scan(&rep.Numbered)
 }

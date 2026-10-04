@@ -1,6 +1,6 @@
 // Command pulizia cleans the listings table: it deletes the copies of the
 // same message, merges the reposts of each inserzione into its first post
-// and numbers the listings INS0001… (see service.CleanupListings).
+// and numbers the listings by year, INS260001… (see service.CleanupListings).
 //
 //	go run ./cmd/pulizia                 # dry run: what would change
 //	go run ./cmd/pulizia -apply          # backup first, then apply

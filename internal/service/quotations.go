@@ -13,6 +13,7 @@ import (
 	"strings"
 	"time"
 
+	"adesgo/internal/db"
 	"adesgo/internal/textutil"
 )
 
@@ -323,21 +324,15 @@ func realID(msgID string) bool {
 
 // ── import quotations from listings ──────────────────────────────────────────
 
-func (s *Service) nextIMPNumber(ctx context.Context, q interface {
-	QueryRowContext(context.Context, string, ...any) *sql.Row
-}) string {
-	var last string
-	n := 1
-	if err := q.QueryRowContext(ctx,
-		"SELECT quotation_number FROM quotations WHERE quotation_number LIKE 'IMP%' ORDER BY quotation_number DESC LIMIT 1").Scan(&last); err == nil {
-		if v, err := strconv.Atoi(strings.TrimPrefix(last, "IMP")); err == nil {
-			n = v + 1
-		}
+// NextOrderNumber is the number a new order dated date ("2026-10-04")
+// would get: "ORD260556" (see db.Code).
+func (s *Service) NextOrderNumber(ctx context.Context, date string) string {
+	n, err := db.NextOrderNumber(ctx, s.db(), date)
+	if err != nil {
+		return ""
 	}
-	return fmt.Sprintf("IMP%04d", n)
+	return n
 }
-
-func (s *Service) NextIMPNumber(ctx context.Context) string { return s.nextIMPNumber(ctx, s.db()) }
 
 // ImportPreventivi creates a quotation for every campaign whose listings
 // have parseable options and no quotation yet. ok=false when there are no
@@ -425,14 +420,17 @@ func (s *Service) ImportPreventivi(ctx context.Context) (created, skipped int, o
 // user on 2026-10-01); Thanisch Riesling Secchi was created by hand.
 var noQtyOptionsSince = time.Date(2026, 10, 1, 0, 0, 0, 0, time.Local)
 
-// CreateImportedQuotation creates an IMPnnnn quotation with these options and
+// CreateImportedQuotation creates an order (ORDyynnnn) with these options and
 // links the given listings to it. Returns the quotation number.
 func (s *Service) CreateImportedQuotation(ctx context.Context, msgIDs []string, ts int64, opts []textutil.Option) (string, error) {
 	var num string
 	err := s.inTx(ctx, func(tx *sql.Tx) error {
-		num = s.nextIMPNumber(ctx, tx)
-		res, err := tx.ExecContext(ctx, "INSERT INTO quotations (quotation_number, quotation_date) VALUES (?, ?)",
-			num, time.Unix(ts, 0).Format("2006-01-02"))
+		date := time.Unix(ts, 0).Format("2006-01-02")
+		var err error
+		if num, err = db.NextOrderNumber(ctx, tx, date); err != nil {
+			return err
+		}
+		res, err := tx.ExecContext(ctx, "INSERT INTO quotations (quotation_number, quotation_date) VALUES (?, ?)", num, date)
 		if err != nil {
 			return err
 		}
@@ -1527,7 +1525,10 @@ func (s *Service) CreateQuotation(ctx context.Context, date, clientName string, 
 	}
 	var num string
 	err = s.inTx(ctx, func(tx *sql.Tx) error {
-		num = s.nextIMPNumber(ctx, tx)
+		var err error
+		if num, err = db.NextOrderNumber(ctx, tx, date); err != nil {
+			return err
+		}
 		res, err := tx.ExecContext(ctx, "INSERT INTO quotations (quotation_number, quotation_date) VALUES (?, ?)", num, date)
 		if err != nil {
 			return err

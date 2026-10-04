@@ -811,6 +811,11 @@ func (s *Server) preventivoView(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	if d == nil {
+		// an old number (IMP0544) leads to the order's current one
+		if to := s.svc.Store.RenamedTo(r.Context(), r.URL.Query().Get("n")); to != "" {
+			http.Redirect(w, r, "/ordini/view?"+url.Values{"n": {to}}.Encode(), http.StatusMovedPermanently)
+			return
+		}
 		http.Redirect(w, r, "/ordini", http.StatusSeeOther)
 		return
 	}
@@ -1000,7 +1005,7 @@ func (s *Server) nuovoData(r *http.Request) (views.NuovoPreventivoData, error) {
 		return views.NuovoPreventivoData{}, err
 	}
 	return views.NuovoPreventivoData{
-		Number: s.svc.NextIMPNumber(ctx), Date: time.Now().Format("2006-01-02"),
+		Number: s.svc.NextOrderNumber(ctx, time.Now().Format("2006-01-02")), Date: time.Now().Format("2006-01-02"),
 		Clients: clients, Catalog: catalog,
 		Rows: []service.NewQuotationRow{{Option: "A", Quantity: 1}},
 	}, nil

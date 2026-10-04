@@ -156,6 +156,13 @@ CREATE TABLE IF NOT EXISTS reply_checks (
     status     TEXT NOT NULL DEFAULT 'open',
     checked_at TEXT DEFAULT (datetime('now'))
 );
+-- old order / listing codes and what they became (IMP0544 → ORD260544)
+CREATE TABLE IF NOT EXISTS number_renames (
+    old        TEXT PRIMARY KEY,
+    new        TEXT NOT NULL,
+    kind       TEXT,
+    renamed_at TEXT
+);
 CREATE TABLE IF NOT EXISTS app_meta (
     key   TEXT PRIMARY KEY,
     value TEXT
@@ -466,30 +473,33 @@ func (s *Store) SetMeta(ctx context.Context, key, value string) error {
 }
 
 // AssignListingNumbers gives the listings without a number the next ones
-// ("INS0001", "INS0002", …), in posting order.
+// of their year ("INS260001", …), in posting order.
 func (s *Store) AssignListingNumbers(ctx context.Context) error {
-	var max int
-	if err := s.DB.QueryRowContext(ctx, `SELECT COALESCE(MAX(CAST(substr(listing_number, 4) AS INTEGER)), 0)
-		FROM listings WHERE listing_number LIKE 'INS%'`).Scan(&max); err != nil {
-		return err
-	}
-	rows, err := s.DB.QueryContext(ctx, "SELECT id FROM listings WHERE listing_number IS NULL ORDER BY created_at, id")
+	rows, err := s.DB.QueryContext(ctx, "SELECT id, COALESCE(timestamp,0), COALESCE(created_at,'') FROM listings WHERE listing_number IS NULL ORDER BY created_at, id")
 	if err != nil {
 		return err
 	}
-	var ids []int64
+	type rec struct {
+		id      int64
+		ts      int64
+		created string
+	}
+	var recs []rec
 	for rows.Next() {
-		var id int64
-		if err := rows.Scan(&id); err != nil {
+		var r rec
+		if err := rows.Scan(&r.id, &r.ts, &r.created); err != nil {
 			rows.Close()
 			return err
 		}
-		ids = append(ids, id)
+		recs = append(recs, r)
 	}
 	rows.Close()
-	for _, id := range ids {
-		max++
-		if _, err := s.DB.ExecContext(ctx, "UPDATE listings SET listing_number = ? WHERE id = ?", fmt.Sprintf("INS%04d", max), id); err != nil {
+	for _, r := range recs {
+		code, err := nextCode(ctx, s.DB, "listings", "listing_number", ListingPrefix, listingYear(r.ts, r.created))
+		if err != nil {
+			return err
+		}
+		if _, err := s.DB.ExecContext(ctx, "UPDATE listings SET listing_number = ? WHERE id = ?", code, r.id); err != nil {
 			return err
 		}
 	}

@@ -5,6 +5,7 @@ import (
 	"path/filepath"
 	"strings"
 	"testing"
+	"time"
 
 	"adesgo/internal/config"
 	"adesgo/internal/db"
@@ -618,7 +619,7 @@ func TestManualLink(t *testing.T) {
 
 // Cleanup: a message stored twice keeps one copy; reposts within 15 days are
 // merged into the first post (replies follow it); the same wine sold again
-// months later stays a separate inserzione; numbers are INS0001….
+// months later stays a separate inserzione; numbers are by year, INSyy0001….
 func TestCleanupListings(t *testing.T) {
 	ctx := context.Background()
 	store, err := db.Open(filepath.Join(t.TempDir(), "wine.db"))
@@ -635,8 +636,8 @@ func TestCleanupListings(t *testing.T) {
 		}
 	}
 	ins("true_"+chat+"_S1_a@c.us", "Albert Grivault Disponibili:\nA. 30 x Meursault 2023 a 67,50€", 1000)
-	ins("false_"+chat+"_S1_b@lid", "Albert Grivault Disponibili:\nA. 30 x Meursault 2023 a 67,50€", 1001) // same message
-	ins("false_"+chat+"_S2_b@lid", "Albert Grivault Disponibili:\nA. 18 x Meursault 2023 a 67,50€", 2000) // repost
+	ins("false_"+chat+"_S1_b@lid", "Albert Grivault Disponibili:\nA. 30 x Meursault 2023 a 67,50€", 1001)      // same message
+	ins("false_"+chat+"_S2_b@lid", "Albert Grivault Disponibili:\nA. 18 x Meursault 2023 a 67,50€", 2000)      // repost
 	ins("false_"+chat+"_S3_b@lid", "Albert Grivault Disponibili:\nA. 24 x Meursault 2025 a 70€", 1000+200*day) // sold again
 	lid := "false_" + chat + "_S2_b@lid"
 	store.InsertReply(ctx, db.Reply{MsgID: "R1", ListingMsgID: &lid, ChatID: chat, AuthorID: "u1", Body: "2A", Timestamp: 2100})
@@ -654,10 +655,11 @@ func TestCleanupListings(t *testing.T) {
 	if n := countRows(t, store, "SELECT COUNT(*) FROM listings"); n != 2 {
 		t.Fatalf("listings after cleanup = %d, want 2", n)
 	}
-	if n := countRows(t, store, `SELECT COUNT(*) FROM listings WHERE listing_number = 'INS0001' AND body LIKE '%30 x%' AND last_body LIKE '%18 x%' AND initial_qty LIKE '%"A":30%'`); n != 1 {
+	first := db.Code(db.ListingPrefix, time.Unix(1000, 0).Year(), 1)
+	if n := countRows(t, store, `SELECT COUNT(*) FROM listings WHERE listing_number = '`+first+`' AND body LIKE '%30 x%' AND last_body LIKE '%18 x%' AND initial_qty LIKE '%"A":30%'`); n != 1 {
 		t.Fatal("first post not kept with its original text, latest edit and initial quantity")
 	}
-	if n := countRows(t, store, `SELECT COUNT(*) FROM replies r JOIN listings l ON l.msg_id = r.listing_msg_id WHERE l.listing_number = 'INS0001'`); n != 1 {
+	if n := countRows(t, store, `SELECT COUNT(*) FROM replies r JOIN listings l ON l.msg_id = r.listing_msg_id WHERE l.listing_number = '`+first+`'`); n != 1 {
 		t.Fatal("the reply did not follow the merged post")
 	}
 }
