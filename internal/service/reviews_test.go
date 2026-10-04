@@ -670,3 +670,47 @@ func countRows(t *testing.T, st *db.Store, q string) int {
 	}
 	return n
 }
+
+// Customers: an imported name merged into the WhatsApp id counts as one
+// customer in the orders; the main record takes the missing data; undo works.
+func TestMergeCustomers(t *testing.T) {
+	ctx := context.Background()
+	store, err := db.Open(filepath.Join(t.TempDir(), "wine.db"))
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer store.Close()
+	svc := New(store, &config.Config{}, nil)
+	const chat = "1@g.us"
+	store.InsertListing(ctx, db.Listing{MsgID: "L1", ChatID: chat, AuthorID: "owner", Body: "Barolo\nA. 12x Barolo 2019 a 40€\nB. 6x Barbaresco 2018 a 30€", Timestamp: 1000})
+	lid := "L1"
+	store.UpsertUser(ctx, "import:Edoardo Vino Gravina", "Edoardo Vino Gravina")
+	store.UpsertUser(ctx, "111@lid", "Edoardo Gravina")
+	store.DB.ExecContext(ctx, `UPDATE users SET "città" = 'Arzignano' WHERE id = 'import:Edoardo Vino Gravina'`)
+	store.InsertReply(ctx, db.Reply{MsgID: "R1", ListingMsgID: &lid, ChatID: chat, AuthorID: "import:Edoardo Vino Gravina", Body: "2A", Timestamp: 1100})
+	store.InsertReply(ctx, db.Reply{MsgID: "R2", ListingMsgID: &lid, ChatID: chat, AuthorID: "111@lid", Body: "1B", Timestamp: 1200})
+	if _, _, _, err := svc.ImportPreventivi(ctx); err != nil {
+		t.Fatal(err)
+	}
+	sugg, _ := svc.MergeSuggestions(ctx)
+	if len(sugg) == 0 || sugg[0].Main.ID != "111@lid" || sugg[0].Alias.ID != "import:Edoardo Vino Gravina" {
+		t.Fatalf("suggestions = %+v", sugg)
+	}
+	if err := svc.MergeCustomers(ctx, "import:Edoardo Vino Gravina", "111@lid"); err != nil {
+		t.Fatal(err)
+	}
+	sums, _ := svc.QuotationSummaries(ctx)
+	if sums[0].Clienti != 1 || sums[0].Bottiglie != 3 {
+		t.Fatalf("after merge: %d clienti, %d bott.; want 1, 3", sums[0].Clienti, sums[0].Bottiglie)
+	}
+	users, _ := svc.Users(ctx)
+	if len(users) != 1 || users[0].Citta != "Arzignano" || len(users[0].Aliases) != 1 || users[0].Replies != 2 {
+		t.Fatalf("customers after merge = %+v", users)
+	}
+	if err := svc.UnmergeCustomer(ctx, "import:Edoardo Vino Gravina"); err != nil {
+		t.Fatal(err)
+	}
+	if sums, _ = svc.QuotationSummaries(ctx); sums[0].Clienti != 2 {
+		t.Fatalf("after undo: %d clienti; want 2", sums[0].Clienti)
+	}
+}

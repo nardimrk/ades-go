@@ -317,10 +317,11 @@ func (s *Service) CampaignReplies(ctx context.Context, msgIDs []string) ([]Reply
 		args[i] = id
 	}
 	rows, err := s.db().QueryContext(ctx, `
-		SELECT r.id, COALESCE(r.author_id,''), `+userNameSQL+`, COALESCE(r.body,''), COALESCE(r.timestamp,0), COALESCE(r.order_override,''),
+		SELECT r.id, COALESCE(u0.merged_into, r.author_id, ''), `+userNameSQL+`, COALESCE(r.body,''), COALESCE(r.timestamp,0), COALESCE(r.order_override,''),
 		       COALESCE(r.msg_id,'') LIKE '`+ManualReplyPrefix+`%',
 		       c.kind, c.reason, c.proposal, c.body, c.status
-		FROM replies r LEFT JOIN users u ON u.id = r.author_id
+		FROM replies r LEFT JOIN users u0 ON u0.id = r.author_id
+		LEFT JOIN users u ON u.id = COALESCE(u0.merged_into, r.author_id)
 		LEFT JOIN reply_checks c ON c.reply_id = r.id
 		WHERE r.listing_msg_id IN (`+ph+`)
 		ORDER BY r.timestamp, r.id`, args...)

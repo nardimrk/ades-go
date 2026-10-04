@@ -24,15 +24,18 @@ type User struct {
 	Regione   string
 	CAP       string
 	Telefono  string // "+393492869246", "" = unknown
-	Replies   int    // messages written in the groups
+	Replies   int    // messages written in the groups (all its ids)
+	Code      string // "CLI0012"
+	Aliases   []string // other ids merged into this customer
 }
 
 func (s *Service) Users(ctx context.Context) ([]User, error) {
 	rows, err := s.db().QueryContext(ctx, `
 		SELECT id, COALESCE(name,''), COALESCE(indirizzo,''), COALESCE(città,''),
 		       COALESCE(provincia,''), COALESCE(regione,''), COALESCE(cap,''), COALESCE(telefono,''),
-		       (SELECT COUNT(*) FROM replies r WHERE r.author_id = users.id)
-		FROM users WHERE id NOT LIKE '%@g.us' ORDER BY name`)
+		       (SELECT COUNT(*) FROM replies r WHERE r.author_id = users.id OR r.author_id IN (SELECT a.id FROM users a WHERE a.merged_into = users.id)),
+		       COALESCE(customer_code,''), COALESCE((SELECT group_concat(a.id, char(10)) FROM users a WHERE a.merged_into = users.id), '')
+		FROM users WHERE id NOT LIKE '%@g.us' AND merged_into IS NULL AND COALESCE(is_seller,0) = 0 ORDER BY name`)
 	if err != nil {
 		return nil, err
 	}
@@ -40,8 +43,12 @@ func (s *Service) Users(ctx context.Context) ([]User, error) {
 	var out []User
 	for rows.Next() {
 		var u User
-		if err := rows.Scan(&u.ID, &u.Name, &u.Indirizzo, &u.Citta, &u.Provincia, &u.Regione, &u.CAP, &u.Telefono, &u.Replies); err != nil {
+		var aliases string
+		if err := rows.Scan(&u.ID, &u.Name, &u.Indirizzo, &u.Citta, &u.Provincia, &u.Regione, &u.CAP, &u.Telefono, &u.Replies, &u.Code, &aliases); err != nil {
 			return nil, err
+		}
+		if aliases != "" {
+			u.Aliases = strings.Split(aliases, "\n")
 		}
 		out = append(out, u)
 	}
@@ -52,8 +59,11 @@ func (s *Service) Users(ctx context.Context) ([]User, error) {
 // others come from WhatsApp and have their WhatsApp id).
 const ManualUserPrefix = "manual:"
 
-// IsManualUser reports a customer added by hand (no WhatsApp id).
-func IsManualUser(id string) bool { return strings.HasPrefix(id, ManualUserPrefix) }
+// IsManualUser reports a customer added by hand (no WhatsApp id): from
+// Clienti ("manual:…") or from a manual order ("manual-…").
+func IsManualUser(id string) bool {
+	return strings.HasPrefix(id, ManualUserPrefix) || strings.HasPrefix(id, "manual-")
+}
 
 // CreateManualUser adds an empty customer, to be filled in from the UI.
 func (s *Service) CreateManualUser(ctx context.Context) (User, error) {
@@ -77,6 +87,9 @@ func (s *Service) DeleteUser(ctx context.Context, id string) error {
 	}
 	if n > 0 {
 		return fmt.Errorf("il cliente ha degli ordini confermati: non si può eliminare")
+	}
+	if _, err := s.db().ExecContext(ctx, "UPDATE users SET merged_into = NULL WHERE merged_into = ?", id); err != nil {
+		return err
 	}
 	res, err := s.db().ExecContext(ctx, "DELETE FROM users WHERE id = ?", id)
 	if err != nil {

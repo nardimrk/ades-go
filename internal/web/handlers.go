@@ -1040,6 +1040,62 @@ func (s *Server) clienteNew(w http.ResponseWriter, r *http.Request) {
 	toast(w, r, "success", "Nuovo cliente aggiunto: compila i campi, si salvano da soli.")
 }
 
+// mergePage shows the possible duplicates among the customers.
+func (s *Server) mergePage(w http.ResponseWriter, r *http.Request) {
+	ctx := r.Context()
+	sugg, err := s.svc.MergeSuggestions(ctx)
+	if err != nil {
+		s.fail(w, r, err)
+		return
+	}
+	merged, err := s.svc.MergedCustomers(ctx)
+	if err != nil {
+		s.fail(w, r, err)
+		return
+	}
+	_, names, err := s.svc.ClientOptions(ctx)
+	if err != nil {
+		s.fail(w, r, err)
+		return
+	}
+	render(w, r, views.MergePage(sugg, merged, names))
+}
+
+// mergeCustomers merges one customer into another (by id, from a
+// suggestion, or by name, from the free form) and reloads the page.
+func (s *Server) mergeCustomers(w http.ResponseWriter, r *http.Request) {
+	ctx := r.Context()
+	alias, main := r.FormValue("alias_id"), r.FormValue("main_id")
+	if alias == "" || main == "" {
+		byName, _, err := s.svc.ClientOptions(ctx)
+		if err != nil {
+			s.fail(w, r, err)
+			return
+		}
+		var ok1, ok2 bool
+		alias, ok1 = byName[strings.TrimSpace(r.FormValue("alias"))]
+		main, ok2 = byName[strings.TrimSpace(r.FormValue("main"))]
+		if !ok1 || !ok2 {
+			s.fail(w, r, fmt.Errorf("scegli entrambi i clienti dall'elenco"))
+			return
+		}
+	}
+	if err := s.svc.MergeCustomers(ctx, alias, main); err != nil {
+		s.fail(w, r, err)
+		return
+	}
+	w.Header().Set("HX-Refresh", "true")
+}
+
+// unmergeCustomer makes a merged id a customer of its own again.
+func (s *Server) unmergeCustomer(w http.ResponseWriter, r *http.Request) {
+	if err := s.svc.UnmergeCustomer(r.Context(), r.FormValue("id")); err != nil {
+		s.fail(w, r, err)
+		return
+	}
+	w.Header().Set("HX-Refresh", "true")
+}
+
 func (s *Server) clienteDelete(w http.ResponseWriter, r *http.Request) {
 	if err := s.svc.DeleteUser(r.Context(), r.FormValue("id")); err != nil {
 		s.fail(w, r, err)

@@ -449,8 +449,8 @@ type customerLocs struct {
 // customerLocations reads provincia and città of every customer (Clienti).
 func (s *Service) customerLocations(ctx context.Context) (customerLocs, error) {
 	out := customerLocs{byID: map[string]location{}, byName: map[string]location{}}
-	rows, err := s.db().QueryContext(ctx, `SELECT id, COALESCE(name,''), COALESCE(provincia,''), COALESCE("città",''),
-		COALESCE(indirizzo,''), COALESCE(cap,'') FROM users`)
+	rows, err := s.db().QueryContext(ctx, `SELECT a.id, COALESCE(m.name,''), COALESCE(m.provincia,''), COALESCE(m."città",''),
+		COALESCE(m.indirizzo,''), COALESCE(m.cap,''), m.id FROM users a JOIN users m ON m.id = COALESCE(a.merged_into, a.id)`)
 	if err != nil {
 		return out, err
 	}
@@ -458,10 +458,11 @@ func (s *Service) customerLocations(ctx context.Context) (customerLocs, error) {
 	for rows.Next() {
 		var id, name string
 		var loc location
-		if err := rows.Scan(&id, &name, &loc.provincia, &loc.citta, &loc.indirizzo, &loc.cap); err != nil {
+		var mainID string
+		if err := rows.Scan(&id, &name, &loc.provincia, &loc.citta, &loc.indirizzo, &loc.cap, &mainID); err != nil {
 			return out, err
 		}
-		loc.id = id
+		loc.id = mainID
 		loc.provincia, loc.citta = cleanPlace(loc.provincia), cleanPlace(loc.citta)
 		out.byID[id] = loc
 		if n := FmtName(name); n != "" {

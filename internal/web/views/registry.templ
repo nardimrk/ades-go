@@ -299,13 +299,16 @@ templ ClientiPage(users []service.User) {
 	@Layout("Clienti", "clienti") {
 		<div class="row between">
 			<h2>Clienti</h2>
-			<button
-				type="button"
-				class="btn primary"
-				hx-post="/clienti/new"
-				hx-target="#clienti-body"
-				hx-swap="afterbegin"
-			>＋ Aggiungi</button>
+			<div class="row">
+				<a href="/clienti/unisci" class="btn">Unisci duplicati</a>
+				<button
+					type="button"
+					class="btn primary"
+					hx-post="/clienti/new"
+					hx-target="#clienti-body"
+					hx-swap="afterbegin"
+				>＋ Aggiungi</button>
+			</div>
 		</div>
 		<div class="row between">
 			<div class="row">
@@ -318,7 +321,7 @@ templ ClientiPage(users []service.User) {
 			<table class="table edit autosave clienti">
 				<thead>
 					<tr>
-						@filterTh("ID WhatsApp")
+						@filterTh("Codice / ID")
 						@filterTh("Nome")
 						@filterTh("Telefono")
 						@filterTh("Indirizzo")
@@ -337,6 +340,117 @@ templ ClientiPage(users []service.User) {
 			</table>
 		</div>
 	}
+}
+
+// customerIDsTitle: all the ids of a customer, for the tooltip.
+func customerIDsTitle(u service.User) string {
+	t := u.ID
+	for _, a := range u.Aliases {
+		t += "\n" + a
+	}
+	return t
+}
+
+// MergePage: suggested duplicates (best first), a free merge, and the
+// merges done (with "Separa").
+templ MergePage(sugg []service.MergeSuggestion, merged []service.MergedCustomer, names []string) {
+	@Layout("Unisci clienti", "clienti") {
+		<div class="page-head">
+			<a href="/clienti" class="btn">← Clienti</a>
+			<h2>Unisci clienti duplicati</h2>
+		</div>
+		<p class="muted">
+			Lo stesso cliente può comparire più volte: con il nome della chat importata, con il suo ID WhatsApp, o aggiunto a mano.
+			Unendoli, ordini e consegne di tutti gli ID vanno al cliente principale. Si può sempre separare.
+		</p>
+		<form class="card merge-free" hx-post="/clienti/unisci" hx-swap="none">
+			<b>Unisci a mano</b>
+			<div class="merge-free-row">
+				<label>Cliente duplicato <input type="text" name="alias" list="merge-clients" placeholder="Scrivi per cercare…" autocomplete="off" required/></label>
+				<span class="merge-arrow">→</span>
+				<label>Nel cliente principale <input type="text" name="main" list="merge-clients" placeholder="Scrivi per cercare…" autocomplete="off" required/></label>
+				<button type="submit" class="btn primary">Unisci</button>
+			</div>
+			<datalist id="merge-clients">
+				for _, n := range names {
+					<option value={ n }></option>
+				}
+			</datalist>
+		</form>
+		<h3>Possibili duplicati <span class="muted">({ itoa(len(sugg)) })</span></h3>
+		if len(sugg) == 0 {
+			@Alert("info", "Nessun possibile duplicato trovato.")
+		}
+		<div class="merge-list">
+			for _, m := range sugg {
+				<div class="merge-item">
+					@mergeSide(m.Alias)
+					<span class="merge-arrow" aria-hidden="true">→</span>
+					@mergeSide(m.Main)
+					<div class="merge-why">
+						for _, r := range m.Reasons {
+							<span class="badge badge-info">{ r }</span>
+						}
+					</div>
+					<button
+						type="button"
+						class="btn small primary"
+						hx-post="/clienti/unisci"
+						hx-vals={ templ.JSONString(map[string]string{"alias_id": m.Alias.ID, "main_id": m.Main.ID}) }
+						hx-swap="none"
+						hx-confirm={ "Unire «" + m.Alias.Name + "» in «" + m.Main.Name + "»?" }
+					>Unisci</button>
+				</div>
+			}
+		</div>
+		if len(merged) > 0 {
+			<h3>Clienti uniti <span class="muted">({ itoa(len(merged)) })</span></h3>
+			<div class="merge-list">
+				for _, m := range merged {
+					<div class="merge-item">
+						<span><b>{ noEmoji(m.Name) }</b> <span class="muted mono">{ m.ID }</span></span>
+						<span class="merge-arrow" aria-hidden="true">→</span>
+						<span><span class="customer-code">{ m.MainCode }</span> <b>{ noEmoji(m.MainName) }</b></span>
+						<button
+							type="button"
+							class="btn small"
+							hx-post="/clienti/separa"
+							hx-vals={ templ.JSONString(map[string]string{"id": m.ID}) }
+							hx-swap="none"
+							hx-confirm={ "Separare «" + m.Name + "» da «" + m.MainName + "»?" }
+						>Separa</button>
+					</div>
+				}
+			</div>
+		}
+	}
+}
+
+templ mergeSide(c service.MergeCandidate) {
+	<span class="merge-side">
+		<b>{ noEmoji(c.Name) }</b>
+		<span class="muted merge-meta">
+			if c.Code != "" {
+				{ c.Code } ·
+			}
+			{ mergeKindLabel(c.Kind) } · { plural(c.Replies, "messaggio", "messaggi") }
+			if c.First != "" {
+				· { c.First } → { c.Last }
+			}
+		</span>
+	</span>
+}
+
+func mergeKindLabel(k string) string {
+	switch k {
+	case "whatsapp":
+		return "WhatsApp"
+	case "import":
+		return "chat importata"
+	case "manual":
+		return "aggiunto a mano"
+	}
+	return k
 }
 
 // deleteUserConfirm says what deleting the customer does to their messages.
@@ -358,11 +472,17 @@ func deleteUserConfirm(u service.User) string {
 // ClienteRow is one customer; focus=true for a just-created one (cursor in Nome).
 templ ClienteRow(u service.User, focus bool) {
 	<tr class="user-row" data-name={ u.Name + " " + u.ID + " " + u.Citta + " " + u.Telefono }>
-		<td class="mono title-cell col-id" title={ u.ID }>
+		<td class="mono title-cell col-id" title={ customerIDsTitle(u) }>
+			if u.Code != "" {
+				<span class="customer-code">{ u.Code }</span>
+			}
 			if service.IsManualUser(u.ID) {
 				<span class="badge badge-warn">aggiunto a mano</span>
 			} else {
 				{ noEmoji(u.ID) }
+			}
+			if len(u.Aliases) > 0 {
+				<span class="muted alias-count">+{ itoa(len(u.Aliases)) } ID</span>
 			}
 		</td>
 		<td class="wide col-nome">@autosaveField("/clienti/field", u.ID, "name", u.Name, "Nome", "", focus)</td>

@@ -208,6 +208,11 @@ var addColumns = []string{
 	"ALTER TABLE quotation_items ADD COLUMN linked_option TEXT",
 	// the inserzione's number ("INS0123"), unique, in posting order
 	"ALTER TABLE listings ADD COLUMN listing_number TEXT",
+	// customers: a duplicate id points to the main record (the customer),
+	// sellers are not customers, every customer has a code (CLI0001)
+	"ALTER TABLE users ADD COLUMN merged_into TEXT",
+	"ALTER TABLE users ADD COLUMN is_seller INTEGER NOT NULL DEFAULT 0",
+	"ALTER TABLE users ADD COLUMN customer_code TEXT",
 }
 
 func (s *Store) migrate(ctx context.Context) error {
@@ -236,6 +241,12 @@ func (s *Store) migrate(ctx context.Context) error {
 	// listings stored before original_body existed: their current text is
 	// the best original there is (earlier edits are lost)
 	if _, err := s.DB.ExecContext(ctx, "UPDATE listings SET original_body = body WHERE original_body IS NULL"); err != nil {
+		return err
+	}
+	if _, err := s.DB.ExecContext(ctx, "CREATE UNIQUE INDEX IF NOT EXISTS idx_users_code ON users(customer_code)"); err != nil {
+		return err
+	}
+	if err := s.AssignCustomerCodes(ctx); err != nil {
 		return err
 	}
 	if err := s.AssignListingNumbers(ctx); err != nil {
@@ -268,6 +279,8 @@ var selectionsTriggers = func() []string {
 		"trg_sel_users_ins AFTER INSERT ON users",
 		"trg_sel_users_upd AFTER UPDATE OF id, name ON users",
 		"trg_sel_users_del AFTER DELETE ON users",
+		// merging/separating customers changes whose orders the replies are
+		"trg_sel_users_merge AFTER UPDATE OF merged_into ON users",
 		"trg_sel_quotations_ins AFTER INSERT ON quotations",
 		"trg_sel_quotations_upd AFTER UPDATE OF id, quotation_number, quotation_date ON quotations",
 		"trg_sel_quotations_del AFTER DELETE ON quotations",
@@ -392,6 +405,41 @@ func (s *Store) AssignListingNumbers(ctx context.Context) error {
 	for _, id := range ids {
 		max++
 		if _, err := s.DB.ExecContext(ctx, "UPDATE listings SET listing_number = ? WHERE id = ?", fmt.Sprintf("INS%04d", max), id); err != nil {
+			return err
+		}
+	}
+	return nil
+}
+
+// AssignCustomerCodes gives the customers without a code the next ones
+// ("CLI0001", …), in order of their first message. Sellers and WhatsApp
+// groups get none; a merged id keeps the code it had.
+func (s *Store) AssignCustomerCodes(ctx context.Context) error {
+	var max int
+	if err := s.DB.QueryRowContext(ctx, `SELECT COALESCE(MAX(CAST(substr(customer_code, 4) AS INTEGER)), 0)
+		FROM users WHERE customer_code LIKE 'CLI%'`).Scan(&max); err != nil {
+		return err
+	}
+	rows, err := s.DB.QueryContext(ctx, `SELECT u.id FROM users u
+		WHERE u.customer_code IS NULL AND COALESCE(u.is_seller,0) = 0 AND u.merged_into IS NULL AND u.id NOT LIKE '%@g.us'
+		ORDER BY (SELECT MIN(timestamp) FROM replies r WHERE r.author_id = u.id) IS NULL,
+		         (SELECT MIN(timestamp) FROM replies r WHERE r.author_id = u.id), u.id`)
+	if err != nil {
+		return err
+	}
+	var ids []string
+	for rows.Next() {
+		var id string
+		if err := rows.Scan(&id); err != nil {
+			rows.Close()
+			return err
+		}
+		ids = append(ids, id)
+	}
+	rows.Close()
+	for _, id := range ids {
+		max++
+		if _, err := s.DB.ExecContext(ctx, "UPDATE users SET customer_code = ? WHERE id = ?", fmt.Sprintf("CLI%04d", max), id); err != nil {
 			return err
 		}
 	}

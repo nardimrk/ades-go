@@ -175,10 +175,11 @@ func (s *Service) loadSelections(ctx context.Context) ([]Selection, error) {
 	}
 
 	rows, err := s.db().QueryContext(ctx, `
-		SELECT r.id, r.author_id, `+userNameSQL+`, COALESCE(r.msg_id,''), COALESCE(r.body,''), COALESCE(r.order_override,''), COALESCE(r.timestamp,0),
+		SELECT r.id, COALESCE(u0.merged_into, r.author_id), `+userNameSQL+`, COALESCE(r.msg_id,''), COALESCE(r.body,''), COALESCE(r.order_override,''), COALESCE(r.timestamp,0),
 		       q.quotation_number, q.id, COALESCE(q.quotation_date,'')
 		FROM replies r
-		LEFT JOIN users u      ON u.id     = r.author_id
+		LEFT JOIN users u0     ON u0.id    = r.author_id
+		LEFT JOIN users u      ON u.id     = COALESCE(u0.merged_into, r.author_id)
 		LEFT JOIN listings l   ON l.msg_id = r.listing_msg_id
 		LEFT JOIN quotations q ON q.id     = l.quotation_id
 		WHERE r.listing_msg_id IS NOT NULL AND q.id IS NOT NULL
@@ -979,7 +980,8 @@ func (s *Service) optionStock(ctx context.Context, quotationID int64, qsel []Sel
 
 // ClientOptions maps display name → user id for every non-group user.
 func (s *Service) ClientOptions(ctx context.Context) (map[string]string, []string, error) {
-	rows, err := s.db().QueryContext(ctx, "SELECT id, COALESCE(name,'') FROM users WHERE id NOT LIKE '%@g.us' ORDER BY name")
+	// customers only: no merged duplicates, no sellers, no groups
+	rows, err := s.db().QueryContext(ctx, "SELECT id, COALESCE(name,'') FROM users WHERE id NOT LIKE '%@g.us' AND merged_into IS NULL AND COALESCE(is_seller,0) = 0 ORDER BY name")
 	if err != nil {
 		return nil, nil, err
 	}

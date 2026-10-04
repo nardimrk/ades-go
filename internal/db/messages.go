@@ -55,7 +55,10 @@ func (s *Store) UpsertUser(ctx context.Context, id, name string) error {
 		ON CONFLICT(id) DO UPDATE SET
 			name       = CASE WHEN excluded.name != '' THEN excluded.name ELSE users.name END,
 			updated_at = datetime('now')`, id, name)
-	return err
+	if err != nil {
+		return err
+	}
+	return s.AssignCustomerCodes(ctx)
 }
 
 // SetPhoneIfEmpty stores the phone number of a customer who has none yet

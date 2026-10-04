@@ -1043,3 +1043,17 @@ body:has(.sel-bar:not(:empty)) .fab-menu { bottom: calc(max(.75rem, env(safe-are
 /* unlink: the same colours as the link pill next to it */
 .tool-pill.pill-unlink { color: var(--accent); background: var(--accent-soft); border-color: var(--accent); }
 .tool-pill.pill-unlink:hover { filter: brightness(.95); }
+
+/* customers: code, merged ids, the merge page */
+.customer-code { display: inline-block; margin-right: .35rem; padding: 0 .4rem; border: 1px solid var(--accent); border-radius: 999px; color: var(--accent); font-size: .72rem; font-weight: 700; font-family: inherit; }
+.alias-count { margin-left: .35rem; font-size: .75rem; }
+.merge-free { display: flex; flex-direction: column; gap: .5rem; margin: .75rem 0 1rem; }
+.merge-free-row { display: flex; flex-wrap: wrap; align-items: flex-end; gap: .5rem .75rem; }
+.merge-free-row label { display: flex; flex-direction: column; gap: .25rem; flex: 1 1 14rem; min-width: 0; font-size: .85rem; }
+.merge-list { display: flex; flex-direction: column; gap: .4rem; margin-bottom: 1.25rem; }
+.merge-item { display: flex; flex-wrap: wrap; align-items: center; gap: .4rem .75rem; padding: .55rem .75rem; background: var(--panel); border: 1px solid var(--border); border-radius: var(--radius); }
+.merge-item > .btn { margin-left: auto; }
+.merge-side { display: flex; flex-direction: column; min-width: 0; }
+.merge-meta { font-size: .8rem; }
+.merge-arrow { color: var(--muted); font-weight: 700; }
+.merge-why { display: flex; flex-wrap: wrap; gap: .25rem; }
