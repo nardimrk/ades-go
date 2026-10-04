@@ -4,6 +4,7 @@ import (
 	"context"
 	"path/filepath"
 	"testing"
+	"time"
 
 	"adesgo/internal/config"
 	"adesgo/internal/db"
@@ -87,5 +88,52 @@ func TestNormalizeEmail(t *testing.T) {
 		if got, err := NormalizeEmail(in); err == nil {
 			t.Errorf("%q accepted as %q", in, got)
 		}
+	}
+}
+
+func TestActiveUsersSkipSellers(t *testing.T) {
+	ctx := context.Background()
+	store, err := db.Open(filepath.Join(t.TempDir(), "wine.db"))
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer store.Close()
+	svc := New(store, &config.Config{}, nil)
+	now := time.Now().Unix()
+	for _, u := range [][2]string{{"a@lid", "Alessandro"}, {"b@lid", "Bruno"}, {"import:Alessandro", "Alessandro"}} {
+		if _, err := store.DB.Exec("INSERT INTO users (id, name) VALUES (?, ?)", u[0], u[1]); err != nil {
+			t.Fatal(err)
+		}
+	}
+	for i, a := range []string{"a@lid", "a@lid", "b@lid"} {
+		if err := store.InsertReply(ctx, db.Reply{MsgID: "R" + itoa(i), ChatID: "1@g.us", AuthorID: a, Body: "x", Timestamp: now - 3600}); err != nil {
+			t.Fatal(err)
+		}
+	}
+	// an old message doesn't count in 3 months
+	if err := store.InsertReply(ctx, db.Reply{MsgID: "OLD", ChatID: "1@g.us", AuthorID: "b@lid", Body: "x", Timestamp: now - 200*24*3600}); err != nil {
+		t.Fatal(err)
+	}
+	users, err := svc.ActiveUsers(ctx, 3)
+	if err != nil || len(users) != 2 || users[0].Utente != "Alessandro" || users[1].Risposte != 1 {
+		t.Fatalf("before: %+v, %v", users, err)
+	}
+	for _, id := range []string{"a@lid", "import:Alessandro"} {
+		if err := svc.SetSeller(ctx, id, true); err != nil {
+			t.Fatal(err)
+		}
+	}
+	if users, _ = svc.ActiveUsers(ctx, 3); len(users) != 1 || users[0].Utente != "Bruno" {
+		t.Fatalf("after: %+v", users)
+	}
+	sellers, err := svc.Sellers(ctx)
+	if err != nil || len(sellers) != 1 || len(sellers[0].IDs) != 2 {
+		t.Fatalf("sellers: %+v, %v", sellers, err)
+	}
+	if err := svc.SetSeller(ctx, "a@lid", false); err != nil {
+		t.Fatal(err)
+	}
+	if users, _ = svc.ActiveUsers(ctx, 3); len(users) != 2 {
+		t.Fatalf("restored: %+v", users)
 	}
 }

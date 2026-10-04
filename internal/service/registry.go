@@ -409,6 +409,7 @@ type DiscussedListing struct {
 }
 
 type ActiveUser struct {
+	ID       string // the customer's id (merged ids count for it)
 	Utente   string
 	Risposte int
 }
@@ -493,7 +494,7 @@ func ActivePeriodFor(key string) ActivePeriod {
 func (s *Service) ActiveUsers(ctx context.Context, months int) ([]ActiveUser, error) {
 	since := time.Now().AddDate(0, -months, 0).Unix()
 	rows, err := s.db().QueryContext(ctx, `
-		SELECT COALESCE(NULLIF(TRIM(m.name),''), m.id), COUNT(*) AS n FROM replies r
+		SELECT m.id, COALESCE(NULLIF(TRIM(m.name),''), m.id), COUNT(*) AS n FROM replies r
 		JOIN users a ON a.id = r.author_id
 		JOIN users m ON m.id = COALESCE(a.merged_into, a.id)
 		WHERE r.timestamp >= ? AND COALESCE(a.is_seller,0) = 0 AND COALESCE(m.is_seller,0) = 0 AND m.id NOT LIKE '%@g.us'
@@ -505,11 +506,66 @@ func (s *Service) ActiveUsers(ctx context.Context, months int) ([]ActiveUser, er
 	var out []ActiveUser
 	for rows.Next() {
 		var a ActiveUser
-		if err := rows.Scan(&a.Utente, &a.Risposte); err != nil {
+		if err := rows.Scan(&a.ID, &a.Utente, &a.Risposte); err != nil {
 			return nil, err
 		}
 		a.Utente = textutil.StripEmoji(a.Utente)
 		out = append(out, a)
 	}
 	return out, rows.Err()
+}
+
+// Seller: someone marked as a seller (left out of Clienti and of the most
+// active customers), with all their ids (the same name once).
+type Seller struct {
+	IDs  []string
+	Name string
+}
+
+// Sellers lists the people marked as sellers, by name.
+func (s *Service) Sellers(ctx context.Context) ([]Seller, error) {
+	rows, err := s.db().QueryContext(ctx, `SELECT id, COALESCE(NULLIF(TRIM(name),''), id) FROM users
+		WHERE COALESCE(is_seller,0) = 1 AND merged_into IS NULL ORDER BY 2, 1`)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+	var out []Seller
+	idx := map[string]int{}
+	for rows.Next() {
+		var id, name string
+		if err := rows.Scan(&id, &name); err != nil {
+			return nil, err
+		}
+		name = textutil.StripEmoji(name)
+		k := strings.ToLower(name)
+		i, ok := idx[k]
+		if !ok {
+			i = len(out)
+			idx[k] = i
+			out = append(out, Seller{Name: name})
+		}
+		out[i].IDs = append(out[i].IDs, id)
+	}
+	return out, rows.Err()
+}
+
+// SetSeller marks a customer (and the ids merged into it) as a seller, or
+// as a customer again. The customer code is kept, so undoing gives it back.
+func (s *Service) SetSeller(ctx context.Context, id string, seller bool) error {
+	v := 0
+	if seller {
+		v = 1
+	}
+	res, err := s.db().ExecContext(ctx, "UPDATE users SET is_seller = ?, updated_at = datetime('now') WHERE id = ? OR merged_into = ?", v, id, id)
+	if err != nil {
+		return err
+	}
+	if n, _ := res.RowsAffected(); n == 0 {
+		return fmt.Errorf("cliente non trovato")
+	}
+	if !seller {
+		return s.Store.AssignCustomerCodes(ctx)
+	}
+	return nil
 }

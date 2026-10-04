@@ -1251,23 +1251,57 @@ func (s *Server) statistiche(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	p := service.ActivePeriodFor(r.URL.Query().Get("periodo"))
-	users, err := s.svc.ActiveUsers(r.Context(), p.Months)
+	a, err := s.activeUsers(r, p)
 	if err != nil {
 		s.fail(w, r, err)
 		return
 	}
-	render(w, r, views.StatistichePage(st, p, users))
+	render(w, r, views.StatistichePage(st, a))
+}
+
+func (s *Server) activeUsers(r *http.Request, p service.ActivePeriod) (views.ActiveUsersData, error) {
+	d := views.ActiveUsersData{Period: p}
+	var err error
+	if d.Users, err = s.svc.ActiveUsers(r.Context(), p.Months); err != nil {
+		return d, err
+	}
+	d.Sellers, err = s.svc.Sellers(r.Context())
+	return d, err
+}
+
+// statisticheVenditore marks a customer as a seller (seller=1) or as a
+// customer again (seller=0) and redraws the most active customers.
+func (s *Server) statisticheVenditore(w http.ResponseWriter, r *http.Request) {
+	seller := r.FormValue("seller") == "1"
+	// "id": one id, or several (one per line) for a seller with more ids
+	for _, id := range strings.Split(r.FormValue("id"), "\n") {
+		if err := s.svc.SetSeller(r.Context(), id, seller); err != nil {
+			s.fail(w, r, err)
+			return
+		}
+	}
+	a, err := s.activeUsers(r, service.ActivePeriodFor(r.FormValue("periodo")))
+	if err != nil {
+		s.fail(w, r, err)
+		return
+	}
+	render(w, r, views.ActiveUsersSection(a))
+	if seller {
+		toast(w, r, "success", "Segnato come venditore: non compare più tra i clienti.")
+	} else {
+		toast(w, r, "success", "Di nuovo tra i clienti.")
+	}
 }
 
 // statisticheAttivi: the most active customers for another period (the
 // section only; the address bar keeps the period).
 func (s *Server) statisticheAttivi(w http.ResponseWriter, r *http.Request) {
 	p := service.ActivePeriodFor(r.URL.Query().Get("periodo"))
-	users, err := s.svc.ActiveUsers(r.Context(), p.Months)
+	a, err := s.activeUsers(r, p)
 	if err != nil {
 		s.fail(w, r, err)
 		return
 	}
 	w.Header().Set("HX-Replace-Url", "/statistiche?periodo="+p.Key)
-	render(w, r, views.ActiveUsersSection(p, users))
+	render(w, r, views.ActiveUsersSection(a))
 }

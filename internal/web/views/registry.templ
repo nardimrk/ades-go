@@ -745,7 +745,7 @@ templ ProdottoRow(it service.Item, focus bool) {
 
 // ── Statistiche ──────────────────────────────────────────────────────────────
 
-templ StatistichePage(st *service.Stats, p service.ActivePeriod, users []service.ActiveUser) {
+templ StatistichePage(st *service.Stats, a ActiveUsersData) {
 	@Layout("Statistiche", "statistiche") {
 		<h2>Statistiche</h2>
 		<div class="metrics">
@@ -767,14 +767,36 @@ templ StatistichePage(st *service.Stats, p service.ActivePeriod, users []service
 				</tbody>
 			</table>
 		}
-		@ActiveUsersSection(p, users)
+		@ActiveUsersSection(a)
 	}
+}
+
+// barWidth: a bar's length as a share of the longest (0–100, at least 1 so
+// every bar shows).
+func barWidth(n, max int) templ.SafeCSS {
+	w := 100.0
+	if max > 0 {
+		w = float64(n) * 100 / float64(max)
+	}
+	if w < 1 {
+		w = 1
+	}
+	return templ.SafeCSS(fmt.Sprintf("--w: %.1f", w))
+}
+
+// ActiveUsersData: the most active customers of a period, and the people
+// marked as sellers (left out).
+type ActiveUsersData struct {
+	Period  service.ActivePeriod
+	Users   []service.ActiveUser
+	Sellers []service.Seller
 }
 
 // ActiveUsersSection: the customers who wrote the most in the groups in the
 // chosen period (3 months, 6 months, 1 year); the period buttons reload only
-// this section.
-templ ActiveUsersSection(p service.ActivePeriod, users []service.ActiveUser) {
+// this section. "Venditore" leaves someone out (Clienti too), "Ripristina"
+// takes them back.
+templ ActiveUsersSection(a ActiveUsersData) {
 	<section id="utenti-attivi" class="active-users">
 		<div class="row between">
 			<h3>Clienti più attivi</h3>
@@ -782,8 +804,8 @@ templ ActiveUsersSection(p service.ActivePeriod, users []service.ActiveUser) {
 				for _, o := range service.ActivePeriods {
 					<button
 						type="button"
-						class={ "seg-btn", templ.KV("active", o.Key == p.Key) }
-						aria-pressed={ fmt.Sprint(o.Key == p.Key) }
+						class={ "seg-btn", templ.KV("active", o.Key == a.Period.Key) }
+						aria-pressed={ fmt.Sprint(o.Key == a.Period.Key) }
 						hx-get={ "/statistiche/attivi?periodo=" + o.Key }
 						hx-target="#utenti-attivi"
 						hx-swap="outerHTML"
@@ -791,18 +813,53 @@ templ ActiveUsersSection(p service.ActivePeriod, users []service.ActiveUser) {
 				}
 			</div>
 		</div>
-		if len(users) == 0 {
-			@Alert("info", "Nessun messaggio dei clienti "+p.Span+".")
+		if len(a.Users) == 0 {
+			@Alert("info", "Nessun messaggio dei clienti "+a.Period.Span+".")
 		} else {
-			<p class="muted">Messaggi scritti nei gruppi { p.Span } (venditori esclusi).</p>
-			<table class="table">
-				<thead><tr><th class="num rank">#</th><th>Cliente</th><th class="num">Messaggi</th></tr></thead>
-				<tbody>
-					for i, u := range users {
-						<tr><td class="num rank">{ itoa(i + 1) }</td><td class="title-cell">{ u.Utente }</td><td class="num">{ itoa(u.Risposte) }</td></tr>
-					}
-				</tbody>
-			</table>
+			<p class="muted">Messaggi scritti nei gruppi { a.Period.Span } (venditori esclusi).</p>
+			// a ranked bar chart: one bar per customer from the same baseline,
+			// its length relative to the first, the count at its tip
+			<ol class="rank-chart" aria-label={ "Clienti più attivi " + a.Period.Span }>
+				for i, u := range a.Users {
+					<li class="rank-row" title={ u.Utente + ": " + plural(u.Risposte, "messaggio", "messaggi") }>
+						<span class="rank-n">{ itoa(i + 1) }</span>
+						<span class="rank-name">{ u.Utente }</span>
+						<span class="rank-track">
+							<span class="rank-bar" style={ barWidth(u.Risposte, a.Users[0].Risposte) }></span>
+							<span class="rank-val">{ itoa(u.Risposte) }<span class="sr-only"> messaggi</span></span>
+						</span>
+						<button
+							type="button"
+							class="btn small rank-seller"
+							title="È un venditore, non un cliente"
+							hx-post="/statistiche/venditore"
+							hx-vals={ templ.JSONString(map[string]string{"id": u.ID, "seller": "1", "periodo": a.Period.Key}) }
+							hx-target="#utenti-attivi"
+							hx-swap="outerHTML"
+							hx-confirm={ u.Utente + " è un venditore? Non comparirà più tra i clienti (né in Clienti); puoi ripristinarlo qui sotto." }
+						>Venditore</button>
+					</li>
+				}
+			</ol>
+		}
+		if len(a.Sellers) > 0 {
+			<div class="sellers">
+				<span class="muted">Venditori esclusi:</span>
+				for _, v := range a.Sellers {
+					<span class="seller-pill">
+						{ v.Name }
+						<button
+							type="button"
+							class="link"
+							hx-post="/statistiche/venditore"
+							hx-vals={ templ.JSONString(map[string]string{"id": strings.Join(v.IDs, "\n"), "seller": "0", "periodo": a.Period.Key}) }
+							hx-target="#utenti-attivi"
+							hx-swap="outerHTML"
+							hx-confirm={ v.Name + " è un cliente? Torna in Clienti e nelle statistiche." }
+						>Ripristina</button>
+					</span>
+				}
+			</div>
 		}
 	</section>
 }

@@ -1084,5 +1084,32 @@ body:has(.sel-bar:not(:empty)) .fab-menu { bottom: calc(max(.75rem, env(safe-are
 .move-item:disabled { opacity: .5; cursor: not-allowed; }
 .move-item:disabled:hover { border-color: var(--border); }
 
-/* Statistiche: the most active customers, the rank column as narrow as it can be */
-.active-users .table .rank { width: 1%; white-space: nowrap; }
+/* Statistiche: the most active customers as a ranked bar chart. Bars start
+   from one baseline, 12px thick, square at the baseline and rounded at the
+   tip, in the accent; the count sits at the tip in text colour. */
+.rank-chart { list-style: none; margin: .25rem 0 0; padding: .5rem .75rem; background: var(--panel); border: 1px solid var(--border); border-radius: var(--radius); }
+.rank-row {
+  display: grid; grid-template-columns: 1.75rem minmax(9rem, 16rem) minmax(0, 1fr) auto;
+  grid-template-areas: "n name track act"; align-items: center; gap: .25rem .75rem;
+  padding: .35rem .25rem; border-radius: 6px;
+}
+.rank-row:hover, .rank-row:focus-within { background: var(--accent-soft); }
+.rank-n { grid-area: n; text-align: right; color: var(--muted); font-variant-numeric: tabular-nums; font-size: .85rem; }
+.rank-name { grid-area: name; min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.rank-row:nth-child(-n+3) .rank-name { font-weight: 600; }
+.rank-track { grid-area: track; display: flex; align-items: center; gap: .5rem; min-width: 0; }
+.rank-bar { flex: none; height: 12px; width: calc(var(--w) * .88%); min-width: 4px; border-radius: 0 4px 4px 0; background: var(--accent); }
+.rank-val { flex: none; font-variant-numeric: tabular-nums; font-size: .9rem; font-weight: 600; color: var(--text); }
+.rank-seller { grid-area: act; }
+/* with a mouse the button stays quiet until the row is pointed at or focused */
+@media (hover: hover) {
+  .rank-seller { opacity: 0; transition: opacity .15s; }
+  .rank-row:hover .rank-seller, .rank-row:focus-within .rank-seller { opacity: 1; }
+}
+@media (max-width: 720px) {
+  .rank-chart { padding: .4rem .5rem; }
+  .rank-row { grid-template-columns: 1.5rem minmax(0, 1fr) auto; grid-template-areas: "n name act" ". track track"; }
+}
+.sellers { display: flex; flex-wrap: wrap; align-items: center; gap: .4rem .6rem; margin-top: .75rem; }
+.seller-pill { display: inline-flex; align-items: center; gap: .4rem; padding: .15rem .3rem .15rem .7rem; border: 1px solid var(--border); border-radius: 999px; background: var(--panel); }
+.seller-pill button.link { color: var(--accent); font-weight: 600; }
