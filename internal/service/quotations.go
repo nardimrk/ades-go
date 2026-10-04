@@ -6,6 +6,8 @@ import (
 	"encoding/json"
 	"errors"
 	"fmt"
+	"math"
+	"regexp"
 	"sort"
 	"strconv"
 	"strings"
@@ -96,7 +98,7 @@ func (s *Service) ComputeSelections(ctx context.Context) ([]Selection, error) {
 	}
 	cases := map[string]QuotationItem{}
 	for _, it := range items {
-		if textutil.CaseSizeFromName(it.WineName) > 0 {
+		if textutil.ExplicitCaseSize(it.WineName) > 0 {
 			cases[strconv.FormatInt(it.QuotationID, 10)+"|"+strings.ToUpper(it.Option)] = it
 		}
 	}
@@ -106,7 +108,7 @@ func (s *Service) ComputeSelections(ctx context.Context) ([]Selection, error) {
 	conv := make([]Selection, 0, len(out))
 	for _, x := range out {
 		if ci, ok := cases[strconv.FormatInt(x.QuotationID, 10)+"|"+x.Opzione+textutil.CaseSuffix]; ok {
-			if n := textutil.CaseSizeFromName(ci.WineName); x.Qta >= n && x.Qta%n == 0 {
+			if n := textutil.ExplicitCaseSize(ci.WineName); x.Qta >= n && x.Qta%n == 0 {
 				if ci.Vintage != 0 {
 					x.Vintage = ci.Vintage
 				}
@@ -872,11 +874,16 @@ func (s *Service) QuotationListing(ctx context.Context, quotationID int64) (*Cam
 // OptionStock is one wine option of the order: the bottles ordered and,
 // when the listing gives a count, how many are left of it.
 type OptionStock struct {
-	Letter   string
-	Wine     string
-	Ordered  int  // bottles ordered by everyone, at any time (cases count their bottles)
-	HasCount bool // the listing states how many bottles it offers
-	Offered  int  // the initial quantity of the listing
+	Letter string
+	Wine   string
+	// the item edited by "Cassa" on the order page: the option's case
+	// variant ("A-CASSA") if there is one, else the option itself
+	Code     string
+	CaseSize int     // bottles per case, 0 = sold by the bottle
+	Price    float64 // that item's price (per case for a case)
+	Ordered  int     // bottles ordered by everyone, at any time (cases count their bottles)
+	HasCount bool    // the listing states how many bottles it offers
+	Offered  int     // the initial quantity of the listing
 }
 
 // Remaining is what is left: offered minus ordered (negative = ordered
@@ -921,18 +928,25 @@ func (s *Service) optionStock(ctx context.Context, quotationID int64, qsel []Sel
 	// the options of the order, named as in the order
 	names := map[string]string{}
 	letters := map[string]bool{}
+	edit := map[string]QuotationItem{} // the case variant wins over the option
+	plainCase := map[string]int{}      // options sold as whole cases ("30 x cassa da 12 …")
 	items, err := s.quotationItems(ctx, "WHERE quotation_id = ?", quotationID)
 	if err != nil {
 		return nil, err
 	}
 	for _, it := range items {
-		letter, _ := strings.CutSuffix(strings.ToUpper(it.Option), textutil.CaseSuffix)
+		code := strings.ToUpper(it.Option)
+		letter, isCase := strings.CutSuffix(code, textutil.CaseSuffix)
 		if len(letter) != 1 {
 			continue
 		}
 		letters[letter] = true
-		if o := strings.ToUpper(it.Option); len(o) == 1 {
+		if !isCase {
 			names[letter] = wineWithVintage(it.WineName, it.Vintage)
+			plainCase[letter] = textutil.CaseSizeFromName(it.WineName)
+		}
+		if _, has := edit[letter]; isCase || !has {
+			edit[letter] = it
 		}
 	}
 	for l := range first {
@@ -968,8 +982,14 @@ func (s *Service) optionStock(ctx context.Context, quotationID int64, qsel []Sel
 	var out []OptionStock
 	for _, l := range keys {
 		o := OptionStock{Letter: l, Wine: names[l], Ordered: total[l]}
+		if it, ok := edit[l]; ok {
+			o.Code, o.CaseSize, o.Price = strings.ToUpper(it.Option), textutil.CaseSizeFromName(it.WineName), it.Price
+		}
 		if st, ok := first[l]; ok {
 			o.HasCount, o.Offered = true, st.count
+			if n := plainCase[l]; n > 0 {
+				o.Offered *= n // the listing counts cases, the orders bottles
+			}
 			if o.Wine == "" {
 				o.Wine = st.wine
 			}
@@ -1303,6 +1323,89 @@ func (s *Service) SaveOrder(ctx context.Context, quotNum, clientName string, row
 		}
 		return nil
 	})
+}
+
+// DeleteSavedOrder removes a customer's confirmed order ("Riapri"): the
+// section goes back to what the replies say, to be confirmed again.
+func (s *Service) DeleteSavedOrder(ctx context.Context, quotNum, clientName string) error {
+	byName, _, err := s.ClientOptions(ctx)
+	if err != nil {
+		return err
+	}
+	return s.inTx(ctx, func(tx *sql.Tx) error {
+		var ids []int64
+		q, args := "SELECT id FROM orders WHERE quotation_number = ? AND user_name = ?", []any{quotNum, clientName}
+		if uid, ok := byName[clientName]; ok {
+			q, args = "SELECT id FROM orders WHERE quotation_number = ? AND (user_id = ? OR (user_id IS NULL AND user_name = ?))", []any{quotNum, uid, clientName}
+		}
+		rows, err := tx.QueryContext(ctx, q, args...)
+		if err != nil {
+			return err
+		}
+		for rows.Next() {
+			var id int64
+			if err := rows.Scan(&id); err != nil {
+				rows.Close()
+				return err
+			}
+			ids = append(ids, id)
+		}
+		rows.Close()
+		if len(ids) == 0 {
+			return fmt.Errorf("nessun ordine confermato per %s", clientName)
+		}
+		for _, id := range ids {
+			if _, err := tx.ExecContext(ctx, "DELETE FROM order_items WHERE order_id = ?", id); err != nil {
+				return err
+			}
+			if _, err := tx.ExecContext(ctx, "DELETE FROM orders WHERE id = ?", id); err != nil {
+				return err
+			}
+		}
+		return nil
+	})
+}
+
+// caseNameRe: the case part of an option's name, "(cassa da 6…)" or
+// "(cassa intera)".
+var caseNameRe = regexp.MustCompile(`(?i)\s*\((?:cassa da \d+[^)]*|cassa intera)\)`)
+
+// SetOptionCase sets how an option of an order is sold: as a whole case of
+// size bottles (its name says "(cassa da N)") at price per case, or by the
+// bottle (size 0) at price per bottle. Replies already read count again
+// with it ("2B" = 2 cases).
+func (s *Service) SetOptionCase(ctx context.Context, quotNum, code string, size int, price float64) error {
+	q, err := s.QuotationByNumber(ctx, quotNum)
+	if err != nil {
+		return err
+	}
+	if q == nil {
+		return fmt.Errorf("ordine %q non trovato", quotNum)
+	}
+	if size < 0 || size > 99 || size == 1 {
+		return fmt.Errorf("bottiglie per cassa non valide: %d (0 = a bottiglia)", size)
+	}
+	if price <= 0 {
+		return fmt.Errorf("inserisci un prezzo valido")
+	}
+	var name string
+	if err := s.db().QueryRowContext(ctx, "SELECT wine_name FROM quotation_items WHERE quotation_id = ? AND UPPER(option) = UPPER(?) ORDER BY id LIMIT 1", q.ID, code).Scan(&name); err != nil {
+		if errors.Is(err, sql.ErrNoRows) {
+			return fmt.Errorf("opzione %s non trovata", code)
+		}
+		return err
+	}
+	switch {
+	case size == 0:
+		name = strings.TrimSpace(caseNameRe.ReplaceAllString(name, ""))
+	case regexp.MustCompile(`(?i)\(cassa da \d+`).MatchString(name):
+		name = regexp.MustCompile(`(?i)\(cassa da \d+`).ReplaceAllString(name, fmt.Sprintf("(cassa da %d", size))
+	default:
+		name = strings.TrimSpace(caseNameRe.ReplaceAllString(name, "")) + fmt.Sprintf(" (cassa da %d)", size)
+	}
+	_, err = s.db().ExecContext(ctx, "UPDATE quotation_items SET wine_name = ?, price = ? WHERE quotation_id = ? AND UPPER(option) = UPPER(?)",
+		name, math.Round(price*100)/100, q.ID, code)
+	return err
 }
 
 // ── new quotation ────────────────────────────────────────────────────────────

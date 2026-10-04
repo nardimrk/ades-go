@@ -878,6 +878,24 @@ func (s *Server) preventivoSection(w http.ResponseWriter, r *http.Request) {
 			return
 		}
 		msg = "Ordine per " + cliente + " salvato!"
+	case op == "reopen":
+		// back to what the replies say (current prices and options)
+		if err := s.svc.DeleteSavedOrder(ctx, num, cliente); err != nil {
+			s.fail(w, r, err)
+			return
+		}
+		d, err := s.svc.QuotationDetail(ctx, num)
+		if err != nil {
+			s.fail(w, r, err)
+			return
+		}
+		rows = nil
+		for _, sec := range d.Sections {
+			if sec.Utente == utente {
+				rows = sec.Rows
+			}
+		}
+		msg = "Ordine di " + cliente + " riaperto: controlla le righe e confermalo di nuovo."
 	}
 	sec, err := s.svc.BuildSection(ctx, q, utente, cliente, rows)
 	if err != nil {
@@ -886,6 +904,22 @@ func (s *Server) preventivoSection(w http.ResponseWriter, r *http.Request) {
 	}
 	s.useSavedRows(r, num, &sec)
 	render(w, r, views.CustomerSection(num, sec, msg, errMsg, clientErr))
+}
+
+// orderOption sets how an option of the order is sold (by the bottle or as
+// a case of N bottles) and its price; the page reloads with the new totals.
+func (s *Server) orderOption(w http.ResponseWriter, r *http.Request) {
+	size, err1 := strconv.Atoi(strings.TrimSpace(r.FormValue("size")))
+	price, err2 := strconv.ParseFloat(strings.ReplaceAll(strings.TrimSpace(r.FormValue("price")), ",", "."), 64)
+	if err1 != nil || err2 != nil {
+		s.fail(w, r, fmt.Errorf("inserisci bottiglie per cassa e prezzo"))
+		return
+	}
+	if err := s.svc.SetOptionCase(r.Context(), r.FormValue("n"), r.FormValue("code"), size, price); err != nil {
+		s.fail(w, r, err)
+		return
+	}
+	w.Header().Set("HX-Refresh", "true")
 }
 
 func parseOrderRows(r *http.Request) []service.OrderRow {

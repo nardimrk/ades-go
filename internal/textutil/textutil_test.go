@@ -256,3 +256,40 @@ func TestParseOptionsMixedCounts(t *testing.T) {
 		t.Fatalf("options = %+v", opts)
 	}
 }
+
+func TestCaseSizes(t *testing.T) {
+	for name, want := range map[string]int{
+		"Roederer Brut Rose (cassa da 6)":                 6,
+		"Château Coutet (cassa da 12, sconto 15%)":        12,
+		"Schieferreich Riesling (cassa intera)":           DefaultCaseSize,
+		"cassa intera 12 bottiglie Janasse Cote du Rhône": 12,
+		"Cassa da 12 bottiglie Domaine de La Janasse":     12,
+		"Cassa intera (6 x 750ml) Barolo":                 6,
+		"Roederer Collection 246":                         0,
+		"Champagne 12 bottiglie per la cantina":           0,
+	} {
+		if got := CaseSizeFromName(name); got != want {
+			t.Errorf("CaseSizeFromName(%q) = %d, want %d", name, got, want)
+		}
+	}
+	if n := ExplicitCaseSize("Schieferreich Riesling (cassa intera)"); n != 0 {
+		t.Errorf("explicit size of an unstated case = %d", n)
+	}
+	for text, want := range map[string]string{
+		"Cassa intera Roederer Collection 246":        "Roederer Collection 246 (cassa da 6)",
+		"Cassa intera (12 x 375ml) Sauternes":         "Sauternes (cassa da 12)",
+		"cassa da 12 bottiglie Janasse Cote du Rhône": "Janasse Cote du Rhône (cassa da 12)",
+		"Cassa intera di Barolo":                      "Barolo (cassa da 6)",
+	} {
+		if got, ok := CaseOptionName(text); !ok || got != want {
+			t.Errorf("CaseOptionName(%q) = %q, %v; want %q", text, got, ok, want)
+		}
+	}
+	if _, ok := CaseOptionName("Roederer Collection 246"); ok {
+		t.Error("a bottle taken as a case")
+	}
+	opts := ParseOptions("Disponibili:\n\nA. 90 x Roederer Collection 246 a 42,50€\n\nB. Cassa intera Roederer Collection 246 a 250€")
+	if len(opts) != 2 || opts[1].Letter != "B" || opts[1].WineName != "Roederer Collection 246 (cassa da 6)" || opts[1].Price != 250 || opts[1].Case {
+		t.Errorf("options = %+v", opts)
+	}
+}

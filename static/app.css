@@ -1113,3 +1113,14 @@ body:has(.sel-bar:not(:empty)) .fab-menu { bottom: calc(max(.75rem, env(safe-are
 .sellers { display: flex; flex-wrap: wrap; align-items: center; gap: .4rem .6rem; margin-top: .75rem; }
 .seller-pill { display: inline-flex; align-items: center; gap: .4rem; padding: .15rem .3rem .15rem .7rem; border: 1px solid var(--border); border-radius: 999px; background: var(--panel); }
 .seller-pill button.link { color: var(--accent); font-weight: 600; }
+
+/* order rows: the listing option in front of the wine ("B", "A cassa") */
+.wine-cell { display: inline-flex; align-items: baseline; gap: .5rem; min-width: 0; }
+.opt-tag {
+  flex: none; display: inline-flex; align-items: baseline; gap: .25rem; padding: 0 .45rem;
+  border-radius: 6px; background: var(--accent-soft); color: var(--accent);
+  font-weight: 700; font-size: .85rem; line-height: 1.5;
+}
+.opt-case { font-weight: 600; font-size: .75rem; }
+/* order summary: how each option is sold, with its "Cassa" button */
+.stock-sale { display: inline-flex; align-items: center; gap: .4rem; color: var(--muted); font-size: .85rem; white-space: nowrap; }

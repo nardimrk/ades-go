@@ -2,6 +2,7 @@ package views
 
 import (
 	"adesgo/internal/service"
+	"adesgo/internal/textutil"
 	"crypto/sha1"
 	"encoding/hex"
 	"strings"
@@ -167,7 +168,7 @@ templ PreventivoDetail(d *service.QuotationDetail, catalog []service.CatalogEntr
 		@ProdottiDatalist(catalog)
 		@ClientiDatalist(d.Sections)
 		@ModalSlot(false)
-		@StockSummary(d.Stock)
+		@StockSummary(d.Quotation.Number, d.Stock)
 		if n := len(d.Sections) + len(service.GroupLinked(d.Linked)); n > 1 {
 			<div class="filters sections-filter">
 				<input type="search" placeholder="Filtra per cliente, città o provincia" data-filter=".cust-section" aria-label="Filtra per cliente, città o provincia"/>
@@ -178,6 +179,19 @@ templ PreventivoDetail(d *service.QuotationDetail, catalog []service.CatalogEntr
 			@CustomerSection(d.Quotation.Number, sec, "", "", "")
 		}
 		@LinkedManualOrders(d.Linked)
+	}
+}
+
+// optTag: the listing option a row was ordered as, in front of the wine
+// ("B", "A cassa" for a full-case option); nothing when it isn't known.
+templ optTag(opz string) {
+	if letter, isCase := strings.CutSuffix(strings.ToUpper(strings.TrimSpace(opz)), textutil.CaseSuffix); letter != "" {
+		<span class="opt-tag" title={ "Opzione " + opz }>
+			{ letter }
+			if isCase {
+				<span class="opt-case">cassa</span>
+			}
+		</span>
 	}
 }
 
@@ -211,7 +225,12 @@ templ LinkedManualOrders(lines []service.LinkedLine) {
 				<tbody>
 					for _, l := range o.Lines {
 						<tr>
-							<td class="title-cell">{ noEmoji(l.Vino) }</td>
+							<td class="title-cell">
+								<span class="wine-cell">
+									@optTag(l.Opzione)
+									{ noEmoji(l.Vino) }
+								</span>
+							</td>
 							<td class="num">{ itoa(l.Qta) }</td>
 							<td class="num">{ money(l.Prezzo) }</td>
 							<td class="num">{ money(l.Totale()) }</td>
@@ -513,7 +532,7 @@ func stockOver(stock []service.OptionStock) bool {
 
 // StockSummary: for each wine option, the bottles ordered and how many are
 // still available (red when ordered beyond availability).
-templ StockSummary(stock []service.OptionStock) {
+templ StockSummary(qnum string, stock []service.OptionStock) {
 	if len(stock) > 0 {
 		<section class={ "stock-summary", templ.KV("stock-over", stockOver(stock)) } aria-label="Ordinato e disponibile">
 			if stockOver(stock) {
@@ -524,6 +543,16 @@ templ StockSummary(stock []service.OptionStock) {
 					<li class={ templ.KV("over", o.Excess() > 0) }>
 						<span class="stock-opt">{ o.Letter }</span>
 						<span class="stock-wine">{ noEmoji(o.Wine) }</span>
+						if o.Code != "" {
+							<span class="stock-sale">
+								if o.CaseSize > 0 {
+									cassa da { itoa(o.CaseSize) } · € { money(o.Price) }
+								} else {
+									a bottiglia · € { money(o.Price) }
+								}
+								<button type="button" class="btn small" data-modal-show={ "opt-" + o.Code } aria-label={ "Modifica come si vende l'opzione " + o.Letter }>Cassa</button>
+							</span>
+						}
 						<span class="stock-nums">
 							<span>ordinate <b>{ itoa(o.Ordered) }</b></span>
 							if o.HasCount {
@@ -541,7 +570,46 @@ templ StockSummary(stock []service.OptionStock) {
 				}
 			</ul>
 		</section>
+		for _, o := range stock {
+			if o.Code != "" {
+				@optionCaseModal(qnum, o)
+			}
+		}
 	}
+}
+
+// optionCaseModal: how option o is sold. Bottles per case 0 = by the bottle
+// (price per bottle); 6, 12… = a whole case at the price of the case, so
+// "2B" counts 2 cases and their bottles. Saving reloads the page.
+templ optionCaseModal(qnum string, o service.OptionStock) {
+	<dialog id={ "opt-" + o.Code } class="modal modal-address" data-modal-keep aria-labelledby={ "opt-" + o.Code + "-title" }>
+		<form class="modal-form" hx-post="/ordini/opzione" hx-swap="none">
+			<input type="hidden" name="n" value={ qnum }/>
+			<input type="hidden" name="code" value={ o.Code }/>
+			<div class="modal-head">
+				<div class="modal-title">
+					<h3 id={ "opt-" + o.Code + "-title" }>Opzione { o.Letter }</h3>
+					<span class="muted">{ noEmoji(o.Wine) }</span>
+				</div>
+				<button type="button" class="icon" data-modal-close aria-label="Chiudi">@IconX()</button>
+			</div>
+			<div class="modal-body address-fields">
+				<label>
+					Bottiglie per cassa
+					<input type="number" name="size" min="0" max="99" step="1" inputmode="numeric" value={ itoa(o.CaseSize) } required/>
+				</label>
+				<label>
+					Prezzo (€)
+					<input type="text" name="price" inputmode="decimal" value={ num(o.Price) } required/>
+				</label>
+				<p class="muted span2 modal-note">0 bottiglie = si vende a bottiglia (prezzo a bottiglia). 6 o 12 = cassa intera (prezzo della cassa): “2{ o.Letter }” vale 2 casse. Gli ordini già confermati non cambiano: usa “Riapri”.</p>
+			</div>
+			<div class="modal-foot">
+				<button type="button" class="btn" data-modal-close>Annulla</button>
+				<button type="submit" class="btn primary">Salva</button>
+			</div>
+		</form>
+	</dialog>
 }
 
 // ClientiDatalist: the customers offered by "Modifica cliente" in every
@@ -578,7 +646,18 @@ templ CustomerSection(qnum string, sec service.CustomerSection, msg, errMsg, cli
 				<span class="nowrap">€ { money(sec.Total()) }</span>
 			</span>
 			if sec.SavedOn != "" {
-				<span class="badge badge-ok">Confermato il { sec.SavedOn }</span>
+				<span class="section-actions">
+					<span class="badge badge-ok">Confermato il { sec.SavedOn }</span>
+					<button
+						type="button"
+						class="btn small"
+						hx-post="/ordini/section"
+						hx-vals='{"op": "reopen"}'
+						hx-target="closest form"
+						hx-swap="outerHTML"
+						hx-confirm={ "Riaprire l'ordine di " + sec.Cliente + "? L'ordine confermato viene cancellato e le righe tornano quelle delle risposte, da confermare di nuovo." }
+					>Riapri</button>
+				</span>
 			} else {
 				<span class="section-actions">
 					<button type="button" class="btn" data-modal-show={ sectionID(sec.Utente) + "-vino" }>＋ Aggiungi vino</button>
@@ -616,7 +695,10 @@ templ CustomerSection(qnum string, sec service.CustomerSection, msg, errMsg, cli
 					for i, r := range sec.Rows {
 						<tr>
 							<td class="title-cell">
-								{ noEmoji(r.Vino) }
+								<span class="wine-cell">
+									@optTag(r.Opzione)
+									{ noEmoji(r.Vino) }
+								</span>
 								<input type="hidden" name="opz" value={ r.Opzione }/>
 								<input type="hidden" name="vino" value={ r.Vino }/>
 								<input type="hidden" name="qta" value={ itoa(r.Qta) }/>

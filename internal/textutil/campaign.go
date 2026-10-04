@@ -310,17 +310,69 @@ func WithCaseOptions(body string, opts []Option) []Option {
 	return out
 }
 
-var caseSizeRe = pyRe(`(?i)\(cassa da (\d+)`)
+var (
+	// "(cassa da 6)", "Cassa da 12 bottiglie …"
+	caseSizeRe = pyRe(`(?i)\bcass[ae]\s+da\s+(\d{1,2})\b`)
+	// "Cassa intera …", "(cassa intera)": a whole case, size maybe elsewhere
+	wholeCaseRe = pyRe(`(?i)\bcass[ae]\s+(?:intera|intere|chiusa|completa)\b`)
+	// "12 bottiglie", "(6 x 750ml)"
+	caseCountRe = pyRe(`(?i)\b(\d{1,2})\s*(?:bott\w*|[x×]\s*\d+\s*(?:ml|cl|l)\b)`)
+)
 
-// CaseSizeFromName reads the bottles per case from a case option's name
-// ("Roederer Brut Rose (cassa da 6)" → 6); 0 when it isn't stated.
-func CaseSizeFromName(name string) int {
-	m := caseSizeRe.FindStringSubmatch(name)
-	if m == nil {
-		return 0
+// DefaultCaseSize: the bottles of a whole case whose size isn't stated.
+const DefaultCaseSize = 6
+
+// ExplicitCaseSize reads the bottles per case stated in a case option's
+// name ("Roederer Brut Rose (cassa da 6)" → 6, "cassa intera 12 bottiglie
+// …" → 12); 0 when the name doesn't state it.
+func ExplicitCaseSize(name string) int {
+	if m := caseSizeRe.FindStringSubmatch(name); m != nil {
+		n, _ := strconv.Atoi(m[1])
+		return n
 	}
-	n, _ := strconv.Atoi(m[1])
-	return n
+	if wholeCaseRe.MatchString(name) {
+		if m := caseCountRe.FindStringSubmatch(name); m != nil {
+			n, _ := strconv.Atoi(m[1])
+			return n
+		}
+	}
+	return 0
+}
+
+// CaseSizeFromName is the bottles per case of a case option: as stated in
+// its name, or DefaultCaseSize for a whole case of unstated size ("Cassa
+// intera …", "(cassa intera)"); 0 for a wine sold by the bottle.
+func CaseSizeFromName(name string) int {
+	if n := ExplicitCaseSize(name); n > 1 {
+		return n
+	}
+	if wholeCaseRe.MatchString(name) {
+		return DefaultCaseSize
+	}
+	return 0
+}
+
+// leadingCaseRe: an option whose wine text starts with the case ("Cassa
+// intera Roederer Collection 246", "Cassa da 12 bottiglie Janasse …").
+var leadingCaseRe = pyRe(`(?i)^cass[ae]\s+(?:intera|intere|chiusa|completa|da\s+\d{1,2}\s*bott\w*)\s*(?:\(\s*\d{1,2}\s*(?:bott\w*|[x×]\s*\d+\s*(?:ml|cl|l))\s*\))?\s*(?:di\s+|da\s+)?`)
+
+// CaseOptionName turns the wine text of an option sold as a whole case into
+// "<wine> (cassa da N)" (N as stated, else DefaultCaseSize); ok is false
+// when the text isn't a case.
+func CaseOptionName(text string) (name string, ok bool) {
+	loc := leadingCaseRe.FindStringIndex(text)
+	if loc == nil {
+		return "", false
+	}
+	n := ExplicitCaseSize(text[:loc[1]])
+	if n < 2 {
+		n = DefaultCaseSize
+	}
+	wine := strings.TrimSpace(text[loc[1]:])
+	if wine == "" {
+		return "", false
+	}
+	return fmt.Sprintf("%s (cassa da %d)", wine, n), true
 }
 
 // parseOptionsNoQty reads options without a bottle count: the bottle price,
@@ -344,6 +396,11 @@ func parseOptionsNoQty(body string) []Option {
 		wine := optionWineName(text)
 		if wine == "" {
 			continue
+		}
+		// "B. Cassa intera Roederer Collection 246 a 250€": option B is a
+		// whole case, priced per case
+		if name, isCase := CaseOptionName(wine); isCase {
+			wine = name
 		}
 		if ok {
 			out = append(out, Option{Letter: sg.letter, WineName: wine, Price: price})
