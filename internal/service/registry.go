@@ -76,6 +76,39 @@ func (s *Service) CreateManualUser(ctx context.Context) (User, error) {
 	return u, err
 }
 
+// CreateCustomer adds a customer typed in by hand (e.g. from "Nuovo
+// ordine"): a name is required and must not be another customer's, since
+// orders pick customers by name. The phone is normalized like in Clienti.
+func (s *Service) CreateCustomer(ctx context.Context, u User) (User, error) {
+	u.Name = strings.TrimSpace(textutil.StripEmoji(u.Name))
+	if u.Name == "" {
+		return User{}, fmt.Errorf("scrivi il nome del cliente")
+	}
+	byName, _, err := s.ClientOptions(ctx)
+	if err != nil {
+		return User{}, err
+	}
+	for n := range byName {
+		if strings.EqualFold(strings.TrimSpace(n), u.Name) {
+			return User{}, fmt.Errorf("esiste già un cliente «%s»: sceglilo dall'elenco", n)
+		}
+	}
+	if u.Telefono, err = NormalizePhone(u.Telefono); err != nil {
+		return User{}, err
+	}
+	b := make([]byte, 6)
+	if _, err := rand.Read(b); err != nil {
+		return User{}, err
+	}
+	u.ID = ManualUserPrefix + hex.EncodeToString(b)
+	if _, err := s.db().ExecContext(ctx, `INSERT INTO users (id, name, telefono, indirizzo, "città", provincia, cap, updated_at)
+		VALUES (?, ?, NULLIF(?,''), NULLIF(?,''), NULLIF(?,''), NULLIF(?,''), NULLIF(?,''), datetime('now'))`,
+		u.ID, u.Name, u.Telefono, strings.TrimSpace(u.Indirizzo), strings.TrimSpace(u.Citta), strings.TrimSpace(u.Provincia), strings.TrimSpace(u.CAP)); err != nil {
+		return User{}, err
+	}
+	return u, s.Store.AssignCustomerCodes(ctx)
+}
+
 // DeleteUser removes a customer, unless they have confirmed orders. Their
 // messages stay in the inserzioni (shown with the WhatsApp id instead of the
 // name), and a customer who writes again in a group is created again.

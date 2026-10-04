@@ -295,6 +295,34 @@ func linkCampName(c service.LinkCampaign) string {
 	return n
 }
 
+// NewCustomerModal: creates a customer without leaving the page; opened
+// from a customer field's suggestions ("+ Nuovo cliente") with the typed name.
+templ NewCustomerModal(id string) {
+	<dialog id={ id } class="modal modal-address" data-modal-keep aria-labelledby={ id + "-title" }>
+		<form class="modal-form" hx-post="/clienti/create" hx-swap="none">
+			<div class="modal-head">
+				<div class="modal-title">
+					<h3 id={ id + "-title" }>Nuovo cliente</h3>
+					<span class="muted">Solo il nome è obbligatorio; il resto si può completare in Clienti.</span>
+				</div>
+				<button type="button" class="icon" data-modal-close aria-label="Chiudi">@IconX()</button>
+			</div>
+			<div class="modal-body address-fields">
+				<label class="span2">Nome <input type="text" name="name" required autocomplete="off"/></label>
+				<label class="span2">Telefono <input type="tel" name="telefono" autocomplete="off" placeholder="+39…"/></label>
+				<label class="span2">Indirizzo <input type="text" name="indirizzo" autocomplete="off"/></label>
+				<label>Città <input type="text" name="citta" autocomplete="off"/></label>
+				<label>Provincia <input type="text" name="provincia" autocomplete="off"/></label>
+				<label>CAP <input type="text" name="cap" autocomplete="off" inputmode="numeric"/></label>
+			</div>
+			<div class="modal-foot">
+				<button type="button" class="btn" data-modal-close>Annulla</button>
+				<button type="submit" class="btn primary">Crea cliente</button>
+			</div>
+		</form>
+	</dialog>
+}
+
 // orderNeighborLink: the order before/after this one in the Ordini list.
 templ orderNeighborLink(q *service.QuotationSummary, label string, left bool) {
 	if q != nil {
@@ -575,12 +603,13 @@ templ NuovoPreventivo(d NuovoPreventivoData) {
 		if d.Error != "" {
 			@Alert("error", d.Error)
 		}
+		@NewCustomerModal("np-new-client")
 		<form method="post" action="/ordini/nuovo" class="stack" id="np-form">
 			<div class="np-head">
 				<div class="np-number"><b>Numero ordine:</b> <code>{ d.Number }</code></div>
 				<label>
 					Cliente
-					<input type="text" name="cliente" list="np-clients" value={ d.Cliente } placeholder="Scrivi per cercare un cliente..." autocomplete="off" required/>
+					<input type="text" name="cliente" list="np-clients" value={ d.Cliente } placeholder="Scrivi per cercare un cliente..." autocomplete="off" required data-new-customer="np-new-client"/>
 				</label>
 				<label>Data <input type="date" name="date" value={ d.Date } required/></label>
 			</div>

@@ -1,6 +1,7 @@
 package web
 
 import (
+	"encoding/json"
 	"errors"
 	"fmt"
 	"net/http"
@@ -1038,6 +1039,22 @@ func (s *Server) clienteNew(w http.ResponseWriter, r *http.Request) {
 	}
 	render(w, r, views.ClienteRow(u, true))
 	toast(w, r, "success", "Nuovo cliente aggiunto: compila i campi, si salvano da soli.")
+}
+
+// customerCreate adds a customer from the "Nuovo cliente" modal; the page
+// picks it up (event clienteCreato) and selects it.
+func (s *Server) customerCreate(w http.ResponseWriter, r *http.Request) {
+	u, err := s.svc.CreateCustomer(r.Context(), service.User{
+		Name: r.FormValue("name"), Telefono: r.FormValue("telefono"), Indirizzo: r.FormValue("indirizzo"),
+		Citta: r.FormValue("citta"), Provincia: r.FormValue("provincia"), CAP: r.FormValue("cap"),
+	})
+	if err != nil {
+		s.fail(w, r, err)
+		return
+	}
+	ev, _ := json.Marshal(map[string]any{"clienteCreato": map[string]string{"name": u.Name}})
+	w.Header().Set("HX-Trigger", string(ev))
+	toast(w, r, "success", "Nuovo cliente aggiunto: "+u.Name)
 }
 
 // mergePage shows the possible duplicates among the customers.

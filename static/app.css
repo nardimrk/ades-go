@@ -1057,3 +1057,7 @@ body:has(.sel-bar:not(:empty)) .fab-menu { bottom: calc(max(.75rem, env(safe-are
 .merge-meta { font-size: .8rem; }
 .merge-arrow { color: var(--muted); font-weight: 700; }
 .merge-why { display: flex; flex-wrap: wrap; gap: .25rem; }
+
+/* "+ Nuovo cliente" at the end of the suggestions */
+.combo-list li.combo-new { color: var(--accent); font-weight: 600; cursor: pointer; border-top: 1px solid var(--border); }
+.combo-list li.combo-new:hover { background: var(--accent-soft); }

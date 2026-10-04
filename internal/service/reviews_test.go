@@ -714,3 +714,29 @@ func TestMergeCustomers(t *testing.T) {
 		t.Fatalf("after undo: %d clienti; want 2", sums[0].Clienti)
 	}
 }
+
+// "Nuovo cliente" from an order: created with its data and a code; a name
+// that's already a customer's is refused (orders pick customers by name).
+func TestCreateCustomer(t *testing.T) {
+	ctx := context.Background()
+	store, err := db.Open(filepath.Join(t.TempDir(), "wine.db"))
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer store.Close()
+	svc := New(store, &config.Config{}, nil)
+	u, err := svc.CreateCustomer(ctx, User{Name: " Enoteca Rossi ", Telefono: "349 286 9246", Citta: "Vicenza"})
+	if err != nil || u.Name != "Enoteca Rossi" || u.Telefono != "+393492869246" {
+		t.Fatalf("created = %+v, %v", u, err)
+	}
+	users, _ := svc.Users(ctx)
+	if len(users) != 1 || users[0].Code == "" || users[0].Citta != "Vicenza" || !IsManualUser(users[0].ID) {
+		t.Fatalf("customers = %+v", users)
+	}
+	if _, err := svc.CreateCustomer(ctx, User{Name: "enoteca rossi"}); err == nil {
+		t.Fatal("same name accepted")
+	}
+	if _, err := svc.CreateCustomer(ctx, User{Name: "  "}); err == nil {
+		t.Fatal("empty name accepted")
+	}
+}

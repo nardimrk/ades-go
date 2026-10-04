@@ -203,6 +203,14 @@
       li.textContent = note;
       combo.list.appendChild(li);
     }
+    // a customer field can create the customer that isn't there
+    if (!total && inp.dataset.newCustomer && inp.value.trim()) {
+      var add = document.createElement("li");
+      add.className = "combo-new";
+      add.setAttribute("role", "option");
+      add.textContent = "+ Nuovo cliente «" + inp.value.trim() + "»";
+      combo.list.appendChild(add);
+    }
   }
 
   function pickCombo(i) {
@@ -243,6 +251,39 @@
   document.addEventListener("mousedown", function (e) {
     if (combo && combo.list.contains(e.target)) e.preventDefault();
   });
+  // "+ Nuovo cliente": the modal opens with the typed name
+  var newCustomerFor = null;
+  document.addEventListener("click", function (e) {
+    var add = e.target.closest && e.target.closest(".combo-list li.combo-new");
+    if (!add || !combo) return;
+    var inp = combo.input;
+    var dlg = document.getElementById(inp.dataset.newCustomer);
+    closeCombo();
+    if (!dlg) return;
+    newCustomerFor = inp;
+    var f = dlg.querySelector("form");
+    if (f) f.reset();
+    dlg.querySelector("[name=name]").value = inp.value.trim();
+    dlg.showModal();
+    var tel = dlg.querySelector("[name=telefono]");
+    if (tel && !matchMedia("(pointer: coarse)").matches) tel.focus();
+  });
+  // created: it joins the suggestions and becomes the field's value
+  document.body.addEventListener("clienteCreato", function (e) {
+    var name = e.detail && e.detail.name;
+    if (!name) return;
+    var inp = newCustomerFor;
+    if (inp) {
+      var dl = document.getElementById(inp.dataset.combo);
+      if (dl) { var o = document.createElement("option"); o.value = name; dl.appendChild(o); }
+      inp.value = name;
+      inp.dispatchEvent(new Event("change", { bubbles: true }));
+    }
+    var dlg = e.target.closest && e.target.closest("dialog");
+    if (dlg && dlg.open) dlg.close();
+    newCustomerFor = null;
+  });
+
   document.addEventListener("click", function (e) {
     if (!combo) return;
     var li = e.target.closest && e.target.closest(".combo-list li[data-i]");
