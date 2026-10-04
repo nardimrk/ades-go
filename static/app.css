@@ -241,6 +241,20 @@ code, .mono { font-family: ui-monospace, SFMono-Regular, Menlo, monospace; font-
 .grid3 { display: grid; grid-template-columns: repeat(3, 1fr); gap: 1rem; align-items: end; }
 .np-head { display: grid; grid-template-columns: auto minmax(0, 1fr) auto; gap: 1rem; align-items: end; }
 .np-number { white-space: nowrap; padding-bottom: .6rem; }
+/* Nuovo ordine: a wine from Prodotti or from an inserzione (+ its wine) */
+.np-rows td { vertical-align: top; }
+.np-rows td.np-n { padding-top: .9rem; }
+.np-pick { display: flex; flex-wrap: wrap; gap: .5rem; align-items: center; }
+.np-src { flex: none; }
+.np-fields { display: flex; flex-wrap: wrap; gap: .5rem; flex: 1 1 22rem; min-width: 0; }
+.np-field { position: relative; flex: 1 1 17rem; min-width: 0; }
+.np-field > input, .np-opt { width: 100%; min-width: 0; }
+.np-opt { flex: 1 1 17rem; }
+.np-rows tr[data-src="i"] .np-prod, .np-rows tr:not([data-src="i"]) .np-ins { display: none; }
+@media (min-width: 721px) {
+  .np-rows th:nth-child(3), .np-rows th:nth-child(4) { width: 8.5rem; }
+  .np-rows td > input { width: 100%; }
+}
 
 /* ── controls ───────────────────────────────────────────── */
 input, select, textarea {
@@ -772,6 +786,14 @@ img { max-width: 100%; height: auto; }
   .grid3 { grid-template-columns: 1fr; }
   .np-head { grid-template-columns: 1fr; }
   .np-number { padding-bottom: 0; }
+  .np-rows td.np-pick { grid-column: 1 / -1; flex-direction: row; align-items: stretch; }
+  .table.np-rows td.np-n { padding-top: 0; flex-direction: row; gap: .3rem; }
+  .table.np-rows td.np-n::before { content: "Vino "; display: inline; color: inherit; font-size: inherit; }
+  .table.np-rows td.np-pick::before { content: none; }
+  .np-src { display: flex; width: 100%; }
+  .np-src .seg-btn { flex: 1; }
+  .np-fields { flex-basis: 100%; flex-direction: column; }
+  .np-field, .np-opt { flex: none; width: 100%; }
   .row.between > * { min-width: 0; }
   .card { padding: .8rem; }
   .add-row { grid-template-columns: 1fr 1fr; }

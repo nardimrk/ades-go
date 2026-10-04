@@ -1514,10 +1514,16 @@ type NewQuotationRow struct {
 	WineName string
 	Quantity int
 	Price    float64
+	// a wine picked from a listing: connected to that option of the listing's
+	// order (like "Collega"); Source "i" and Camp keep the form's choice.
+	LinkQuotation int64
+	LinkOption    string
+	Source        string // "p" (Prodotti, default) or "i" (inserzione)
+	Camp          string
 }
 
 // CreateQuotation inserts a manual quotation; wines not yet in the catalog
-// are added to it.
+// are added to it (except the ones taken from a listing).
 func (s *Service) CreateQuotation(ctx context.Context, date, clientName string, rows []NewQuotationRow) (string, error) {
 	byName, _, err := s.ClientOptions(ctx)
 	if err != nil {
@@ -1536,9 +1542,16 @@ func (s *Service) CreateQuotation(ctx context.Context, date, clientName string, 
 		qid, _ := res.LastInsertId()
 		for _, r := range rows {
 			wine := strings.TrimSpace(r.WineName)
-			if _, err := tx.ExecContext(ctx, "INSERT INTO quotation_items (quotation_id, option, wine_name, quantity, price) VALUES (?,?,?,?,?)",
-				qid, r.Option, wine, r.Quantity, r.Price); err != nil {
+			var lq, lo any
+			if r.LinkQuotation != 0 {
+				lq, lo = r.LinkQuotation, r.LinkOption
+			}
+			if _, err := tx.ExecContext(ctx, "INSERT INTO quotation_items (quotation_id, option, wine_name, quantity, price, linked_quotation_id, linked_option) VALUES (?,?,?,?,?,?,?)",
+				qid, r.Option, wine, r.Quantity, r.Price, lq, lo); err != nil {
 				return err
+			}
+			if r.LinkQuotation != 0 {
+				continue
 			}
 			var exists int
 			err := tx.QueryRowContext(ctx, "SELECT 1 FROM items WHERE LOWER(description) = LOWER(?) AND deleted_at IS NULL LIMIT 1", wine).Scan(&exists)
@@ -1767,6 +1780,7 @@ type LinkTarget struct {
 	QuotationID int64
 	Letter      string
 	Wine        string
+	Price       float64
 }
 
 // LinkCampaign is a listing with its wine options, for the "Collega" list.
@@ -1792,7 +1806,7 @@ func (s *Service) LinkCampaigns(ctx context.Context, since string) ([]LinkCampai
 	byQ := map[int64][]LinkTarget{}
 	for _, it := range items {
 		if o := strings.ToUpper(strings.TrimSpace(it.Option)); len(o) == 1 {
-			byQ[it.QuotationID] = append(byQ[it.QuotationID], LinkTarget{QuotationID: it.QuotationID, Letter: o, Wine: wineWithVintage(it.WineName, it.Vintage)})
+			byQ[it.QuotationID] = append(byQ[it.QuotationID], LinkTarget{QuotationID: it.QuotationID, Letter: o, Wine: wineWithVintage(it.WineName, it.Vintage), Price: it.Price})
 		}
 	}
 	var out []LinkCampaign

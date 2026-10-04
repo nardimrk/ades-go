@@ -1004,9 +1004,26 @@ func (s *Server) nuovoData(r *http.Request) (views.NuovoPreventivoData, error) {
 	if err != nil {
 		return views.NuovoPreventivoData{}, err
 	}
+	// inserzioni with an order from the last 6 months, like "Collega"
+	links, err := s.svc.LinkCampaigns(ctx, time.Now().AddDate(0, -6, 0).Format("2006-01-02"))
+	if err != nil {
+		return views.NuovoPreventivoData{}, err
+	}
+	camps := make([]views.NpCamp, 0, len(links))
+	seen := map[string]int{}
+	for _, c := range links {
+		label := strings.TrimSpace(textutil.StripEmoji(c.Title))
+		if len(c.Published) >= 10 {
+			label += " · " + c.Published[8:10] + "/" + c.Published[5:7] + "/" + c.Published[2:4]
+		}
+		if seen[label]++; seen[label] > 1 {
+			label += " (" + strconv.Itoa(seen[label]) + ")"
+		}
+		camps = append(camps, views.NpCamp{Label: label, Chat: c.ChatName, Options: c.Options})
+	}
 	return views.NuovoPreventivoData{
 		Number: s.svc.NextOrderNumber(ctx, time.Now().Format("2006-01-02")), Date: time.Now().Format("2006-01-02"),
-		Clients: clients, Catalog: catalog,
+		Clients: clients, Catalog: catalog, Camps: camps,
 		Rows: []service.NewQuotationRow{{Option: "A", Quantity: 1}},
 	}, nil
 }
@@ -1030,23 +1047,58 @@ func (s *Server) nuovoPreventivoSubmit(w http.ResponseWriter, r *http.Request) {
 	d.Date = r.FormValue("date")
 	d.Cliente = strings.TrimSpace(r.FormValue("cliente"))
 	vino, qta, prezzo := r.Form["vino"], r.Form["qta"], r.Form["prezzo"]
+	src, camp, opt := r.Form["src"], r.Form["camp"], r.Form["opt"]
+	at := func(a []string, i int) string {
+		if i < len(a) {
+			return strings.TrimSpace(a[i])
+		}
+		return ""
+	}
+	products := map[string]bool{}
+	for _, e := range d.Catalog {
+		products[strings.ToLower(e.Description)] = true
+	}
 	letters := "ABCDEFGHIJ"
 	d.Rows = nil
 	var valid []service.NewQuotationRow
-	for i := 0; i < len(vino) && i < len(letters); i++ {
-		// catalog labels are "description — winery"
-		name, _, _ := strings.Cut(vino[i], " — ")
-		row := service.NewQuotationRow{Option: string(letters[i]), WineName: strings.TrimSpace(name), Quantity: 1}
-		if i < len(qta) {
-			if v, err := strconv.Atoi(qta[i]); err == nil && v >= 1 {
-				row.Quantity = v
-			}
+	rowErr := ""
+	for i := 0; i < len(qta) && i < len(letters); i++ {
+		row := service.NewQuotationRow{Option: string(letters[i]), Quantity: 1, Source: at(src, i), Camp: at(camp, i)}
+		if v, err := strconv.Atoi(at(qta, i)); err == nil && v >= 1 {
+			row.Quantity = v
 		}
-		if i < len(prezzo) {
-			row.Price, _ = strconv.ParseFloat(strings.ReplaceAll(prezzo[i], ",", "."), 64)
+		row.Price, _ = strconv.ParseFloat(strings.ReplaceAll(at(prezzo, i), ",", "."), 64)
+		n := strconv.Itoa(i + 1)
+		if row.Source == "i" {
+			// "<quotation id>:<letter>" of an option of the chosen inserzione
+			qs, letter, _ := strings.Cut(at(opt, i), ":")
+			row.LinkQuotation, _ = strconv.ParseInt(qs, 10, 64)
+			row.LinkOption = letter
+			if c := d.Camp(row.Camp); c == nil {
+				if row.Camp != "" && rowErr == "" {
+					rowErr = "Riga " + n + ": inserzione «" + row.Camp + "» non trovata. Sceglila dall'elenco."
+				}
+			} else if o := c.Option(row.LinkQuotation, letter); o == nil {
+				if rowErr == "" {
+					rowErr = "Riga " + n + ": scegli il vino dell'inserzione."
+				}
+			} else {
+				row.WineName = o.Wine
+			}
+		} else {
+			row.Source = "p"
+			// catalog labels are "description — winery"
+			name, _, _ := strings.Cut(at(vino, i), " — ")
+			row.WineName = strings.TrimSpace(name)
+			if row.WineName != "" && !products[strings.ToLower(row.WineName)] && rowErr == "" {
+				rowErr = "Riga " + n + ": «" + row.WineName + "» non è nei Prodotti. Sceglilo dall'elenco o crealo con «+ Nuovo prodotto»."
+			}
 		}
 		d.Rows = append(d.Rows, row)
 		if row.WineName != "" && row.Price > 0 {
+			if row.Source != "i" {
+				row.LinkQuotation, row.LinkOption = 0, ""
+			}
 			valid = append(valid, row)
 		}
 	}
@@ -1056,6 +1108,8 @@ func (s *Server) nuovoPreventivoSubmit(w http.ResponseWriter, r *http.Request) {
 		d.Error = "Seleziona un cliente per poter creare l'ordine."
 	} else if !slices.Contains(d.Clients, d.Cliente) {
 		d.Error = "Cliente non trovato: " + d.Cliente + ". Sceglilo dall'elenco."
+	} else if rowErr != "" {
+		d.Error = rowErr
 	} else if len(valid) == 0 {
 		d.Error = "Inserisci almeno un vino con un prezzo maggiore di zero."
 	}

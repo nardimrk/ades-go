@@ -698,6 +698,48 @@
     if (max && n + 1 >= max) btn.disabled = true;
   });
 
+  // Nuovo ordine: each wine comes from Prodotti or from an inserzione (pick
+  // the inserzione, then its wine: the price is filled in).
+  document.addEventListener("click", function (e) {
+    var b = e.target.closest(".np-src .seg-btn");
+    if (!b) return;
+    var tr = b.closest("tr");
+    tr.dataset.src = b.dataset.src;
+    tr.querySelector("input[name=src]").value = b.dataset.src;
+    tr.querySelectorAll(".np-src .seg-btn").forEach(function (x) {
+      x.classList.toggle("active", x === b);
+      x.setAttribute("aria-pressed", x === b ? "true" : "false");
+    });
+    var f = tr.querySelector(b.dataset.src === "i" ? ".np-camp" : "input[name=vino]");
+    if (f && !f.value && !matchMedia("(pointer: coarse)").matches) f.focus();
+  });
+  var npCamps = null;
+  document.addEventListener("change", function (e) {
+    var t = e.target;
+    var tr = t.closest && t.closest("#np-rows tr");
+    if (!tr) return;
+    if (t.classList.contains("np-camp")) {
+      if (!npCamps) {
+        var el = document.getElementById("np-camps-data");
+        try { npCamps = el ? JSON.parse(el.textContent) : {}; } catch (err) { npCamps = {}; }
+      }
+      var sel = tr.querySelector(".np-opt");
+      var opts = npCamps[t.value.trim()] || [];
+      sel.innerHTML = "";
+      sel.add(new Option(opts.length ? "Scegli il vino..." : t.value.trim() ? "Inserzione non trovata" : "Scegli il vino...", ""));
+      opts.forEach(function (o) {
+        var op = new Option(o.t, o.v);
+        op.dataset.price = o.p;
+        sel.add(op);
+      });
+      if (opts.length === 1) { sel.selectedIndex = 1; sel.dispatchEvent(new Event("change", { bubbles: true })); }
+      else if (opts.length && !matchMedia("(pointer: coarse)").matches) sel.focus();
+    } else if (t.classList.contains("np-opt")) {
+      var o = t.selectedOptions[0];
+      if (o && o.dataset.price && Number(o.dataset.price) > 0) tr.querySelector("input[name=prezzo]").value = o.dataset.price;
+    }
+  });
+
   // Notifications bell: a click opens the frosted preview and fires
   // "notif-open" (htmx loads the unseen orders and the server marks them seen,
   // resetting the badge out-of-band). Outside click or Esc closes it.

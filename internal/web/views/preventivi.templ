@@ -902,7 +902,61 @@ type NuovoPreventivoData struct {
 	Cliente string
 	Catalog []service.CatalogEntry
 	Rows    []service.NewQuotationRow
+	Camps   []NpCamp
 	Error   string
+}
+
+// NpCamp is an inserzione a wine of a new order can be taken from.
+type NpCamp struct {
+	Label   string // unique: title · date
+	Chat    string
+	Options []service.LinkTarget
+}
+
+// Camp finds an inserzione by its label.
+func (d NuovoPreventivoData) Camp(label string) *NpCamp {
+	for i := range d.Camps {
+		if d.Camps[i].Label == label {
+			return &d.Camps[i]
+		}
+	}
+	return nil
+}
+
+// Option finds one of the inserzione's wines.
+func (c *NpCamp) Option(qid int64, letter string) *service.LinkTarget {
+	for i := range c.Options {
+		if c.Options[i].QuotationID == qid && c.Options[i].Letter == letter {
+			return &c.Options[i]
+		}
+	}
+	return nil
+}
+
+// npCampsJSON: label → wines, read by app.js to fill the wine select.
+func npCampsJSON(camps []NpCamp) map[string][]map[string]any {
+	out := make(map[string][]map[string]any, len(camps))
+	for _, c := range camps {
+		for _, o := range c.Options {
+			out[c.Label] = append(out[c.Label], map[string]any{"v": i64(o.QuotationID) + ":" + o.Letter, "t": npOptText(o), "p": money(o.Price)})
+		}
+	}
+	return out
+}
+
+func npOptText(o service.LinkTarget) string {
+	t := o.Letter + " · " + noEmoji(o.Wine)
+	if o.Price > 0 {
+		t += " · " + strings.ReplaceAll(money(o.Price), ".", ",") + " €"
+	}
+	return t
+}
+
+func npSrc(r service.NewQuotationRow) string {
+	if r.Source == "i" {
+		return "i"
+	}
+	return "p"
 }
 
 templ NuovoPreventivo(d NuovoPreventivoData) {
@@ -931,30 +985,27 @@ templ NuovoPreventivo(d NuovoPreventivoData) {
 				}
 			</datalist>
 			<hr/>
-			<h3>Prodotti</h3>
+			<h3>Vini</h3>
+			<p class="muted np-help">Per ogni vino scegli se prenderlo dai <b>Prodotti</b> o da un'<b>inserzione</b>: dall'inserzione il prezzo si compila da solo e il vino resta collegato all'inserzione (data di consegna e disponibilità).</p>
 			<datalist id="catalog">
 				for _, e := range d.Catalog {
 					<option value={ e.Label() }></option>
 				}
 			</datalist>
-			<table class="table" id="np-rows">
+			<datalist id="np-camps">
+				for _, c := range d.Camps {
+					<option value={ c.Label }>{ c.Chat }</option>
+				}
+			</datalist>
+			@templ.JSONScript("np-camps-data", npCampsJSON(d.Camps))
+			<table class="table np-rows" id="np-rows">
 				<thead><tr><th>N.</th><th>Vino</th><th>Quantità</th><th>Prezzo €</th></tr></thead>
 				<tbody>
 					for i, r := range d.Rows {
-						<tr>
-							<td><b>{ itoa(i + 1) }</b></td>
-							<td><input type="text" name="vino" list="catalog" value={ r.WineName } placeholder="Scegli o scrivi un nuovo vino..." data-new-product="np-new-product"/></td>
-							<td><input type="number" name="qta" min="1" step="1" value={ itoa(r.Quantity) }/></td>
-							<td><input type="number" name="prezzo" min="0" step="0.5" value={ money(r.Price) }/></td>
-						</tr>
+						@npRow(d, itoa(i+1), r)
 					}
 					<template>
-						<tr>
-							<td><b>__N__</b></td>
-							<td><input type="text" name="vino" list="catalog" placeholder="Scegli o scrivi un nuovo vino..." data-new-product="np-new-product"/></td>
-							<td><input type="number" name="qta" min="1" step="1" value="1"/></td>
-							<td><input type="number" name="prezzo" min="0" step="0.5" value="0.00"/></td>
-						</tr>
+						@npRow(d, "__N__", service.NewQuotationRow{Quantity: 1})
 					</template>
 				</tbody>
 			</table>
@@ -962,7 +1013,43 @@ templ NuovoPreventivo(d NuovoPreventivoData) {
 				<button type="button" class="btn" data-add-row="#np-rows" data-max="10">＋ Aggiungi</button>
 				<button type="submit" class="btn primary">Crea</button>
 			</div>
-			<p class="muted">Sono salvate le righe con un vino e un prezzo maggiore di zero. I vini nuovi vengono aggiunti ai Prodotti.</p>
+			<p class="muted">Sono salvate le righe con un vino e un prezzo maggiore di zero. Un vino che non è nei Prodotti si crea con «+ Nuovo prodotto».</p>
 		</form>
 	}
+}
+
+// npRow: one wine of a new order, taken from Prodotti or from an inserzione
+// (inserzione + its wine). The fields of both stay in the form so the arrays
+// line up; "src" says which one counts.
+templ npRow(d NuovoPreventivoData, n string, r service.NewQuotationRow) {
+	<tr data-src={ npSrc(r) }>
+		<td class="title-cell np-n"><b>{ n }</b></td>
+		<td class="wide np-pick">
+			<input type="hidden" name="src" value={ npSrc(r) }/>
+			<div class="seg np-src" role="group" aria-label="Prendi il vino da">
+				<button type="button" class={ "seg-btn", templ.KV("active", npSrc(r) == "p") } data-src="p" aria-pressed={ boolStr(npSrc(r) == "p") }>Prodotti</button>
+				<button type="button" class={ "seg-btn", templ.KV("active", npSrc(r) == "i") } data-src="i" aria-pressed={ boolStr(npSrc(r) == "i") }>Inserzione</button>
+			</div>
+			<div class="np-fields np-prod">
+				<span class="np-field">
+					<input type="text" name="vino" list="catalog" value={ r.WineName } placeholder="Cerca un prodotto..." aria-label="Prodotto" data-new-product="np-new-product"/>
+				</span>
+			</div>
+			<div class="np-fields np-ins">
+				<span class="np-field">
+					<input type="text" name="camp" list="np-camps" class="np-camp" value={ r.Camp } placeholder="Cerca un'inserzione..." aria-label="Inserzione"/>
+				</span>
+				<select name="opt" class="np-opt" aria-label="Vino dell'inserzione">
+					<option value="">Scegli il vino...</option>
+					if c := d.Camp(r.Camp); c != nil {
+						for _, o := range c.Options {
+							<option value={ i64(o.QuotationID) + ":" + o.Letter } data-price={ money(o.Price) } selected?={ o.QuotationID == r.LinkQuotation && o.Letter == r.LinkOption }>{ npOptText(o) }</option>
+						}
+					}
+				</select>
+			</div>
+		</td>
+		<td><input type="number" name="qta" min="1" step="1" value={ itoa(r.Quantity) } inputmode="numeric"/></td>
+		<td><input type="number" name="prezzo" min="0" step="0.01" value={ money(r.Price) } inputmode="decimal"/></td>
+	</tr>
 }
