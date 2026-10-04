@@ -73,7 +73,11 @@ templ PreventiviSummary(months []service.QuotationMonth) {
 												{ noEmoji(r.Title) }
 											</b>
 										} else {
-											<b class="dl-title">{ noEmoji(r.Title) }</b>
+											<b class="dl-title dl-manual" title="Ordine da un'inserzione WhatsApp">
+												@IconRomanIOutline()
+												<span class="sr-only">Ordine da un'inserzione WhatsApp</span>
+												{ noEmoji(r.Title) }
+											</b>
 										}
 										<span class="muted dl-group">{ r.Number }</span>
 									</span>
