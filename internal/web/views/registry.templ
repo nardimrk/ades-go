@@ -125,7 +125,7 @@ templ ConsegnePage(months []service.ConsegneMonth, selected map[string]bool, res
 templ ConsegneShowPage(result *service.Consegne, ids []string) {
 	@Layout("Consegne", "consegne") {
 		<div class="page-head">
-			<a href={ templ.URL(selURL("/consegne", ids)) } class="btn">← Elenco</a>
+			<a href={ templ.URL(selURL("/consegne", ids)) } class="btn icon-btn" title="Elenco" aria-label="Elenco">@IconList()</a>
 			<h2>Consegne selezionate</h2>
 		</div>
 		if len(result.Selected) > 0 {
@@ -932,7 +932,9 @@ templ ActiveUsersSection(a ActiveUsersData) {
 				for i, u := range a.Users {
 					<li class="rank-row" title={ u.Utente + ": " + plural(u.Risposte, "messaggio", "messaggi") }>
 						<span class="rank-n">{ itoa(i + 1) }</span>
-						<span class="rank-name">{ u.Utente }</span>
+						<span class="rank-name">
+							<a class="name-pill" href={ templ.URL("/ordini?" + q("q", u.Utente)) } title={ "Ordini di " + u.Utente }>{ u.Utente }</a>
+						</span>
 						<span class="rank-track">
 							<span class="rank-bar" style={ barWidth(u.Risposte, a.Users[0].Risposte) }></span>
 							<span class="rank-val">{ itoa(u.Risposte) }<span class="sr-only"> messaggi</span></span>

@@ -108,6 +108,7 @@ templ PreventiviSearch(rows []service.Selection) {
 	if len(rows) == 0 {
 		@Alert("info", "Nessun risultato.")
 	} else {
+		@customerYearTotals(rows)
 		<table class="table clickable">
 			<thead>
 				<tr><th>Utente</th><th>Vino</th><th class="num">Qta</th><th class="num">Prezzo (€)</th><th>Ordine</th><th>Data</th></tr>
@@ -126,6 +127,32 @@ templ PreventiviSearch(rows []service.Selection) {
 			</tbody>
 		</table>
 		<p class="muted">Clicca su una riga per aprire l'ordine.</p>
+	}
+}
+
+// customerYearTotals: when the filter leaves a single customer, what they
+// ordered summed by year, plus the overall total.
+templ customerYearTotals(rows []service.Selection) {
+	if name, years, all := service.CustomerYearTotals(rows); name != "" {
+		<section class="year-totals" aria-label={ "Totali per anno di " + name }>
+			<h3>{ name } · totale per anno</h3>
+			<div class="metrics">
+				for _, y := range years {
+					<div class="metric">
+						<span>{ y.Year }</span>
+						<b>€ { money(y.Totale) }</b>
+						<span>{ plural(y.Ordini, "ordine", "ordini") } · { itoa(y.Bottiglie) } bott.</span>
+					</div>
+				}
+				if len(years) > 1 {
+					<div class="metric metric-total">
+						<span>Totale</span>
+						<b>€ { money(all.Totale) }</b>
+						<span>{ plural(all.Ordini, "ordine", "ordini") } · { itoa(all.Bottiglie) } bott.</span>
+					</div>
+				}
+			</div>
+		</section>
 	}
 }
 
@@ -836,7 +863,7 @@ type NuovoPreventivoData struct {
 templ NuovoPreventivo(d NuovoPreventivoData) {
 	@Layout("Nuovo ordine", "ordini") {
 		<div class="page-head">
-			<a href="/ordini" class="btn">← Elenco</a>
+			<a href="/ordini" class="btn icon-btn" title="Elenco" aria-label="Elenco">@IconList()</a>
 			<h2>Nuovo ordine</h2>
 		</div>
 		if d.Error != "" {

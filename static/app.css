@@ -215,7 +215,7 @@ code, .mono { font-family: ui-monospace, SFMono-Regular, Menlo, monospace; font-
 .sidebar nav a.active { background: var(--accent-soft); color: var(--accent); font-weight: 600; }
 .logout { padding: 0; }
 .content { flex: 1; min-width: 0; padding: var(--top) 2rem 1.5rem; }
-/* The first row of every page (title, or "← Elenco" + title, or title +
+/* The first row of every page (title, or list icon + title, or title +
    actions) has the same height as the sidebar brand, so they line up. */
 .content h2 { min-height: var(--head-h); display: flex; align-items: center; margin: 0 0 .75rem; }
 .page-head, .content .row.between:has(> h2) { min-height: var(--head-h); }
@@ -411,6 +411,11 @@ input.save-error { border-color: var(--danger) !important; box-shadow: 0 0 0 2px
 .metric { background: var(--panel); border: 1px solid var(--border); border-radius: var(--radius); padding: .9rem 1rem; }
 .metric span { display: block; color: var(--muted); font-size: .85rem; }
 .metric b { font-size: 1.6rem; font-weight: 600; }
+/* Ordini filtered on one customer: their totals by year */
+.year-totals h3 { margin: .5rem 0 .75rem; }
+.year-totals .metric b { display: block; }
+.year-totals .metric b + span { margin-top: .2rem; }
+.metric-total { border-color: var(--accent); background: var(--accent-soft); }
 
 /* ── inserzioni ─────────────────────────────────────────── */
 details > summary { cursor: pointer; user-select: none; }
@@ -1097,6 +1102,14 @@ body:has(.sel-bar:not(:empty)) .fab-menu { bottom: calc(max(.75rem, env(safe-are
 .rank-n { grid-area: n; text-align: right; color: var(--muted); font-variant-numeric: tabular-nums; font-size: .85rem; }
 .rank-name { grid-area: name; min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
 .rank-row:nth-child(-n+3) .rank-name { font-weight: 600; }
+/* the name opens the customer's orders (Ordini filtered by name) */
+.name-pill {
+  display: inline-block; max-width: 100%; overflow: hidden; text-overflow: ellipsis; vertical-align: middle;
+  padding: .1rem .7rem; border: 1px solid var(--border); border-radius: 999px;
+  background: var(--panel); color: var(--text); text-decoration: none;
+}
+.name-pill:hover, .name-pill:focus-visible { border-color: var(--accent); color: var(--accent); }
+@media (pointer: coarse) { .name-pill { padding: .45rem .8rem; } }
 .rank-track { grid-area: track; display: flex; align-items: center; gap: .5rem; min-width: 0; }
 .rank-bar { flex: none; height: 12px; width: calc(var(--w) * .88%); min-width: 4px; border-radius: 0 4px 4px 0; background: var(--accent); }
 .rank-val { flex: none; font-variant-numeric: tabular-nums; font-size: .9rem; font-weight: 600; color: var(--text); }

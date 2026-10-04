@@ -746,16 +746,89 @@ func (s *Service) SearchableSelections(ctx context.Context) ([]Selection, error)
 }
 
 // SearchSelections filters selections by customer or wine, newest first.
+// A query that is exactly a customer's name (e.g. "Ale", from the most
+// active customers) keeps only that customer, not "Alessio" or wines.
 func SearchSelections(sel []Selection, q string) []Selection {
 	q = strings.ToLower(strings.TrimSpace(q))
+	exact := false
+	for _, x := range sel {
+		if strings.EqualFold(strings.TrimSpace(x.Utente), q) {
+			exact = true
+			break
+		}
+	}
 	var out []Selection
 	for _, x := range sel {
-		if strings.Contains(strings.ToLower(x.Utente), q) || strings.Contains(strings.ToLower(x.Vino), q) {
+		if exact {
+			if strings.EqualFold(strings.TrimSpace(x.Utente), q) {
+				out = append(out, x)
+			}
+		} else if strings.Contains(strings.ToLower(x.Utente), q) || strings.Contains(strings.ToLower(x.Vino), q) {
 			out = append(out, x)
 		}
 	}
 	sort.SliceStable(out, func(i, j int) bool { return out[i].DataPrev > out[j].DataPrev })
 	return out
+}
+
+// YearTotal: what one customer ordered in a year.
+type YearTotal struct {
+	Year      string
+	Ordini    int
+	Bottiglie int
+	Totale    float64
+}
+
+// CustomerYearTotals: when the search results all belong to one customer,
+// their name and their orders summed by year (newest first) plus the overall
+// total; "" when the results name several customers (or none).
+func CustomerYearTotals(rows []Selection) (string, []YearTotal, YearTotal) {
+	name := ""
+	for _, x := range rows {
+		if name == "" {
+			name = x.Utente
+		} else if !strings.EqualFold(name, x.Utente) {
+			return "", nil, YearTotal{}
+		}
+	}
+	if name == "" {
+		return "", nil, YearTotal{}
+	}
+	by := map[string]*YearTotal{}
+	orders := map[string]bool{}
+	all := YearTotal{Year: "Totale"}
+	for _, x := range rows {
+		if x.Qta <= 0 {
+			continue
+		}
+		y := x.DataPrev
+		if len(y) >= 4 {
+			y = y[:4]
+		}
+		t := by[y]
+		if t == nil {
+			t = &YearTotal{Year: y}
+			by[y] = t
+		}
+		if !orders[x.Preventivo] {
+			orders[x.Preventivo] = true
+			t.Ordini++
+			all.Ordini++
+		}
+		b, v := x.Bottles(), float64(x.Qta)*x.Prezzo
+		t.Bottiglie += b
+		t.Totale += v
+		all.Bottiglie += b
+		all.Totale += v
+	}
+	out := make([]YearTotal, 0, len(by))
+	for _, t := range by {
+		t.Totale = round2(t.Totale)
+		out = append(out, *t)
+	}
+	sort.Slice(out, func(i, j int) bool { return out[i].Year > out[j].Year })
+	all.Totale = round2(all.Totale)
+	return name, out, all
 }
 
 // ── detail view ──────────────────────────────────────────────────────────────
