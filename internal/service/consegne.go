@@ -1,6 +1,7 @@
 package service
 
 import (
+	"adesgo/internal/db"
 	"adesgo/internal/textutil"
 	"bytes"
 	"context"
@@ -68,7 +69,19 @@ func CampaignURL(chatID, key string) string {
 
 // ConsegneCampaigns returns the campaigns with a quotation, newest
 // publication first, each with customers / units / total from the replies.
+// ConsegneCampaigns lists what can be delivered: listings with an order and
+// manual orders, newest first. Cached until orders, replies, listings or
+// customers change; the slice is a copy, its elements must not be changed.
 func (s *Service) ConsegneCampaigns(ctx context.Context) ([]ConsegneCampaign, error) {
+	camps, err := s.consegneCache.get(ctx, s.Store, s.loadConsegneCampaigns,
+		db.SelectionsVersionKey, db.ListingsVersionKey, db.OrdiniVersionKey)
+	if err != nil {
+		return nil, err
+	}
+	return append([]ConsegneCampaign(nil), camps...), nil
+}
+
+func (s *Service) loadConsegneCampaigns(ctx context.Context) ([]ConsegneCampaign, error) {
 	rows, err := s.ListingRows(ctx)
 	if err != nil {
 		return nil, err

@@ -42,6 +42,8 @@ type Service struct {
 	listingsCache versioned[[]ListingRow]
 	// the Ordini list, until orders, selections, listings or confirmations change
 	summariesCache versioned[[]QuotationSummary]
+	// what Consegne can deliver, until the same data changes
+	consegneCache versioned[[]ConsegneCampaign]
 }
 
 func New(store *db.Store, cfg *config.Config, groups GroupNamer) *Service {

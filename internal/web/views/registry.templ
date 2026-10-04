@@ -6,6 +6,7 @@ import (
 	"net/url"
 	"strconv"
 	"strings"
+	"time"
 )
 
 // ── Consegne ─────────────────────────────────────────────────────────────────
@@ -76,48 +77,124 @@ templ ConsegnePage(months []service.ConsegneMonth, selected map[string]bool, res
 				}
 				<input type="search" placeholder="Filtra Consegne…" data-filter=".dl-item" class="narrow list-filter"/>
 				<div class="consegne view-timeline">
-					for _, m := range months {
-						<section class="month" data-filter-group=".dl-item">
-							<header class="month-head">
-								<h3>{ monthLabel(m.Year, m.Month) }</h3>
-								<span class="muted">
-									if manual {
-										{ plural(len(m.Campaigns), "ordine", "ordini") }
-									} else {
-										{ plural(len(m.Campaigns), "inserzione", "inserzioni") }
-									}
-									· { plural(m.Clienti, "cliente", "clienti") } · { itoa(m.Bottiglie) } bott. · € { money(m.Totale) }
-								</span>
-								<button type="button" class="btn small" data-check-all>Seleziona mese</button>
-							</header>
-							<div class="month-items">
-								for _, c := range m.Campaigns {
-									<label class={ "dl-item", templ.KV("dl-empty", c.Clienti == 0) } data-name={ c.Label }>
-										<input type="checkbox" name="sel" value={ c.ID } checked?={ selected[c.ID] }/>
-										<span class="dl-day">{ dayMonthShort(c.Published) }</span>
-										<span class="dl-main">
-											<b class="dl-title">{ c.Title }</b>
-											<span class="muted dl-group">{ c.ChatName }</span>
-										</span>
-										<span class="dl-stats">
-											if c.Clienti == 0 {
-												<span>nessun ordine</span>
-											} else {
-												<span>{ plural(c.Clienti, "cliente", "clienti") }</span>
-												<span>{ itoa(c.Bottiglie) } bott.</span>
-												<b>€ { money(c.Totale) }</b>
-											}
-										</span>
-									</label>
-								}
-							</div>
-						</section>
+					{{ recent, years := service.SplitRecentConsegne(months, time.Now()) }}
+					for _, m := range recent {
+						@consegneMonth(m, selected, manual)
+					}
+					// older months: one closed section per year, loaded when
+					// opened; a year with a selected item comes open, so the
+					// selection always travels with the form
+					for _, y := range years {
+						if yearHasSelected(y, selected) {
+							<details class="year-group" open>
+								@consegneYearHead(y, manual)
+								<div class="year-body">
+									@ConsegneYearMonths(y.Months, selected, manual)
+								</div>
+							</details>
+						} else {
+							<details
+								class="year-group"
+								hx-get={ "/consegne/anno?" + consegneYearQuery(y.Year, manual) }
+								hx-trigger="toggle once"
+								hx-target="find .year-body"
+								hx-swap="innerHTML"
+								hx-disinherit="*"
+							>
+								@consegneYearHead(y, manual)
+								<div class="year-body"><p class="muted">Caricamento…</p></div>
+							</details>
+						}
 					}
 				</div>
 			</form>
 			@ConsegneSelBar(result, ids)
 		}
 	}
+}
+
+func yearHasSelected(y service.ConsegneYear, selected map[string]bool) bool {
+	for _, m := range y.Months {
+		for _, c := range m.Campaigns {
+			if selected[c.ID] {
+				return true
+			}
+		}
+	}
+	return false
+}
+
+func consegneYearQuery(year int, manual bool) string {
+	if manual {
+		return q("y", itoa(year), "vista", "ordini")
+	}
+	return q("y", itoa(year))
+}
+
+templ consegneYearHead(y service.ConsegneYear, manual bool) {
+	<summary class="year-head">
+		<h3>
+			if y.Year > 0 {
+				{ itoa(y.Year) }
+			} else {
+				Senza data
+			}
+		</h3>
+		<span class="muted">
+			if manual {
+				{ plural(y.Count, "ordine", "ordini") }
+			} else {
+				{ plural(y.Count, "inserzione", "inserzioni") }
+			}
+			· { itoa(y.Bottiglie) } bott. · € { money(y.Totale) }
+		</span>
+	</summary>
+}
+
+// ConsegneYearMonths: the months of an older year (loaded when opened, or
+// shown open when it holds a selected item).
+templ ConsegneYearMonths(months []service.ConsegneMonth, selected map[string]bool, manual bool) {
+	for _, m := range months {
+		@consegneMonth(m, selected, manual)
+	}
+}
+
+templ consegneMonth(m service.ConsegneMonth, selected map[string]bool, manual bool) {
+	<section class="month" data-filter-group=".dl-item">
+		<header class="month-head">
+			<h3>{ monthLabel(m.Year, m.Month) }</h3>
+			<span class="muted">
+				if manual {
+					{ plural(len(m.Campaigns), "ordine", "ordini") }
+				} else {
+					{ plural(len(m.Campaigns), "inserzione", "inserzioni") }
+				}
+				· { plural(m.Clienti, "cliente", "clienti") } · { itoa(m.Bottiglie) } bott. · € { money(m.Totale) }
+			</span>
+			<button type="button" class="btn small" data-check-all>Seleziona mese</button>
+		</header>
+		<div class="month-items">
+			for _, c := range m.Campaigns {
+				<label class={ "dl-item", templ.KV("dl-empty", c.Clienti == 0) } data-name={ c.Label }>
+					<input type="checkbox" name="sel" value={ c.ID } checked?={ selected[c.ID] }/>
+					<span class="dl-day">{ dayMonthShort(c.Published) }</span>
+					<span class="dl-main">
+						<b class="dl-title">{ c.Title }</b>
+						<span class="muted dl-group">{ c.ChatName }</span>
+					</span>
+					<span class="dl-stats">
+						if c.Clienti == 0 {
+							<span>nessun ordine</span>
+						} else {
+							<span>{ plural(c.Clienti, "cliente", "clienti") }</span>
+							<span>{ itoa(c.Bottiglie) } bott.</span>
+							<b>€ { money(c.Totale) }</b>
+						}
+					</span>
+				</label>
+			}
+		</div>
+	</section>
 }
 
 // ConsegneShowPage: the deliveries of the selected campaigns, on a page of

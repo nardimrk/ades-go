@@ -1102,6 +1102,32 @@ func (s *Server) consegne(w http.ResponseWriter, r *http.Request) {
 	render(w, r, views.ConsegnePage(service.ConsegneMonths(shown), sel, res, ids, manual, hidden))
 }
 
+// consegneAnno: the months of an older year (its section was opened), in
+// the tab shown; nothing in it is selected yet.
+func (s *Server) consegneAnno(w http.ResponseWriter, r *http.Request) {
+	camps, err := s.svc.ConsegneCampaigns(r.Context())
+	if err != nil {
+		s.fail(w, r, err)
+		return
+	}
+	manual := r.URL.Query().Get("vista") == "ordini"
+	var shown []service.ConsegneCampaign
+	for _, c := range camps {
+		if c.Manual == manual {
+			shown = append(shown, c)
+		}
+	}
+	y, _ := strconv.Atoi(r.URL.Query().Get("y"))
+	_, years := service.SplitRecentConsegne(service.ConsegneMonths(shown), time.Now())
+	var months []service.ConsegneMonth
+	for _, yr := range years {
+		if yr.Year == y {
+			months = yr.Months
+		}
+	}
+	render(w, r, views.ConsegneYearMonths(months, nil, manual))
+}
+
 func (s *Server) consegneResult(w http.ResponseWriter, r *http.Request) {
 	ids := r.URL.Query()["sel"]
 	res, err := s.svc.Consegne(r.Context(), ids)

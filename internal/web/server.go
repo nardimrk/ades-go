@@ -93,6 +93,7 @@ func (s *Server) Handler(static fs.FS) http.Handler {
 
 	mux.HandleFunc("GET /consegne", s.consegne)
 	mux.HandleFunc("GET /consegne/result", s.consegneResult)
+	mux.HandleFunc("GET /consegne/anno", s.consegneAnno)
 	mux.HandleFunc("GET /consegne/show", s.consegneShow)
 	mux.HandleFunc("GET /consegne/excel", s.consegneExcel)
 

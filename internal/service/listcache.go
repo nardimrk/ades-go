@@ -274,3 +274,28 @@ func (s *Service) QuotationSummaries(ctx context.Context) ([]QuotationSummary, e
 	}
 	return append([]QuotationSummary(nil), rows...), nil
 }
+
+// ConsegneYear: the months of one older year in Consegne, with its totals.
+type ConsegneYear struct {
+	Year      int
+	Months    []ConsegneMonth
+	Count     int
+	Bottiglie int
+	Totale    float64
+}
+
+// SplitRecentConsegne keeps the last RecentMonths of Consegne open and
+// groups the older months by year.
+func SplitRecentConsegne(months []ConsegneMonth, now time.Time) (recent []ConsegneMonth, years []ConsegneYear) {
+	recent, groups := splitRecent(months, func(m ConsegneMonth) (int, int) { return m.Year, m.Month }, now)
+	for _, g := range groups {
+		y := ConsegneYear{Year: g.Year, Months: g.Items}
+		for _, m := range g.Items {
+			y.Count += len(m.Campaigns)
+			y.Bottiglie += m.Bottiglie
+			y.Totale += m.Totale
+		}
+		years = append(years, y)
+	}
+	return recent, years
+}
