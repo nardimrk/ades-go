@@ -1098,6 +1098,37 @@ type LinkedLine struct {
 
 func (l LinkedLine) Totale() float64 { return float64(l.Qta) * l.Prezzo }
 
+// LinkedOrder: the linked wines of one manual order (one customer).
+type LinkedOrder struct {
+	Order   string
+	Cliente string
+	Lines   []LinkedLine
+}
+
+func (o LinkedOrder) Totale() float64 {
+	t := 0.0
+	for _, l := range o.Lines {
+		t += l.Totale()
+	}
+	return t
+}
+
+// GroupLinked groups linked wines by manual order, in order of appearance.
+func GroupLinked(lines []LinkedLine) []LinkedOrder {
+	var out []LinkedOrder
+	idx := map[string]int{}
+	for _, l := range lines {
+		i, ok := idx[l.Order]
+		if !ok {
+			i = len(out)
+			idx[l.Order] = i
+			out = append(out, LinkedOrder{Order: l.Order, Cliente: l.Cliente})
+		}
+		out[i].Lines = append(out[i].Lines, l)
+	}
+	return out
+}
+
 // linkedLines returns the wines of manual orders connected to quotationID,
 // by option then order, read from the same lines as Consegne.
 func (s *Service) linkedLines(ctx context.Context, quotationID int64) ([]LinkedLine, error) {

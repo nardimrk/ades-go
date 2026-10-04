@@ -1046,7 +1046,11 @@ body:has(.sel-bar:not(:empty)) .fab-menu { bottom: calc(max(.75rem, env(safe-are
 /* the inserzione's number (INS0123) */
 .link-group { display: inline-flex; align-items: center; gap: .35rem; white-space: nowrap; }
 
-/* Consegne and an order's page: wines that come from a manual order */
+/* an order's page: the manual orders connected to it, light blue cards */
+.card.manual-card { background: var(--info-bg); border-color: var(--info-border); }
+.manual-card .table, .manual-card .table th, .manual-card .table td { background: transparent; }
+.manual-card .manual-badge { margin-left: 0; font-size: .8rem; padding: .1rem .6rem; }
+/* Consegne: wines that come from a manual order */
 .table tr.manual-line > td { background: var(--info-bg); }
 .table tr.manual-line > td:first-child { box-shadow: inset 3px 0 0 var(--info-border); }
 .manual-badge { display: inline-flex; align-items: center; gap: .25rem; margin-left: .5rem; padding: 0 .5rem; border: 1px solid var(--info-border); border-radius: 999px; background: var(--panel); color: var(--info-text); font-size: .75rem; font-weight: 600; text-decoration: none; white-space: nowrap; }
