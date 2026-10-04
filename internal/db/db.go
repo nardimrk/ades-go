@@ -213,6 +213,9 @@ var addColumns = []string{
 	"ALTER TABLE users ADD COLUMN merged_into TEXT",
 	"ALTER TABLE users ADD COLUMN is_seller INTEGER NOT NULL DEFAULT 0",
 	"ALTER TABLE users ADD COLUMN customer_code TEXT",
+	// the customer's VAT number ("01234567890", or "DE123456789" abroad),
+	// editable in Clienti
+	"ALTER TABLE users ADD COLUMN partita_iva TEXT",
 }
 
 func (s *Store) migrate(ctx context.Context) error {

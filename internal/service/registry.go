@@ -25,6 +25,7 @@ type User struct {
 	Regione   string
 	CAP       string
 	Telefono  string // "+393492869246", "" = unknown
+	PIVA      string // partita IVA: "01234567890" (Italy) or "DE123456789"
 	Replies   int    // messages written in the groups (all its ids)
 	Code      string // "CLI0012"
 	Aliases   []string // other ids merged into this customer
@@ -33,7 +34,7 @@ type User struct {
 func (s *Service) Users(ctx context.Context) ([]User, error) {
 	rows, err := s.db().QueryContext(ctx, `
 		SELECT id, COALESCE(name,''), COALESCE(indirizzo,''), COALESCE(città,''),
-		       COALESCE(provincia,''), COALESCE(regione,''), COALESCE(cap,''), COALESCE(telefono,''),
+		       COALESCE(provincia,''), COALESCE(regione,''), COALESCE(cap,''), COALESCE(telefono,''), COALESCE(partita_iva,''),
 		       (SELECT COUNT(*) FROM replies r WHERE r.author_id = users.id OR r.author_id IN (SELECT a.id FROM users a WHERE a.merged_into = users.id)),
 		       COALESCE(customer_code,''), COALESCE((SELECT group_concat(a.id, char(10)) FROM users a WHERE a.merged_into = users.id), '')
 		FROM users WHERE id NOT LIKE '%@g.us' AND merged_into IS NULL AND COALESCE(is_seller,0) = 0 ORDER BY name`)
@@ -45,7 +46,7 @@ func (s *Service) Users(ctx context.Context) ([]User, error) {
 	for rows.Next() {
 		var u User
 		var aliases string
-		if err := rows.Scan(&u.ID, &u.Name, &u.Indirizzo, &u.Citta, &u.Provincia, &u.Regione, &u.CAP, &u.Telefono, &u.Replies, &u.Code, &aliases); err != nil {
+		if err := rows.Scan(&u.ID, &u.Name, &u.Indirizzo, &u.Citta, &u.Provincia, &u.Regione, &u.CAP, &u.Telefono, &u.PIVA, &u.Replies, &u.Code, &aliases); err != nil {
 			return nil, err
 		}
 		if aliases != "" {
@@ -139,6 +140,54 @@ func (s *Service) DeleteUser(ctx context.Context, id string) error {
 var userColumns = map[string]string{
 	"name": "name", "indirizzo": "indirizzo", "citta": "città",
 	"provincia": "provincia", "regione": "regione", "cap": "cap", "telefono": "telefono",
+	"piva": "partita_iva",
+}
+
+// NormalizePartitaIVA checks a typed VAT number: spaces, dots and dashes are
+// dropped; an Italian one ("IT" optional) must be 11 digits with a valid
+// check digit and is kept without "IT"; a foreign one keeps its country
+// prefix ("DE123456789", 2-13 letters/digits after it).
+func NormalizePartitaIVA(v string) (string, error) {
+	v = strings.ToUpper(strings.Map(func(r rune) rune {
+		if r == ' ' || r == '.' || r == '-' {
+			return -1
+		}
+		return r
+	}, v))
+	if v == "" {
+		return "", nil
+	}
+	digits := strings.TrimPrefix(v, "IT")
+	if strings.Trim(digits, "0123456789") == "" {
+		if len(digits) != 11 {
+			return "", fmt.Errorf("partita IVA non valida: %q (deve avere 11 cifre)", v)
+		}
+		if !pivaCheckDigit(digits) {
+			return "", fmt.Errorf("partita IVA non valida: %q (cifra di controllo errata, controlla il numero)", v)
+		}
+		return digits, nil
+	}
+	if len(v) < 4 || len(v) > 15 || v[0] < 'A' || v[0] > 'Z' || v[1] < 'A' || v[1] > 'Z' ||
+		strings.Trim(v[2:], "0123456789ABCDEFGHIJKLMNOPQRSTUVWXYZ") != "" {
+		return "", fmt.Errorf("partita IVA non valida: %q", v)
+	}
+	return v, nil
+}
+
+// pivaCheckDigit verifies the 11th digit of an Italian partita IVA (digits in
+// even positions are doubled, minus 9 when over 9, like Luhn).
+func pivaCheckDigit(d string) bool {
+	sum := 0
+	for i := 0; i < 10; i++ {
+		n := int(d[i] - '0')
+		if i%2 == 1 {
+			if n *= 2; n > 9 {
+				n -= 9
+			}
+		}
+		sum += n
+	}
+	return (10-sum%10)%10 == int(d[10]-'0')
 }
 
 // NormalizePhone turns a typed number into "+<country><number>": spaces,
@@ -175,11 +224,15 @@ func (s *Service) SetUserField(ctx context.Context, id, field, value string) err
 	if !ok {
 		return fmt.Errorf("campo %q non valido", field)
 	}
-	if field == "telefono" {
-		var err error
-		if value, err = NormalizePhone(value); err != nil {
-			return err
-		}
+	var err error
+	switch field {
+	case "telefono":
+		value, err = NormalizePhone(value)
+	case "piva":
+		value, err = NormalizePartitaIVA(value)
+	}
+	if err != nil {
+		return err
 	}
 	res, err := s.db().ExecContext(ctx,
 		`UPDATE users SET "`+col+`" = ?, updated_at = datetime('now') WHERE id = ?`, strings.TrimSpace(value), id)

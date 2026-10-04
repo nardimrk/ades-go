@@ -936,6 +936,14 @@ body:has(.sel-bar:not(:empty)) .fab-menu { bottom: calc(max(.75rem, env(safe-are
   .table.clienti td.col-id { max-width: 12rem; overflow: hidden; text-overflow: ellipsis; }
 }
 .tel-link { flex: none; color: var(--accent); }
+/* Clienti: "Dettagli" (and its dialog) only on phones, where the cards show
+   just Nome and Telefono */
+.table.clienti .col-more { display: none; }
+@media (max-width: 720px) {
+  .table.clienti td.col-extra { display: none; }
+  .table.clienti td.col-more { display: flex; position: static; grid-column: 1 / -1; }
+  .table.clienti td.col-more > .btn { width: 100%; }
+}
 
 /* Consegne: the customer's name opens their delivery address */
 .client-pill {

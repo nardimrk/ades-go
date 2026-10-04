@@ -349,6 +349,12 @@
       return;
     }
     showToast("Salvato: " + autosaveLabel(el));
+    // the same field elsewhere in the row (Clienti: the table and the
+    // phone's "Dettagli" dialog) shows the new value too
+    var row = el.closest("tr");
+    if (row) row.querySelectorAll("[data-autosave]").forEach(function (o) {
+      if (o !== el && o.getAttribute("hx-post") === el.getAttribute("hx-post") && o.getAttribute("hx-vals") === el.getAttribute("hx-vals")) o.value = el.value;
+    });
     var dlg = el.closest("dialog[data-reload-on-save]");
     if (dlg) dlg.dataset.saved = "1";
   });
