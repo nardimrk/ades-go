@@ -62,7 +62,7 @@ func (c Campaign) Time() time.Time {
 // and reply count, cached until a listing or a reply changes. The slice is
 // a copy; the rows' QuotationID pointers are shared and must not be changed.
 func (s *Service) ListingRows(ctx context.Context) ([]ListingRow, error) {
-	rows, err := s.listingsCache.get(ctx, s.Store, db.ListingsVersionKey, s.loadListingRows)
+	rows, err := s.listingsCache.get(ctx, s.Store, s.loadListingRows, db.ListingsVersionKey)
 	if err != nil {
 		return nil, err
 	}
@@ -297,36 +297,18 @@ type InserzioniYear struct {
 	Risposte int
 }
 
-// RecentMonths: how many months (this one included) Inserzioni shows open.
-const RecentMonths = 6
-
-// SplitRecent splits months (newest first) into the last RecentMonths
-// months before now, kept open, and the older ones by year (newest first).
+// SplitRecent keeps the last RecentMonths of Inserzioni open and groups
+// the older months by year.
 func SplitRecent(months []InserzioniMonth, now time.Time) (recent []InserzioniMonth, years []InserzioniYear) {
-	cut := now.Year()*12 + int(now.Month()) - RecentMonths // months after this are recent
-	idx := map[int]int{}
-	for _, m := range months {
-		if m.Year > 0 && m.Year*12+m.Month > cut {
-			recent = append(recent, m)
-			continue
+	recent, groups := splitRecent(months, func(m InserzioniMonth) (int, int) { return m.Year, m.Month }, now)
+	for _, g := range groups {
+		y := InserzioniYear{Year: g.Year, Months: g.Items}
+		for _, m := range g.Items {
+			y.Count += len(m.Rows)
+			y.Risposte += m.Risposte
 		}
-		i, ok := idx[m.Year]
-		if !ok {
-			i = len(years)
-			idx[m.Year] = i
-			years = append(years, InserzioniYear{Year: m.Year})
-		}
-		years[i].Months = append(years[i].Months, m)
-		years[i].Count += len(m.Rows)
-		years[i].Risposte += m.Risposte
+		years = append(years, y)
 	}
-	sort.SliceStable(years, func(i, j int) bool {
-		a, b := years[i].Year, years[j].Year
-		if a == 0 || b == 0 {
-			return b == 0 && a != 0 // without a date last
-		}
-		return a > b
-	})
 	return recent, years
 }
 

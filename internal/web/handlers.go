@@ -756,6 +756,35 @@ func (s *Server) preventiviList(w http.ResponseWriter, r *http.Request) {
 	render(w, r, c)
 }
 
+// preventiviRecenti: the open months of Ordini (the 30s refresh).
+func (s *Server) preventiviRecenti(w http.ResponseWriter, r *http.Request) {
+	rows, err := s.svc.QuotationSummaries(r.Context())
+	if err != nil {
+		s.fail(w, r, err)
+		return
+	}
+	recent, _ := service.SplitRecentOrders(service.QuotationMonths(rows), time.Now())
+	render(w, r, views.PreventiviRecent(recent))
+}
+
+// preventiviAnno: the months of an older year (its section was opened).
+func (s *Server) preventiviAnno(w http.ResponseWriter, r *http.Request) {
+	rows, err := s.svc.QuotationSummaries(r.Context())
+	if err != nil {
+		s.fail(w, r, err)
+		return
+	}
+	y, _ := strconv.Atoi(r.URL.Query().Get("y"))
+	_, years := service.SplitRecentOrders(service.QuotationMonths(rows), time.Now())
+	var months []service.QuotationMonth
+	for _, yr := range years {
+		if yr.Year == y {
+			months = yr.Months
+		}
+	}
+	render(w, r, views.PreventiviYearMonths(months))
+}
+
 func (s *Server) preventiviImport(w http.ResponseWriter, r *http.Request) {
 	created, skipped, ok, err := s.svc.ImportPreventivi(r.Context())
 	if err != nil {

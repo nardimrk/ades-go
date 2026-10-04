@@ -282,6 +282,10 @@ const (
 	// the listings with their reply counts (Inserzioni and every page
 	// built on the campaigns)
 	ListingsVersionKey = "listings_version"
+	// confirmed orders (the "Confermato il" of Ordini)
+	OrdiniVersionKey = "ordini_version"
+	// the selections counter (see SelectionsVersion), for list caches too
+	SelectionsVersionKey = selectionsVersionKey
 )
 
 var listTriggers = map[string][]string{
@@ -301,6 +305,16 @@ var listTriggers = map[string][]string{
 		"trg_lst_replies_ins AFTER INSERT ON replies",
 		"trg_lst_replies_upd AFTER UPDATE OF listing_msg_id ON replies",
 		"trg_lst_replies_del AFTER DELETE ON replies",
+	},
+	OrdiniVersionKey: {
+		"trg_ord_orders_ins AFTER INSERT ON orders",
+		"trg_ord_orders_upd AFTER UPDATE ON orders",
+		"trg_ord_orders_del AFTER DELETE ON orders",
+		"trg_ord_items_ins AFTER INSERT ON order_items",
+		"trg_ord_items_upd AFTER UPDATE ON order_items",
+		"trg_ord_items_del AFTER DELETE ON order_items",
+		// e.g. a manual order's customer (its title in the list)
+		"trg_ord_quot_upd AFTER UPDATE ON quotations",
 	},
 	ProdottiVersionKey: {
 		"trg_prod_items_ins AFTER INSERT ON items",

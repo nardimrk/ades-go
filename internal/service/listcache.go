@@ -5,6 +5,7 @@ import (
 	"sort"
 	"strings"
 	"sync"
+	"time"
 	"unicode"
 
 	"golang.org/x/text/runes"
@@ -24,12 +25,20 @@ type versioned[T any] struct {
 	val T
 }
 
-func (c *versioned[T]) get(ctx context.Context, store *db.Store, key string, load func(context.Context) (T, error)) (T, error) {
+func (c *versioned[T]) get(ctx context.Context, store *db.Store, load func(context.Context) (T, error), keys ...string) (T, error) {
 	c.mu.Lock()
 	defer c.mu.Unlock()
-	// read the version before loading: a write that lands meanwhile bumps
-	// it again, so the next call reloads
-	ver, verErr := store.Version(ctx, key)
+	// read the versions before loading: a write that lands meanwhile bumps
+	// one again, so the next call reloads
+	var ver string
+	var verErr error
+	for _, k := range keys {
+		v, err := store.Version(ctx, k)
+		if err != nil {
+			verErr = err
+		}
+		ver += v + "|"
+	}
 	if verErr == nil && c.ok && ver == c.ver {
 		return c.val, nil
 	}
@@ -45,13 +54,13 @@ func (c *versioned[T]) get(ctx context.Context, store *db.Store, key string, loa
 // UsersCached is Users, cached until a customer or a reply changes. The
 // slice is shared: callers must not modify it.
 func (s *Service) UsersCached(ctx context.Context) ([]User, error) {
-	return s.usersCache.get(ctx, s.Store, db.ClientiVersionKey, s.Users)
+	return s.usersCache.get(ctx, s.Store, s.Users, db.ClientiVersionKey)
 }
 
 // ItemsCached is Items, cached until a product changes. The slice is
 // shared: callers must not modify it.
 func (s *Service) ItemsCached(ctx context.Context) ([]Item, error) {
-	return s.itemsCache.get(ctx, s.Store, db.ProdottiVersionKey, s.Items)
+	return s.itemsCache.get(ctx, s.Store, s.Items, db.ProdottiVersionKey)
 }
 
 // ListPerPage: rows per page in Clienti and Prodotti.
@@ -188,4 +197,80 @@ func DistinctCities(users []User) []string {
 	}
 	sort.Slice(out, func(i, j int) bool { return strings.ToLower(out[i]) < strings.ToLower(out[j]) })
 	return out
+}
+
+// YearGroup: the items of one year older than the recent months.
+type YearGroup[T any] struct {
+	Year  int // 0 = without a date
+	Items []T
+}
+
+// RecentMonths: how many months (this one included) the timelines of
+// Inserzioni and Ordini show open.
+const RecentMonths = 6
+
+// splitRecent splits months (newest first; ym gives each one's year and
+// month) into the last RecentMonths before now, and the older ones by year,
+// newest first, without a date last.
+func splitRecent[T any](months []T, ym func(T) (int, int), now time.Time) (recent []T, years []YearGroup[T]) {
+	cut := now.Year()*12 + int(now.Month()) - RecentMonths // months after this are recent
+	idx := map[int]int{}
+	for _, m := range months {
+		y, mo := ym(m)
+		if y > 0 && y*12+mo > cut {
+			recent = append(recent, m)
+			continue
+		}
+		i, ok := idx[y]
+		if !ok {
+			i = len(years)
+			idx[y] = i
+			years = append(years, YearGroup[T]{Year: y})
+		}
+		years[i].Items = append(years[i].Items, m)
+	}
+	sort.SliceStable(years, func(i, j int) bool {
+		a, b := years[i].Year, years[j].Year
+		if a == 0 || b == 0 {
+			return b == 0 && a != 0
+		}
+		return a > b
+	})
+	return recent, years
+}
+
+// OrdiniYear: the months of one older year in Ordini, with its totals.
+type OrdiniYear struct {
+	Year      int
+	Months    []QuotationMonth
+	Count     int
+	Bottiglie int
+	Totale    float64
+}
+
+// SplitRecentOrders keeps the last RecentMonths of Ordini open and groups
+// the older months by year.
+func SplitRecentOrders(months []QuotationMonth, now time.Time) (recent []QuotationMonth, years []OrdiniYear) {
+	recent, groups := splitRecent(months, func(m QuotationMonth) (int, int) { return m.Year, m.Month }, now)
+	for _, g := range groups {
+		y := OrdiniYear{Year: g.Year, Months: g.Items}
+		for _, m := range g.Items {
+			y.Count += len(m.Rows)
+			y.Bottiglie += m.Bottiglie
+			y.Totale += m.Totale
+		}
+		years = append(years, y)
+	}
+	return recent, years
+}
+
+// QuotationSummaries is the Ordini list, cached until an order, a reply, a
+// listing or a confirmation changes. The slice is a copy.
+func (s *Service) QuotationSummaries(ctx context.Context) ([]QuotationSummary, error) {
+	rows, err := s.summariesCache.get(ctx, s.Store, s.loadQuotationSummaries,
+		db.SelectionsVersionKey, db.ListingsVersionKey, db.OrdiniVersionKey)
+	if err != nil {
+		return nil, err
+	}
+	return append([]QuotationSummary(nil), rows...), nil
 }

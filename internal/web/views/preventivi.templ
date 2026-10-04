@@ -3,6 +3,7 @@ package views
 import (
 	"adesgo/internal/service"
 	"adesgo/internal/textutil"
+	"time"
 	"crypto/sha1"
 	"encoding/hex"
 	"strings"
@@ -46,62 +47,106 @@ templ PreventiviPage(search, flash string, list templ.Component) {
 
 // PreventiviSummary: the orders as a monthly timeline (newest first, by order
 // date). It refreshes itself every 30s to pick up new WhatsApp replies;
-// hx-disinherit keeps the links inside from inheriting the refresh target
-// (otherwise a click would load the whole page inside the list).
+// PreventiviSummary: the orders of the last 6 months as a monthly timeline,
+// refreshed every 30s; older orders in one closed section per year, their
+// months loaded when opened (and left alone by the refresh).
 templ PreventiviSummary(months []service.QuotationMonth) {
-	<div hx-get="/ordini/list" hx-trigger="every 30s" hx-target="#prev-list" hx-include="[name=q]" hx-disinherit="*">
-		if len(months) == 0 {
-			@Alert("info", "Nessun ordine presente. Usa \"+ Crea\" o \"Importa\" per crearne uno.")
-		} else {
-			<div class="view-timeline timeline">
-				for _, m := range months {
-					<section class="month">
-						<header class="month-head">
-							<h3>{ monthLabel(m.Year, m.Month) }</h3>
-							<span class="muted">
-								{ plural(len(m.Rows), "ordine", "ordini") } · { itoa(m.Bottiglie) } bott. · € { money(m.Totale) }
-							</span>
-						</header>
-						<div class="month-items">
-							for _, r := range m.Rows {
-								<a class={ "dl-item", "dl-link", templ.KV("dl-empty", r.Clienti == 0) } href={ templ.URL(previewURL(r.Number)) }>
-									<span class="dl-day">{ dayMonthShort(r.Date) }</span>
-									<span class="dl-main">
-										if r.Manual {
-											<b class="dl-title dl-manual" title="Ordine manuale">
-												@IconHand()
-												<span class="sr-only">Ordine manuale</span>
-												{ noEmoji(r.Title) }
-											</b>
-										} else {
-											<b class="dl-title dl-manual" title="Ordine da un'inserzione WhatsApp">
-												@IconRomanIOutline()
-												<span class="sr-only">Ordine da un'inserzione WhatsApp</span>
-												{ noEmoji(r.Title) }
-											</b>
-										}
-										<span class="muted dl-group">{ r.Number }</span>
-									</span>
-									<span class="dl-stats">
-										if r.Clienti == 0 {
-											<span>nessuna selezione</span>
-										} else {
-											<span>{ plural(r.Clienti, "cliente", "clienti") }</span>
-											<span>{ itoa(r.Bottiglie) } bott.</span>
-											<b>€ { money(r.Totale) }</b>
-										}
-										if r.SavedOn != "" {
-											<span class="badge badge-ok">Confermato il { r.SavedOn }</span>
-										}
-									</span>
-								</a>
+	if len(months) == 0 {
+		@Alert("info", "Nessun ordine presente. Usa \"+ Crea\" o \"Importa\" per crearne uno.")
+	} else {
+		{{ recent, years := service.SplitRecentOrders(months, time.Now()) }}
+		<div class="view-timeline timeline">
+			@PreventiviRecent(recent)
+			for _, y := range years {
+				<details
+					class="year-group"
+					hx-get={ "/ordini/anno?" + q("y", itoa(y.Year)) }
+					hx-trigger="toggle once"
+					hx-target="find .year-body"
+					hx-swap="innerHTML"
+					hx-disinherit="*"
+				>
+					<summary class="year-head">
+						<h3>
+							if y.Year > 0 {
+								{ itoa(y.Year) }
+							} else {
+								Senza data
 							}
-						</div>
-					</section>
-				}
-			</div>
+						</h3>
+						<span class="muted">{ plural(y.Count, "ordine", "ordini") } · { itoa(y.Bottiglie) } bott. · € { money(y.Totale) }</span>
+					</summary>
+					<div class="year-body"><p class="muted">Caricamento…</p></div>
+				</details>
+			}
+		</div>
+	}
+}
+
+// PreventiviRecent: the months kept open, refreshed every 30s on their own
+// (hx-disinherit keeps the links inside from inheriting the refresh swap).
+templ PreventiviRecent(months []service.QuotationMonth) {
+	<div id="prev-recent" hx-get="/ordini/recenti" hx-trigger="every 30s" hx-swap="outerHTML" hx-disinherit="*">
+		for _, m := range months {
+			@preventiviMonth(m)
 		}
 	</div>
+}
+
+// PreventiviYearMonths: the months of an older year, loaded when opened.
+templ PreventiviYearMonths(months []service.QuotationMonth) {
+	for _, m := range months {
+		@preventiviMonth(m)
+	}
+	if len(months) == 0 {
+		<p class="muted">Nessun ordine.</p>
+	}
+}
+
+templ preventiviMonth(m service.QuotationMonth) {
+	<section class="month">
+		<header class="month-head">
+			<h3>{ monthLabel(m.Year, m.Month) }</h3>
+			<span class="muted">
+				{ plural(len(m.Rows), "ordine", "ordini") } · { itoa(m.Bottiglie) } bott. · € { money(m.Totale) }
+			</span>
+		</header>
+		<div class="month-items">
+			for _, r := range m.Rows {
+				<a class={ "dl-item", "dl-link", templ.KV("dl-empty", r.Clienti == 0) } href={ templ.URL(previewURL(r.Number)) }>
+					<span class="dl-day">{ dayMonthShort(r.Date) }</span>
+					<span class="dl-main">
+						if r.Manual {
+							<b class="dl-title dl-manual" title="Ordine manuale">
+								@IconHand()
+								<span class="sr-only">Ordine manuale</span>
+								{ noEmoji(r.Title) }
+							</b>
+						} else {
+							<b class="dl-title dl-manual" title="Ordine da un'inserzione WhatsApp">
+								@IconRomanIOutline()
+								<span class="sr-only">Ordine da un'inserzione WhatsApp</span>
+								{ noEmoji(r.Title) }
+							</b>
+						}
+						<span class="muted dl-group">{ r.Number }</span>
+					</span>
+					<span class="dl-stats">
+						if r.Clienti == 0 {
+							<span>nessuna selezione</span>
+						} else {
+							<span>{ plural(r.Clienti, "cliente", "clienti") }</span>
+							<span>{ itoa(r.Bottiglie) } bott.</span>
+							<b>€ { money(r.Totale) }</b>
+						}
+						if r.SavedOn != "" {
+							<span class="badge badge-ok">Confermato il { r.SavedOn }</span>
+						}
+					</span>
+				</a>
+			}
+		</div>
+	</section>
 }
 
 templ PreventiviSearch(rows []service.Selection) {

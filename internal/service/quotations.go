@@ -551,7 +551,7 @@ func sectionCustomers(q Quotation, qsel []Selection, hasItems bool) []string {
 	return out
 }
 
-func (s *Service) QuotationSummaries(ctx context.Context) ([]QuotationSummary, error) {
+func (s *Service) loadQuotationSummaries(ctx context.Context) ([]QuotationSummary, error) {
 	quots, err := s.Quotations(ctx)
 	if err != nil {
 		return nil, err

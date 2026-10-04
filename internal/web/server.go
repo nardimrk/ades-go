@@ -74,6 +74,8 @@ func (s *Server) Handler(static fs.FS) http.Handler {
 
 	mux.HandleFunc("GET /ordini", s.preventivi)
 	mux.HandleFunc("GET /ordini/list", s.preventiviList)
+	mux.HandleFunc("GET /ordini/recenti", s.preventiviRecenti)
+	mux.HandleFunc("GET /ordini/anno", s.preventiviAnno)
 	mux.HandleFunc("POST /ordini/import", s.preventiviImport)
 	mux.HandleFunc("GET /ordini/view", s.preventivoView)
 	mux.HandleFunc("POST /ordini/section", s.preventivoSection)
