@@ -192,7 +192,7 @@ func (s *Server) addReply(w http.ResponseWriter, r *http.Request) {
 	warn := ""
 	switch {
 	case !known:
-		warn = "Cliente non trovato: " + name + ". Sceglilo dall'elenco (un cliente nuovo si aggiunge da Clienti)."
+		warn = "Cliente non trovato: " + name + ". Sceglilo dall'elenco o crealo con «+ Nuovo cliente»."
 	case timeErr != nil:
 		warn = "Data e ora non valide."
 	case body == "":

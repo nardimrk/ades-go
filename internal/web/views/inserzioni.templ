@@ -336,8 +336,10 @@ templ deliveryField(d InserzioniData) {
 }
 
 // AddReplyForm: a reply typed in by hand, for a message WhatsApp never
-// delivered to the app. Collapsed until needed.
+// delivered to the app. Collapsed until needed. A customer that isn't there
+// yet is created from the field's suggestions ("+ Nuovo cliente").
 templ AddReplyForm(d InserzioniData) {
+	@NewCustomerModal("reply-new-client")
 	<details class="add-reply">
 		<summary class="btn">＋ Aggiungi risposta</summary>
 		<form hx-post="/inserzioni/reply" hx-target="#conv" hx-swap="innerHTML">
@@ -348,7 +350,7 @@ templ AddReplyForm(d InserzioniData) {
 				<div class="add-reply-row">
 					<label>
 						Cliente
-						<input type="text" name="cliente" list="reply-clients" placeholder="Scrivi per cercare un cliente..." autocomplete="off" required/>
+						<input type="text" name="cliente" list="reply-clients" placeholder="Scrivi per cercare un cliente..." autocomplete="off" required data-new-customer="reply-new-client"/>
 					</label>
 					<label>
 						Data e ora
