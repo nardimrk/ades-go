@@ -140,6 +140,15 @@ templ PreventivoDetail(d *service.QuotationDetail, catalog []service.CatalogEntr
 						aria-label={ "Apri l'inserzione: " + d.ListingTitle }
 					>@IconRomanI()
 </a>
+					<button
+						type="button"
+						class="btn icon-btn order-link"
+						title="Sposta l'ordine su un'altra inserzione"
+						aria-label="Sposta l'ordine su un'altra inserzione"
+						hx-get={ "/ordini/sposta?" + q("n", d.Quotation.Number) }
+						hx-target="#modal"
+						hx-swap="innerHTML"
+					>@IconMove()</button>
 				}
 				<nav class="prev-next" aria-label="Altri ordini">
 					@orderNeighborLink(d.Prev, "Ordine precedente", true)
@@ -321,6 +330,77 @@ templ NewCustomerModal(id string) {
 			</div>
 		</form>
 	</dialog>
+}
+
+// MoveOrderModal: the inserzioni to move the order to (most recent first,
+// searchable); the ones with another order can't be picked.
+templ MoveOrderModal(num, current string, rows []service.CampaignRow, quotNum map[int64]string) {
+	<dialog class="modal modal-move" data-modal-open aria-labelledby="move-order-title">
+		<form class="modal-form" hx-post="/ordini/sposta" hx-swap="none">
+			<input type="hidden" name="n" value={ num }/>
+			<div class="modal-head">
+				<div class="modal-title">
+					<h3 id="move-order-title">Sposta { num } su un'altra inserzione</h3>
+					<span class="muted">Ora è collegato a: { current }. I clienti dell'ordine diventano quelli che hanno risposto alla nuova inserzione.</span>
+				</div>
+				<button type="button" class="icon" data-modal-close aria-label="Chiudi">@IconX()</button>
+			</div>
+			<div class="modal-body">
+				<input type="search" placeholder="Cerca un'inserzione…" data-filter=".move-item" aria-label="Cerca un'inserzione"/>
+				<div class="move-list">
+					for _, x := range rows {
+						<button
+							type="submit"
+							class="move-item"
+							name="to"
+							value={ q("chat", x.ChatID, "c", x.Key) }
+							data-name={ x.Number + " " + x.DisplayTitle + " " + x.ChatName }
+							disabled?={ otherOrder(x, num, quotNum) != "" }
+						>
+							<span class="dl-day">{ dayMonthShort(x.Data) }</span>
+							<span class="dl-main">
+								<b class="dl-title">{ x.DisplayTitle }</b>
+								<span class="muted dl-group">
+									if x.Number != "" {
+										{ x.Number } ·
+									}
+									if o := otherOrder(x, num, quotNum); o != "" {
+										ha già l'ordine { o }
+									} else if hasOrder(x, num, quotNum) {
+										collegato a questo ordine
+									} else {
+										{ x.ChatName }
+									}
+								</span>
+							</span>
+						</button>
+					}
+				</div>
+			</div>
+			<div class="modal-foot">
+				<button type="button" class="btn" data-modal-close>Annulla</button>
+			</div>
+		</form>
+	</dialog>
+}
+
+// otherOrder: the number of an order of the inserzione other than num.
+func otherOrder(x service.CampaignRow, num string, quotNum map[int64]string) string {
+	for _, id := range x.QuotationIDs {
+		if n := quotNum[id]; n != "" && n != num {
+			return n
+		}
+	}
+	return ""
+}
+
+func hasOrder(x service.CampaignRow, num string, quotNum map[int64]string) bool {
+	for _, id := range x.QuotationIDs {
+		if quotNum[id] == num {
+			return true
+		}
+	}
+	return false
 }
 
 // orderNeighborLink: the order before/after this one in the Ordini list.

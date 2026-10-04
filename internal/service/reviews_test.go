@@ -740,3 +740,76 @@ func TestCreateCustomer(t *testing.T) {
 		t.Fatal("empty name accepted")
 	}
 }
+
+// The same wine sold again months later is a separate inserzione, with its
+// own order; reposts within days stay one.
+func TestCampaignChains(t *testing.T) {
+	q1, q2 := int64(1), int64(2)
+	rows := []ListingRow{
+		{MsgID: "a", ChatID: "c", Campaign: "Roederer", Data: "2025-05-31 11:00:00", Number: "INS0497", QuotationID: &q1},
+		{MsgID: "b", ChatID: "c", Campaign: "Roederer", Data: "2025-06-02 11:00:00", Number: "INS0498"},
+		{MsgID: "c", ChatID: "c", Campaign: "Roederer", Data: "2026-09-23 09:00:00", Number: "INS0725", QuotationID: &q2},
+	}
+	camps := GroupCampaigns(rows)
+	if len(camps) != 2 {
+		t.Fatalf("campaigns = %d, want 2", len(camps))
+	}
+	for _, c := range camps {
+		switch c.Number {
+		case "INS0497":
+			if len(c.MsgIDs) != 2 || c.Key != "Roederer" {
+				t.Errorf("2025 sale = %+v", c)
+			}
+		case "INS0725":
+			if len(c.MsgIDs) != 1 || c.Key != "Roederer · INS0725" || c.DisplayTitle == "" || len(c.QuotationIDs) != 1 || c.QuotationIDs[0] != 2 {
+				t.Errorf("2026 sale = %+v", c)
+			}
+		default:
+			t.Errorf("unexpected campaign %+v", c)
+		}
+	}
+}
+
+// Moving an order: its customers become the new inserzione's repliers; an
+// inserzione with another order is refused.
+func TestMoveQuotation(t *testing.T) {
+	ctx := context.Background()
+	store, err := db.Open(filepath.Join(t.TempDir(), "wine.db"))
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer store.Close()
+	svc := New(store, &config.Config{}, nil)
+	const chat = "1@g.us"
+	store.InsertListing(ctx, db.Listing{MsgID: "L1", ChatID: chat, AuthorID: "owner", Body: "Barolo\nA. 6x Barolo 2019 a 40€", Timestamp: 1000})
+	store.InsertListing(ctx, db.Listing{MsgID: "L2", ChatID: chat, AuthorID: "owner", Body: "Champagne\nA. 6x Brut a 30€", Timestamp: 2000})
+	l2 := "L2"
+	store.InsertReply(ctx, db.Reply{MsgID: "R1", ListingMsgID: &l2, ChatID: chat, AuthorID: "u1", Body: "2A", Timestamp: 2100})
+	if _, _, _, err := svc.ImportPreventivi(ctx); err != nil {
+		t.Fatal(err)
+	}
+	rows, _ := svc.InserzioniList(ctx, "", "")
+	var barolo, champ *Campaign
+	for i := range rows {
+		if rows[i].MsgIDs[0] == "L1" {
+			barolo = &rows[i].Campaign
+		} else {
+			champ = &rows[i].Campaign
+		}
+	}
+	if err := svc.MoveQuotation(ctx, barolo.QuotationIDs[0], champ); err == nil {
+		t.Fatal("moved onto an inserzione that has its own order")
+	}
+	// free the Champagne inserzione, then move the Barolo order onto it
+	store.DB.ExecContext(ctx, "UPDATE listings SET quotation_id = NULL WHERE msg_id = 'L2'")
+	champ.QuotationIDs = nil
+	q := barolo.QuotationIDs[0]
+	if err := svc.MoveQuotation(ctx, q, champ); err != nil {
+		t.Fatal(err)
+	}
+	var on string
+	store.DB.QueryRow("SELECT GROUP_CONCAT(msg_id) FROM listings WHERE quotation_id = ?", q).Scan(&on)
+	if on != "L2" {
+		t.Fatalf("order now on %q, want L2", on)
+	}
+}

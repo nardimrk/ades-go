@@ -1588,3 +1588,36 @@ func (s *Service) SetItemConsegna(ctx context.Context, quotationID int64, option
 	}
 	return nil
 }
+
+// MoveQuotation links the order to another inserzione (when it was linked
+// to the wrong one): the posts of the old inserzione lose it, all the posts
+// of the new one get it, so its customers become the new inserzione's
+// repliers. An inserzione that already has another order is refused.
+func (s *Service) MoveQuotation(ctx context.Context, quotationID int64, to *Campaign) error {
+	if to == nil || len(to.MsgIDs) == 0 {
+		return errors.New("inserzione non trovata")
+	}
+	for _, q := range to.QuotationIDs {
+		if q != quotationID {
+			var num string
+			s.db().QueryRowContext(ctx, "SELECT COALESCE(quotation_number,'') FROM quotations WHERE id = ?", q).Scan(&num)
+			return fmt.Errorf("questa inserzione ha già l'ordine %s", num)
+		}
+	}
+	ids, err := s.campaignPosts(ctx, to)
+	if err != nil {
+		return err
+	}
+	return s.inTx(ctx, func(tx *sql.Tx) error {
+		if _, err := tx.ExecContext(ctx, "UPDATE listings SET quotation_id = NULL WHERE quotation_id = ?", quotationID); err != nil {
+			return err
+		}
+		for _, id := range ids {
+			if _, err := tx.ExecContext(ctx, "UPDATE listings SET quotation_id = ? WHERE msg_id = ?", quotationID, id); err != nil {
+				return err
+			}
+		}
+		_, err := tx.ExecContext(ctx, "UPDATE quotations SET msg_id = ? WHERE id = ?", ids[0], quotationID)
+		return err
+	})
+}

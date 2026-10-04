@@ -105,15 +105,18 @@ func FilterRows(rows []ListingRow, q string) []ListingRow {
 // GroupCampaigns groups rows (chronological) by (chat, campaign key), most
 // recently active campaign first.
 func GroupCampaigns(rows []ListingRow) []Campaign {
+	keys := campaignChains(rows)
 	idx := map[[2]string]int{}
 	var out []Campaign
-	for _, r := range rows {
-		k := [2]string{r.ChatID, r.Campaign}
+	base := map[int]string{}
+	for n, r := range rows {
+		k := [2]string{r.ChatID, keys[n]}
 		i, ok := idx[k]
 		if !ok {
 			i = len(out)
 			idx[k] = i
-			out = append(out, Campaign{ChatID: r.ChatID, Key: r.Campaign, Data: r.Data, Venditore: r.Venditore, Number: r.Number})
+			out = append(out, Campaign{ChatID: r.ChatID, Key: keys[n], Data: r.Data, Venditore: r.Venditore, Number: r.Number})
+			base[i] = r.Campaign
 		}
 		c := &out[i]
 		c.MsgIDs = append(c.MsgIDs, r.MsgID)
@@ -139,12 +142,71 @@ func GroupCampaigns(rows []ListingRow) []Campaign {
 	for i := range out {
 		out[i].DisplayTitle = textutil.StripEmoji(out[i].Title)
 		if out[i].DisplayTitle == "" {
-			out[i].DisplayTitle = textutil.CleanTitle(textutil.StripEmoji(out[i].Key))
+			out[i].DisplayTitle = textutil.CleanTitle(textutil.StripEmoji(base[i]))
 		}
 		sort.Slice(out[i].QuotationIDs, func(a, b int) bool { return out[i].QuotationIDs[a] < out[i].QuotationIDs[b] })
 	}
 	sort.SliceStable(out, func(i, j int) bool { return out[i].MaxTS > out[j].MaxTS })
 	return out
+}
+
+// campaignChains gives each row the key of its inserzione. Posts with the
+// same campaign key are one inserzione only while they follow each other
+// within 15 days and don't belong to different orders: the same wine sold
+// again months later is another inserzione. The first one keeps the plain
+// key (stable URLs); the later ones get " · INS0725" (their first post's
+// number, or date) appended.
+func campaignChains(rows []ListingRow) []string {
+	order := make([]int, len(rows))
+	for i := range order {
+		order[i] = i
+	}
+	sort.SliceStable(order, func(a, b int) bool {
+		ra, rb := rows[order[a]], rows[order[b]]
+		if ra.ChatID != rb.ChatID {
+			return ra.ChatID < rb.ChatID
+		}
+		if ra.Campaign != rb.Campaign {
+			return ra.Campaign < rb.Campaign
+		}
+		return ra.Data < rb.Data
+	})
+	keys := make([]string, len(rows))
+	type chain struct {
+		key  string
+		last time.Time
+		qid  int64
+	}
+	var cur *chain
+	var prevChat, prevKey string
+	for _, i := range order {
+		r := rows[i]
+		t, _ := time.Parse("2006-01-02 15:04:05", r.Data)
+		var qid int64
+		if r.QuotationID != nil {
+			qid = *r.QuotationID
+		}
+		same := cur != nil && r.ChatID == prevChat && r.Campaign == prevKey
+		if same && t.Sub(cur.last) <= 15*24*time.Hour && (qid == 0 || cur.qid == 0 || qid == cur.qid) {
+			cur.last = t
+			if cur.qid == 0 {
+				cur.qid = qid
+			}
+		} else {
+			key := r.Campaign
+			if same {
+				suffix := r.Number
+				if suffix == "" && len(r.Data) >= 10 {
+					suffix = r.Data[:10]
+				}
+				key += " · " + suffix
+			}
+			cur = &chain{key: key, last: t, qid: qid}
+		}
+		prevChat, prevKey = r.ChatID, r.Campaign
+		keys[i] = cur.key
+	}
+	return keys
 }
 
 func containsID(ids []int64, id int64) bool {

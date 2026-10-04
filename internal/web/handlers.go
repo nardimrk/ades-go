@@ -210,6 +210,65 @@ func (s *Server) orderItemConsegna(w http.ResponseWriter, r *http.Request) {
 	autosaveResult(w, r, err)
 }
 
+// moveOrderForm opens the list of inserzioni to move an order to.
+func (s *Server) moveOrderForm(w http.ResponseWriter, r *http.Request) {
+	ctx := r.Context()
+	num := r.URL.Query().Get("n")
+	q, err := s.svc.QuotationByNumber(ctx, num)
+	if err != nil || q == nil {
+		s.fail(w, r, fmt.Errorf("ordine %q non trovato", num))
+		return
+	}
+	rows, err := s.svc.InserzioniList(ctx, "", "")
+	if err != nil {
+		s.fail(w, r, err)
+		return
+	}
+	sums, err := s.svc.QuotationSummaries(ctx)
+	if err != nil {
+		s.fail(w, r, err)
+		return
+	}
+	quotNum := map[int64]string{}
+	for _, x := range sums {
+		quotNum[x.ID] = x.Number
+	}
+	current := "nessuna inserzione"
+	if c, err := s.svc.QuotationListing(ctx, q.ID); err == nil && c != nil {
+		current = c.DisplayTitle
+		if c.Number != "" {
+			current = c.Number + " · " + current
+		}
+	}
+	render(w, r, views.MoveOrderModal(num, current, rows, quotNum))
+}
+
+// moveOrder links the order to the chosen inserzione and reloads it.
+func (s *Server) moveOrder(w http.ResponseWriter, r *http.Request) {
+	ctx := r.Context()
+	num := r.FormValue("n")
+	q, err := s.svc.QuotationByNumber(ctx, num)
+	if err != nil || q == nil {
+		s.fail(w, r, fmt.Errorf("ordine %q non trovato", num))
+		return
+	}
+	to, err := url.ParseQuery(r.FormValue("to"))
+	if err != nil || to.Get("chat") == "" {
+		s.fail(w, r, fmt.Errorf("scegli un'inserzione"))
+		return
+	}
+	camp, err := s.svc.FindCampaign(ctx, to.Get("chat"), to.Get("c"))
+	if err != nil || camp == nil {
+		s.fail(w, r, fmt.Errorf("inserzione non trovata"))
+		return
+	}
+	if err := s.svc.MoveQuotation(ctx, q.ID, camp); err != nil {
+		s.fail(w, r, err)
+		return
+	}
+	w.Header().Set("HX-Redirect", "/ordini/view?"+url.Values{"n": {num}}.Encode())
+}
+
 // orderLinkForm opens the list of listings to connect a manual wine to.
 func (s *Server) orderLinkForm(w http.ResponseWriter, r *http.Request) {
 	qs := r.URL.Query()
