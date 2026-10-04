@@ -1434,6 +1434,7 @@ type ItemDelivery struct {
 	Linked       bool
 	LinkedOption string
 	LinkedTitle  string // the listing's title
+	LinkedNumber string // the listing's number, "INS0731"
 	LinkedURL    string // the listing's page
 }
 
@@ -1477,7 +1478,7 @@ func (s *Service) manualConsegne(ctx context.Context, quotationID int64) (bool, 
 		if r.lq != 0 {
 			d = ItemDelivery{Date: r.ldate, Linked: true, LinkedOption: r.lopt}
 			if c, err := s.QuotationListing(ctx, r.lq); err == nil && c != nil {
-				d.LinkedTitle, d.LinkedURL = c.DisplayTitle, CampaignURL(c.ChatID, c.Key)
+				d.LinkedTitle, d.LinkedURL, d.LinkedNumber = c.DisplayTitle, CampaignURL(c.ChatID, c.Key), c.Number
 			}
 		}
 		out[r.opt] = d

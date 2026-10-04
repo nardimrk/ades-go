@@ -273,9 +273,17 @@ templ deliveryCustomer(c service.CustomerDelivery) {
 								</td>
 							</tr>
 							for _, l := range c.Lines {
-								<tr>
+								<tr class={ templ.KV("manual-line", l.Manual) }>
 									<td class="title-cell">{ noEmoji(l.Vino) }</td>
-									<td><a href={ templ.URL(l.URL) }>{ l.Inserzione }</a></td>
+									<td>
+										<a href={ templ.URL(l.URL) }>{ l.Inserzione }</a>
+										if l.Manual && l.Order != "" {
+											<a href={ templ.URL("/ordini/view?n=" + l.Order) } class="manual-badge" title="Questo vino viene da un ordine manuale">
+												@IconHand()
+												<span>Ordine manuale { l.Order }</span>
+											</a>
+										}
+									</td>
 									<td class="num">{ itoa(l.Qta) }</td>
 									<td class="num">{ money(l.Prezzo) }</td>
 									<td class="num">{ money(l.Totale()) }</td>

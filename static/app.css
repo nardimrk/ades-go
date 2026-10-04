@@ -1011,14 +1011,16 @@ body:has(.sel-bar:not(:empty)) .fab-menu { bottom: calc(max(.75rem, env(safe-are
 @media (max-width: 720px) { .table td.col-consegna input[type=date] { min-width: 0; width: 100%; max-width: 100%; } }
 
 /* manual orders: a wine's delivery, own date or connected to a listing */
-.item-delivery { display: flex; align-items: center; gap: .4rem; flex-wrap: wrap; }
+/* Inserzione column: the link pill / Collega, at the right edge */
+.table th.col-link, .table td.col-link { text-align: right; white-space: nowrap; }
+@media (max-width: 720px) { .table td.col-link { text-align: left; } }
 @media (min-width: 721px) {
-  .item-delivery { flex-wrap: nowrap; }
-  .table td.col-consegna .item-delivery input[type=date] { min-width: 0; width: 9.5rem; flex: none; }
+  .table td.col-consegna input[type=date] { min-width: 0; width: 9.5rem; }
 }
 .item-date { white-space: nowrap; }
-.link-pill { display: inline-flex; align-items: center; gap: .25rem; padding: .05rem .5rem; border: 1px solid var(--accent); border-radius: 999px; color: var(--accent); background: var(--accent-soft); font-weight: 700; font-size: .8rem; text-decoration: none; }
-.link-pill .icon-svg { width: 13px; height: 13px; }
+/* same height, border and icon size as the ✕ pill next to it (.tool-pill) */
+.link-pill { display: inline-flex; align-items: center; gap: .25rem; box-sizing: border-box; height: 1.5rem; padding: 0 .55rem; border: 1px solid var(--accent); border-radius: 999px; color: var(--accent); background: var(--accent-soft); font-weight: 700; font-size: .75rem; line-height: 1; text-decoration: none; }
+.link-pill .icon-svg { width: 15px; height: 15px; }
 .link-camp { display: flex; flex-direction: column; gap: .25rem; padding: .35rem 0; border-top: 1px solid var(--border); }
 .link-camp:first-child { border-top: 0; }
 .link-camp-head { display: flex; gap: .6rem; align-items: baseline; font-size: .9rem; }
@@ -1026,3 +1028,18 @@ body:has(.sel-bar:not(:empty)) .fab-menu { bottom: calc(max(.75rem, env(safe-are
 
 /* the inserzione's number (INS0123) */
 .listing-number { display: inline-block; margin-right: .5rem; padding: 0 .45rem; border: 1px solid var(--border-strong); border-radius: 999px; font-size: .8rem; font-weight: 600; color: var(--muted); }
+.link-group { display: inline-flex; align-items: center; gap: .35rem; white-space: nowrap; }
+
+/* Consegne: wines that come from a manual order */
+.table.deliveries tr.manual-line > td { background: var(--info-bg); }
+.table.deliveries tr.manual-line > td:first-child { box-shadow: inset 3px 0 0 var(--info-border); }
+.manual-badge { display: inline-flex; align-items: center; gap: .25rem; margin-left: .5rem; padding: 0 .5rem; border: 1px solid var(--info-border); border-radius: 999px; background: var(--panel); color: var(--info-text); font-size: .75rem; font-weight: 600; text-decoration: none; white-space: nowrap; }
+.manual-badge .icon-svg { width: 13px; height: 13px; }
+@media (max-width: 720px) {
+  .table.deliveries tr.manual-line { background: var(--info-bg); border-color: var(--info-border); }
+  .table.deliveries tr.manual-line > td { background: transparent; box-shadow: none; }
+  .manual-badge { margin: .2rem 0 0; }
+}
+/* unlink: the same colours as the link pill next to it */
+.tool-pill.pill-unlink { color: var(--accent); background: var(--accent-soft); border-color: var(--accent); }
+.tool-pill.pill-unlink:hover { filter: brightness(.95); }

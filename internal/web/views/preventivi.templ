@@ -127,7 +127,8 @@ templ PreventiviSearch(rows []service.Selection) {
 templ PreventivoDetail(d *service.QuotationDetail, catalog []service.CatalogEntry) {
 	@Layout("Ordine "+d.Quotation.Number, "ordini") {
 		<div class="page-head">
-			<a href="/ordini" class="btn icon-btn" title="Elenco" aria-label="Elenco">@IconList()</a>
+			<a href="/ordini" class="btn icon-btn" title="Elenco" aria-label="Elenco">@IconList()
+</a>
 			<h2>{ d.Quotation.Number } · { d.Date }</h2>
 			<div class="head-actions">
 				// the listing the order comes from (manual orders have none)
@@ -137,7 +138,8 @@ templ PreventivoDetail(d *service.QuotationDetail, catalog []service.CatalogEntr
 						class="btn icon-btn order-link"
 						title={ "Apri l'inserzione: " + d.ListingTitle }
 						aria-label={ "Apri l'inserzione: " + d.ListingTitle }
-					>@IconMegaphone()</a>
+					>@IconMegaphone()
+</a>
 				}
 				<nav class="prev-next" aria-label="Altri ordini">
 					@orderNeighborLink(d.Prev, "Ordine precedente", true)
@@ -179,55 +181,66 @@ templ ProdottiDatalist(catalog []service.CatalogEntry) {
 	</datalist>
 }
 
-// itemDelivery: a manual wine's estimated delivery. Connected to a
-// listing's option, it shows that listing's date and a link to it;
-// otherwise its own date, and "Collega" to connect it.
-templ itemDelivery(qid int64, r service.OrderRow, d service.ItemDelivery) {
-	<div class="item-delivery">
-		if d.Linked {
-			<span class="item-date">
-				if d.Date != "" {
-					{ dateIT(d.Date) }
+// itemDate: a manual wine's estimated delivery: the date of the listing it
+// is connected to, or its own date (editable).
+templ itemDate(qid int64, r service.OrderRow, d service.ItemDelivery) {
+	if d.Linked {
+		<span class="item-date">
+			if d.Date != "" {
+				{ dateIT(d.Date) }
+			} else {
+				<span class="muted">data non indicata</span>
+			}
+		</span>
+	} else {
+		<input
+			type="date"
+			name="value"
+			value={ d.Date }
+			aria-label={ "Consegna stimata " + r.Vino }
+			data-autosave
+			hx-post="/ordini/consegna"
+			hx-trigger="change"
+			hx-swap="none"
+			hx-vals={ templ.JSONString(map[string]string{"q": i64(qid), "option": r.Opzione}) }
+		/>
+	}
+}
+
+// itemLink: the listing a manual wine is connected to (pill + ✕ to
+// disconnect), or "Collega" to connect it.
+templ itemLink(qid int64, r service.OrderRow, d service.ItemDelivery) {
+	if d.Linked {
+		<span class="link-group">
+			<a href={ templ.URL(d.LinkedURL) } class="link-pill" title={ "Apri l'inserzione: " + d.LinkedTitle + " · opzione " + d.LinkedOption }>
+				@IconLink()
+				if d.LinkedNumber != "" {
+					<span>{ d.LinkedNumber } · { d.LinkedOption }</span>
 				} else {
-					<span class="muted">data non indicata</span>
+					<span>{ d.LinkedOption }</span>
 				}
-			</span>
-			<a href={ templ.URL(d.LinkedURL) } class="link-pill" title={ "Collegato a: " + d.LinkedTitle + " · opzione " + d.LinkedOption }>
-				@IconMegaphone()
-				<span>{ d.LinkedOption }</span>
 			</a>
 			<button
 				type="button"
-				class="icon"
+				class="tool-pill pill-unlink"
 				title="Scollega dall'inserzione"
 				aria-label="Scollega dall'inserzione"
 				hx-post="/ordini/link"
 				hx-vals={ templ.JSONString(map[string]string{"q": i64(qid), "option": r.Opzione, "to_q": "0"}) }
 				hx-swap="none"
 				hx-confirm={ "Scollegare " + r.Vino + " dall'inserzione? Tornerà ad avere la sua data di consegna." }
-			>@IconX()</button>
-		} else {
-			<input
-				type="date"
-				name="value"
-				value={ d.Date }
-				aria-label={ "Consegna stimata " + r.Vino }
-				data-autosave
-				hx-post="/ordini/consegna"
-				hx-trigger="change"
-				hx-swap="none"
-				hx-vals={ templ.JSONString(map[string]string{"q": i64(qid), "option": r.Opzione}) }
-			/>
-			<button
-				type="button"
-				class="btn small"
-				title="Collega a un vino di un'inserzione"
-				hx-get={ "/ordini/link?" + q("q", i64(qid), "option", r.Opzione, "vino", r.Vino) }
-				hx-target="#modal"
-				hx-swap="innerHTML"
-			>Collega</button>
-		}
-	</div>
+			>@IconUnlink()</button>
+		</span>
+	} else {
+		<button
+			type="button"
+			class="btn small"
+			title="Collega a un vino di un'inserzione"
+			hx-get={ "/ordini/link?" + q("q", i64(qid), "option", r.Opzione, "vino", r.Vino) }
+			hx-target="#modal"
+			hx-swap="innerHTML"
+		>Collega</button>
+	}
 }
 
 // LinkModal: the listings with their wine options, to connect a manual wine.
@@ -239,7 +252,8 @@ templ LinkModal(qid int64, option, wine string, camps []service.LinkCampaign) {
 					<h3 id="link-title">Collega a un'inserzione</h3>
 					<span class="muted">{ wine }: prende la data di consegna dell'inserzione e conta nella sua disponibilità</span>
 				</div>
-				<button type="button" class="icon" data-modal-close aria-label="Chiudi">@IconX()</button>
+				<button type="button" class="icon" data-modal-close aria-label="Chiudi">@IconX()
+</button>
 			</div>
 			<div class="modal-body">
 				<input type="search" placeholder="Cerca un'inserzione o un vino…" data-filter=".link-camp" aria-label="Cerca un'inserzione o un vino"/>
@@ -399,9 +413,14 @@ templ CustomerSection(qnum string, sec service.CustomerSection, msg, errMsg, cli
 		} else {
 			<table class="table">
 				<thead>
-					<tr><th>Vino</th><th class="num">Qtà</th><th class="num">Prezzo (€)</th><th class="num">Totale (€)</th>
+					<tr>
+						<th>Vino</th>
+						<th class="num">Qtà</th>
+						<th class="num">Prezzo (€)</th>
+						<th class="num">Totale (€)</th>
 						if sec.Manual {
 							<th class="col-consegna">Consegna stimata</th>
+							<th class="col-link">Inserzione</th>
 						}
 						if sec.SavedOn == "" {
 							<th class="num"></th>
@@ -424,14 +443,20 @@ templ CustomerSection(qnum string, sec service.CustomerSection, msg, errMsg, cli
 							if sec.Manual {
 								<td class="col-consegna">
 									if d, ok := sec.Consegne[strings.ToUpper(r.Opzione)]; ok && r.Opzione != "" {
-										@itemDelivery(sec.QuotationID, r, d)
+										@itemDate(sec.QuotationID, r, d)
 									} else {
 										<span class="muted">–</span>
 									}
 								</td>
+								<td class="col-link">
+									if d, ok := sec.Consegne[strings.ToUpper(r.Opzione)]; ok && r.Opzione != "" {
+										@itemLink(sec.QuotationID, r, d)
+									}
+								</td>
 							}
 							if sec.SavedOn == "" {
-								<td class="num"><button type="submit" name="op" value={ "del:" + itoa(i) } class="icon danger" title="Rimuovi riga" aria-label="Rimuovi riga">@IconX()</button></td>
+								<td class="num"><button type="submit" name="op" value={ "del:" + itoa(i) } class="icon danger" title="Rimuovi riga" aria-label="Rimuovi riga">@IconX()
+</button></td>
 							}
 						</tr>
 					}
@@ -463,7 +488,8 @@ templ addWineModal(sec service.CustomerSection, errMsg string) {
 					<h3 id={ sectionID(sec.Utente) + "-vino-title" }>Aggiungi un vino all'ordine</h3>
 					<span class="muted">{ sec.Cliente }</span>
 				</div>
-				<button type="button" class="icon" data-modal-close aria-label="Chiudi">@IconX()</button>
+				<button type="button" class="icon" data-modal-close aria-label="Chiudi">@IconX()
+</button>
 			</div>
 			<div class="modal-body">
 				if errMsg != "" {
@@ -510,7 +536,8 @@ templ clientModal(sec service.CustomerSection, errMsg string) {
 					<h3 id={ sectionID(sec.Utente) + "-cliente-title" }>Modifica cliente</h3>
 					<span class="muted">Attuale: { sec.Cliente }</span>
 				</div>
-				<button type="button" class="icon" data-modal-close aria-label="Chiudi">@IconX()</button>
+				<button type="button" class="icon" data-modal-close aria-label="Chiudi">@IconX()
+</button>
 			</div>
 			<div class="modal-body">
 				if errMsg != "" {
@@ -530,13 +557,13 @@ templ clientModal(sec service.CustomerSection, errMsg string) {
 }
 
 type NuovoPreventivoData struct {
-	Number   string
-	Date     string
-	Clients  []string
-	Cliente  string
-	Catalog  []service.CatalogEntry
-	Rows     []service.NewQuotationRow
-	Error    string
+	Number  string
+	Date    string
+	Clients []string
+	Cliente string
+	Catalog []service.CatalogEntry
+	Rows    []service.NewQuotationRow
+	Error   string
 }
 
 templ NuovoPreventivo(d NuovoPreventivoData) {

@@ -239,6 +239,8 @@ type DeliveryLine struct {
 	Prezzo     float64
 	Provincia  string
 	Citta      string
+	Manual     bool   // from a manual order (connected to the inserzione, or selected in Ordini)
+	Order      string // the manual order's number, "IMP0555"
 }
 
 func (l DeliveryLine) Totale() float64 { return round2(float64(l.Qta) * l.Prezzo) }
@@ -328,12 +330,43 @@ func (s *Service) Consegne(ctx context.Context, ids []string) (*Consegne, error)
 	if err != nil {
 		return nil, err
 	}
+	// wines of manual orders connected to a selected inserzione: delivered
+	// with it (unless their own order is selected too, then they're there)
+	type itemKey struct {
+		q   int64
+		opt string
+	}
+	linked := map[itemKey]ConsegneCampaign{}
+	orderNum := map[int64]string{}
+	lrows, err := s.db().QueryContext(ctx, `SELECT qi.quotation_id, UPPER(COALESCE(qi.option,'')), qi.linked_quotation_id, COALESCE(q.quotation_number,'')
+		FROM quotation_items qi JOIN quotations q ON q.id = qi.quotation_id WHERE qi.linked_quotation_id IS NOT NULL`)
+	if err != nil {
+		return nil, err
+	}
+	for lrows.Next() {
+		var mq, lq int64
+		var opt, num string
+		if lrows.Scan(&mq, &opt, &lq, &num) != nil {
+			continue
+		}
+		orderNum[mq] = num
+		if c, ok := byQID[lq]; ok {
+			if _, own := byQID[mq]; !own {
+				linked[itemKey{mq, opt}] = c
+			}
+		}
+	}
+	lrows.Close()
 	var lines []DeliveryLine
 	clienti := map[string]location{}
 	for _, x := range sel {
 		c, ok := byQID[x.QuotationID]
+		viaLink := false
 		if !ok {
-			continue
+			if c, ok = linked[itemKey{x.QuotationID, strings.ToUpper(x.Opzione)}]; !ok {
+				continue
+			}
+			viaLink = true
 		}
 		loc, ok := locs.byID[x.AuthorID]
 		if !ok {
@@ -343,8 +376,14 @@ func (s *Service) Consegne(ctx context.Context, ids []string) (*Consegne, error)
 		if c.Manual {
 			label = c.ChatName // the order number
 		}
-		l := DeliveryLine{Cliente: x.Utente, Inserzione: label, URL: CampaignURL(c.ChatID, c.Key), Vino: wineWithVintage(x.Vino, x.Vintage), Qta: x.Qta, Prezzo: x.Prezzo,
+		l := DeliveryLine{Cliente: x.Utente, Inserzione: label, URL: c.URL, Vino: wineWithVintage(x.Vino, x.Vintage), Qta: x.Qta, Prezzo: x.Prezzo,
 			Provincia: loc.provincia, Citta: loc.citta}
+		if viaLink || c.Manual {
+			l.Manual, l.Order = true, x.Preventivo
+			if l.Order == "" {
+				l.Order = orderNum[x.QuotationID]
+			}
+		}
 		lines = append(lines, l)
 		if _, seen := clienti[l.Cliente]; !seen {
 			clienti[l.Cliente] = loc
@@ -511,7 +550,11 @@ func ConsegneExcel(rows []DeliveryLine) ([]byte, error) {
 	}
 	for i, r := range rows {
 		cell, _ := excelize.CoordinatesToCellName(1, i+2)
-		row := []any{r.Provincia, r.Citta, r.Cliente, r.Inserzione, r.Vino, r.Qta, r.Prezzo, r.Totale()}
+		ins := r.Inserzione
+		if r.Manual && r.Order != "" && r.Order != ins {
+			ins += " (ordine manuale " + r.Order + ")"
+		}
+		row := []any{r.Provincia, r.Citta, r.Cliente, ins, r.Vino, r.Qta, r.Prezzo, r.Totale()}
 		if err := f.SetSheetRow(sheet, cell, &row); err != nil {
 			return nil, err
 		}
