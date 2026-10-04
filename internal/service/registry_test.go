@@ -181,3 +181,18 @@ func TestFilterUsersAndCache(t *testing.T) {
 		t.Error("cache not refreshed after a change")
 	}
 }
+
+func TestSplitRecent(t *testing.T) {
+	now := time.Date(2026, 10, 4, 12, 0, 0, 0, time.UTC)
+	var months []InserzioniMonth
+	for _, ym := range [][2]int{{2026, 10}, {2026, 5}, {2026, 4}, {2026, 1}, {2025, 12}, {2025, 3}, {0, 0}} {
+		months = append(months, InserzioniMonth{Year: ym[0], Month: ym[1], Rows: make([]CampaignRow, 2), Risposte: 3})
+	}
+	recent, years := SplitRecent(months, now)
+	if len(recent) != 2 || recent[1].Month != 5 {
+		t.Fatalf("recent = %+v", recent)
+	}
+	if len(years) != 3 || years[0].Year != 2026 || len(years[0].Months) != 2 || years[1].Year != 2025 || years[1].Count != 4 || years[1].Risposte != 6 || years[2].Year != 0 {
+		t.Fatalf("years = %+v", years)
+	}
+}

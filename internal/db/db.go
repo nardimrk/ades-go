@@ -279,6 +279,9 @@ func (s *Store) migrate(ctx context.Context) error {
 const (
 	ClientiVersionKey  = "clienti_version"
 	ProdottiVersionKey = "prodotti_version"
+	// the listings with their reply counts (Inserzioni and every page
+	// built on the campaigns)
+	ListingsVersionKey = "listings_version"
 )
 
 var listTriggers = map[string][]string{
@@ -290,6 +293,14 @@ var listTriggers = map[string][]string{
 		"trg_cli_replies_ins AFTER INSERT ON replies",
 		"trg_cli_replies_upd AFTER UPDATE OF author_id ON replies",
 		"trg_cli_replies_del AFTER DELETE ON replies",
+	},
+	ListingsVersionKey: {
+		"trg_lst_listings_ins AFTER INSERT ON listings",
+		"trg_lst_listings_upd AFTER UPDATE ON listings",
+		"trg_lst_listings_del AFTER DELETE ON listings",
+		"trg_lst_replies_ins AFTER INSERT ON replies",
+		"trg_lst_replies_upd AFTER UPDATE OF listing_msg_id ON replies",
+		"trg_lst_replies_del AFTER DELETE ON replies",
 	},
 	ProdottiVersionKey: {
 		"trg_prod_items_ins AFTER INSERT ON items",

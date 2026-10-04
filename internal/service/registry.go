@@ -28,8 +28,8 @@ type User struct {
 	Telefono  string // "+393492869246", "" = unknown
 	PIVA      string // partita IVA: "01234567890" (Italy) or "DE123456789"
 	Email     string
-	Replies   int    // messages written in the groups (all its ids)
-	Code      string // "CLI0012"
+	Replies   int      // messages written in the groups (all its ids)
+	Code      string   // "CLI0012"
 	Aliases   []string // other ids merged into this customer
 }
 
@@ -415,10 +415,10 @@ type ActiveUser struct {
 }
 
 type Stats struct {
-	Campagne     int
-	Risposte     int
-	Utenti       int
-	PiuDiscusse  []DiscussedListing
+	Campagne    int
+	Risposte    int
+	Utenti      int
+	PiuDiscusse []DiscussedListing
 }
 
 func (s *Service) Stats(ctx context.Context) (*Stats, error) {

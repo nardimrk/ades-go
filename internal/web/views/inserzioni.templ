@@ -1,6 +1,9 @@
 package views
 
-import "adesgo/internal/service"
+import (
+	"adesgo/internal/service"
+	"time"
+)
 
 type InserzioniData struct {
 	Search   string
@@ -109,48 +112,95 @@ templ InserzioniList(d InserzioniData) {
 	} else {
 		<p class="muted">Clicca su un'inserzione per aprire la conversazione.</p>
 		<div class="view-timeline timeline">
-			for _, m := range service.InserzioniMonths(d.Rows) {
-				<section class="month">
-					<header class="month-head">
-						<h3>{ monthLabel(m.Year, m.Month) }</h3>
-						<span class="muted">
-							{ plural(len(m.Rows), "inserzione", "inserzioni") } · { plural(m.Risposte, "risposta", "risposte") }
-						</span>
-					</header>
-					<div class="month-items">
-						for _, r := range m.Rows {
-							<a class={ "dl-item", "dl-link", templ.KV("dl-empty", r.Risposte == 0), templ.KV("dl-ordered", r.HasOrders) } href={ templ.URL(convURL(d, r)) }>
-								<span class="dl-day">{ dayMonthShort(r.Data) }</span>
-								<span class="dl-main">
-									<b class="dl-title" title={ r.DisplayTitle }>{ r.DisplayTitle }</b>
-									<span class="muted dl-group">
-										if r.Number != "" {
-											{ r.Number } ·
-										}
-										{ r.ChatName }
-										if r.LastData != "" && dateIT(r.LastData) != dateIT(r.Data) {
-											· agg. { dateIT(r.LastData) }
-										}
-									</span>
-								</span>
-								<span class="dl-stats">
-									if r.HasOrders {
-										<span class="sr-only">con ordini ricevuti</span>
-									}
-									if r.Orphan {
-										<span class="badge badge-warn">non monitorato</span>
-									}
-									if r.Consegna != "" {
-										<span class="badge badge-info">Consegna { dayMonthShort(r.Consegna) }</span>
-									}
-								</span>
-							</a>
-						}
-					</div>
-				</section>
+			if d.Search != "" {
+				// a search shows every match
+				for _, m := range service.InserzioniMonths(d.Rows) {
+					@inserzioniMonth(d, m)
+				}
+			} else {
+				{{ recent, years := service.SplitRecent(service.InserzioniMonths(d.Rows), time.Now()) }}
+				for _, m := range recent {
+					@inserzioniMonth(d, m)
+				}
+				// older inserzioni: one closed section per year, its months
+				// loaded when opened (the page stays light)
+				for _, y := range years {
+					<details
+						class="year-group"
+						hx-get={ "/inserzioni/anno?" + q("y", itoa(y.Year), "g", d.Group) }
+						hx-trigger="toggle once"
+						hx-target="find .year-body"
+						hx-swap="innerHTML"
+						hx-disinherit="*"
+					>
+						<summary class="year-head">
+							<h3>
+								if y.Year > 0 {
+									{ itoa(y.Year) }
+								} else {
+									Senza data
+								}
+							</h3>
+							<span class="muted">{ plural(y.Count, "inserzione", "inserzioni") } · { plural(y.Risposte, "risposta", "risposte") }</span>
+						</summary>
+						<div class="year-body"><p class="muted">Caricamento…</p></div>
+					</details>
+				}
 			}
 		</div>
 	}
+}
+
+// InserzioniYearMonths: the months of an older year, loaded when its
+// section is opened.
+templ InserzioniYearMonths(d InserzioniData, months []service.InserzioniMonth) {
+	for _, m := range months {
+		@inserzioniMonth(d, m)
+	}
+	if len(months) == 0 {
+		<p class="muted">Nessuna inserzione.</p>
+	}
+}
+
+templ inserzioniMonth(d InserzioniData, m service.InserzioniMonth) {
+	<section class="month">
+		<header class="month-head">
+			<h3>{ monthLabel(m.Year, m.Month) }</h3>
+			<span class="muted">
+				{ plural(len(m.Rows), "inserzione", "inserzioni") } · { plural(m.Risposte, "risposta", "risposte") }
+			</span>
+		</header>
+		<div class="month-items">
+			for _, r := range m.Rows {
+				<a class={ "dl-item", "dl-link", templ.KV("dl-empty", r.Risposte == 0), templ.KV("dl-ordered", r.HasOrders) } href={ templ.URL(convURL(d, r)) }>
+					<span class="dl-day">{ dayMonthShort(r.Data) }</span>
+					<span class="dl-main">
+						<b class="dl-title" title={ r.DisplayTitle }>{ r.DisplayTitle }</b>
+						<span class="muted dl-group">
+							if r.Number != "" {
+								{ r.Number } ·
+							}
+							{ r.ChatName }
+							if r.LastData != "" && dateIT(r.LastData) != dateIT(r.Data) {
+								· agg. { dateIT(r.LastData) }
+							}
+						</span>
+					</span>
+					<span class="dl-stats">
+						if r.HasOrders {
+							<span class="sr-only">con ordini ricevuti</span>
+						}
+						if r.Orphan {
+							<span class="badge badge-warn">non monitorato</span>
+						}
+						if r.Consegna != "" {
+							<span class="badge badge-info">Consegna { dayMonthShort(r.Consegna) }</span>
+						}
+					</span>
+				</a>
+			}
+		</div>
+	</section>
 }
 
 templ InserzioneDetail(d InserzioniData) {

@@ -90,6 +90,25 @@ func (s *Server) inserzioniList(w http.ResponseWriter, r *http.Request) {
 	render(w, r, views.InserzioniList(d))
 }
 
+// inserzioniAnno: the months of an older year of the list (its section
+// was opened), with the list's group filter.
+func (s *Server) inserzioniAnno(w http.ResponseWriter, r *http.Request) {
+	d, err := s.inserzioniData(r)
+	if err != nil {
+		s.fail(w, r, err)
+		return
+	}
+	y, _ := strconv.Atoi(r.URL.Query().Get("y"))
+	_, years := service.SplitRecent(service.InserzioniMonths(d.Rows), time.Now())
+	var months []service.InserzioniMonth
+	for _, yr := range years {
+		if yr.Year == y {
+			months = yr.Months
+		}
+	}
+	render(w, r, views.InserzioniYearMonths(d, months))
+}
+
 func (s *Server) titleJobStatus(w http.ResponseWriter, r *http.Request) {
 	st := s.titles.Status()
 	if !st.Running && st.Done > 0 {

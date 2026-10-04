@@ -11,6 +11,7 @@ import (
 	"strings"
 	"time"
 
+	"adesgo/internal/db"
 	"adesgo/internal/textutil"
 )
 
@@ -57,7 +58,18 @@ func (c Campaign) Time() time.Time {
 	return t
 }
 
+// ListingRows returns every listing (chronological) with its campaign key
+// and reply count, cached until a listing or a reply changes. The slice is
+// a copy; the rows' QuotationID pointers are shared and must not be changed.
 func (s *Service) ListingRows(ctx context.Context) ([]ListingRow, error) {
+	rows, err := s.listingsCache.get(ctx, s.Store, db.ListingsVersionKey, s.loadListingRows)
+	if err != nil {
+		return nil, err
+	}
+	return append([]ListingRow(nil), rows...), nil
+}
+
+func (s *Service) loadListingRows(ctx context.Context) ([]ListingRow, error) {
 	rows, err := s.db().QueryContext(ctx, `
 		SELECT l.msg_id, COALESCE(l.timestamp,0), COALESCE(l.created_at,''), COALESCE(l.chat_id,''),
 		       COALESCE(l.author_name,''), COALESCE(l.body,''), l.quotation_id, COALESCE(l.title,''),
@@ -274,6 +286,48 @@ type InserzioniMonth struct {
 	Month    int
 	Rows     []CampaignRow
 	Risposte int
+}
+
+// InserzioniYear: the months of one year older than the recent ones,
+// shown collapsed.
+type InserzioniYear struct {
+	Year     int // 0 = without a date
+	Months   []InserzioniMonth
+	Count    int
+	Risposte int
+}
+
+// RecentMonths: how many months (this one included) Inserzioni shows open.
+const RecentMonths = 6
+
+// SplitRecent splits months (newest first) into the last RecentMonths
+// months before now, kept open, and the older ones by year (newest first).
+func SplitRecent(months []InserzioniMonth, now time.Time) (recent []InserzioniMonth, years []InserzioniYear) {
+	cut := now.Year()*12 + int(now.Month()) - RecentMonths // months after this are recent
+	idx := map[int]int{}
+	for _, m := range months {
+		if m.Year > 0 && m.Year*12+m.Month > cut {
+			recent = append(recent, m)
+			continue
+		}
+		i, ok := idx[m.Year]
+		if !ok {
+			i = len(years)
+			idx[m.Year] = i
+			years = append(years, InserzioniYear{Year: m.Year})
+		}
+		years[i].Months = append(years[i].Months, m)
+		years[i].Count += len(m.Rows)
+		years[i].Risposte += m.Risposte
+	}
+	sort.SliceStable(years, func(i, j int) bool {
+		a, b := years[i].Year, years[j].Year
+		if a == 0 || b == 0 {
+			return b == 0 && a != 0 // without a date last
+		}
+		return a > b
+	})
+	return recent, years
 }
 
 // InserzioniMonths groups campaigns by month of first post, newest month

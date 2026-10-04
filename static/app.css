@@ -1130,3 +1130,13 @@ body:has(.sel-bar:not(:empty)) .fab-menu { bottom: calc(max(.75rem, env(safe-are
 .pager-btns { display: inline-flex; align-items: center; gap: .5rem; margin-left: auto; }
 .pager-num { font-variant-numeric: tabular-nums; white-space: nowrap; }
 .list-empty td { text-align: center; padding: 1.5rem .5rem; }
+
+/* Inserzioni: older years, closed; their months load when opened */
+.year-group { margin-bottom: .75rem; }
+.year-head { display: flex; align-items: baseline; gap: .35rem 1rem; flex-wrap: wrap; cursor: pointer; padding: .55rem .8rem; background: var(--panel); border: 1px solid var(--border); border-radius: var(--radius); list-style: none; }
+.year-head::-webkit-details-marker { display: none; }
+.year-head::before { content: ""; width: .5rem; height: .5rem; border-right: 2px solid var(--muted); border-bottom: 2px solid var(--muted); transform: rotate(-45deg); transition: transform .15s; align-self: center; }
+.year-group[open] > .year-head::before { transform: rotate(45deg); }
+.year-head h3 { margin: 0; font-size: 1.05rem; }
+.year-group[open] > .year-head { margin-bottom: .75rem; }
+@media (prefers-reduced-motion: reduce) { .year-head::before { transition: none; } }

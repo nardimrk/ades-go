@@ -57,6 +57,7 @@ func (s *Server) Handler(static fs.FS) http.Handler {
 
 	mux.HandleFunc("GET /inserzioni", s.inserzioni)
 	mux.HandleFunc("GET /inserzioni/list", s.inserzioniList)
+	mux.HandleFunc("GET /inserzioni/anno", s.inserzioniAnno)
 	mux.HandleFunc("POST /inserzioni/rename", s.inserzioniRename)
 	mux.HandleFunc("POST /inserzioni/consegna", s.inserzioniConsegna)
 	mux.HandleFunc("GET /inserzioni/titles", s.titleJobStatus)

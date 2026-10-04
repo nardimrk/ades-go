@@ -38,6 +38,8 @@ type Service struct {
 	// the Clienti and Prodotti lists, until their DB counters change
 	usersCache versioned[[]User]
 	itemsCache versioned[[]Item]
+	// the listings, until a listing or a reply changes (see ListingRows)
+	listingsCache versioned[[]ListingRow]
 }
 
 func New(store *db.Store, cfg *config.Config, groups GroupNamer) *Service {
