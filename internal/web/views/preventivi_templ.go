@@ -674,7 +674,7 @@ func PreventivoDetail(d *service.QuotationDetail, catalog []service.CatalogEntry
 				if templ_7745c5c3_Err != nil {
 					return templ_7745c5c3_Err
 				}
-				templ_7745c5c3_Err = IconMegaphone().Render(ctx, templ_7745c5c3_Buffer)
+				templ_7745c5c3_Err = IconRomanI().Render(ctx, templ_7745c5c3_Buffer)
 				if templ_7745c5c3_Err != nil {
 					return templ_7745c5c3_Err
 				}

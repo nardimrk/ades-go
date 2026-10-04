@@ -283,12 +283,12 @@ func fabIcon(key string) templ.Component {
 		ctx = templ.ClearChildren(ctx)
 		switch key {
 		case "inserzioni":
-			templ_7745c5c3_Err = IconMegaphone().Render(ctx, templ_7745c5c3_Buffer)
+			templ_7745c5c3_Err = IconRomanI().Render(ctx, templ_7745c5c3_Buffer)
 			if templ_7745c5c3_Err != nil {
 				return templ_7745c5c3_Err
 			}
 		case "ordini":
-			templ_7745c5c3_Err = IconReceipt().Render(ctx, templ_7745c5c3_Buffer)
+			templ_7745c5c3_Err = IconRomanO().Render(ctx, templ_7745c5c3_Buffer)
 			if templ_7745c5c3_Err != nil {
 				return templ_7745c5c3_Err
 			}
