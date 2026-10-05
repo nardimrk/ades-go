@@ -794,8 +794,25 @@ templ CustomerSection(qnum string, sec service.CustomerSection, msg, errMsg, cli
 								</td>
 							}
 							if sec.SavedOn == "" {
-								<td class="num"><button type="submit" name="op" value={ "del:" + itoa(i) } class="icon danger" title="Rimuovi riga" aria-label="Rimuovi riga">@IconX()
-</button></td>
+								<td class="num">
+									if sec.Manual && r.Opzione != "" {
+										<button
+											type="button"
+											class="icon danger"
+											title="Rimuovi riga"
+											aria-label="Rimuovi riga"
+											hx-post="/ordini/section"
+											hx-vals={ templ.JSONString(map[string]string{"op": "del:" + itoa(i)}) }
+											hx-target="closest form"
+											hx-swap="outerHTML"
+											hx-confirm={ "Togliere " + noEmoji(r.Vino) + " dall'ordine?" }
+										>@IconX()
+</button>
+									} else {
+										<button type="submit" name="op" value={ "del:" + itoa(i) } class="icon danger" title="Rimuovi riga" aria-label="Rimuovi riga">@IconX()
+</button>
+									}
+								</td>
 							}
 						</tr>
 					}

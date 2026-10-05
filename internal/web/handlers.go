@@ -869,6 +869,11 @@ func (s *Server) preventivoSection(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	rows := parseOrderRows(r)
+	manual, err := s.svc.IsManualOrder(ctx, q.ID)
+	if err != nil {
+		s.fail(w, r, err)
+		return
+	}
 	op := r.FormValue("op")
 	msg, errMsg, clientErr := "", "", ""
 	switch {
@@ -919,12 +924,40 @@ func (s *Server) preventivoSection(w http.ResponseWriter, r *http.Request) {
 			if qty < 1 {
 				qty = 1
 			}
-			rows = append(rows, service.OrderRow{Vino: wine, Qta: qty, Prezzo: price})
+			if !manual {
+				rows = append(rows, service.OrderRow{Vino: wine, Qta: qty, Prezzo: price})
+				break
+			}
+			// a manual order keeps its wines in the order itself: saved now
+			if _, err := s.svc.AddManualItem(ctx, q.ID, wine, qty, price); err != nil {
+				s.fail(w, r, err)
+				return
+			}
+			if rows, err = s.svc.ManualRows(ctx, q.ID); err != nil {
+				s.fail(w, r, err)
+				return
+			}
+			msg = "Aggiunto e salvato: " + wine + "."
 		}
 	case strings.HasPrefix(op, "del:"):
-		if i, err := strconv.Atoi(strings.TrimPrefix(op, "del:")); err == nil && i >= 0 && i < len(rows) {
-			rows = append(rows[:i], rows[i+1:]...)
+		i, err := strconv.Atoi(strings.TrimPrefix(op, "del:"))
+		if err != nil || i < 0 || i >= len(rows) {
+			break
 		}
+		if !manual || rows[i].Opzione == "" {
+			rows = append(rows[:i], rows[i+1:]...)
+			break
+		}
+		if err := s.svc.DeleteManualItem(ctx, q.ID, rows[i].Opzione); err != nil {
+			s.fail(w, r, err)
+			return
+		}
+		gone := rows[i].Vino
+		if rows, err = s.svc.ManualRows(ctx, q.ID); err != nil {
+			s.fail(w, r, err)
+			return
+		}
+		msg = "Tolto dall'ordine: " + gone + "."
 	case op == "save":
 		if err := s.svc.SaveOrder(ctx, num, cliente, rows); err != nil {
 			s.fail(w, r, err)

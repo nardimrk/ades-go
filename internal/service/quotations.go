@@ -1854,6 +1854,76 @@ func (s *Service) SetItemLink(ctx context.Context, quotationID int64, option str
 	return nil
 }
 
+// IsManualOrder: an order created by hand (no listing behind it).
+func (s *Service) IsManualOrder(ctx context.Context, quotationID int64) (bool, error) {
+	manual, _, err := s.manualConsegne(ctx, quotationID)
+	return manual, err
+}
+
+// ManualRows returns the wines of a manual order, as stored.
+func (s *Service) ManualRows(ctx context.Context, quotationID int64) ([]OrderRow, error) {
+	items, err := s.quotationItems(ctx, "WHERE quotation_id = ?", quotationID)
+	if err != nil {
+		return nil, err
+	}
+	var out []OrderRow
+	for _, it := range items {
+		out = append(out, OrderRow{Opzione: it.Option, Vino: it.WineName, Qta: it.Quantity, Prezzo: it.Price})
+	}
+	return out, nil
+}
+
+// AddManualItem saves a wine in a manual order under the next free letter
+// (so it gets its delivery date and can be connected to an inserzione).
+func (s *Service) AddManualItem(ctx context.Context, quotationID int64, wine string, qty int, price float64) (string, error) {
+	if manual, err := s.IsManualOrder(ctx, quotationID); err != nil {
+		return "", err
+	} else if !manual {
+		return "", errors.New("si possono aggiungere vini solo agli ordini manuali")
+	}
+	var letter string
+	err := s.inTx(ctx, func(tx *sql.Tx) error {
+		rows, err := tx.QueryContext(ctx, "SELECT UPPER(COALESCE(option,'')) FROM quotation_items WHERE quotation_id = ?", quotationID)
+		if err != nil {
+			return err
+		}
+		used := map[string]bool{}
+		for rows.Next() {
+			var o string
+			if err := rows.Scan(&o); err != nil {
+				rows.Close()
+				return err
+			}
+			used[o] = true
+		}
+		rows.Close()
+		for c := 'A'; c <= 'Z'; c++ {
+			if !used[string(c)] {
+				letter = string(c)
+				break
+			}
+		}
+		if letter == "" {
+			return errors.New("l'ordine ha già 26 vini")
+		}
+		_, err = tx.ExecContext(ctx, "INSERT INTO quotation_items (quotation_id, option, wine_name, quantity, price) VALUES (?,?,?,?,?)",
+			quotationID, letter, wine, qty, price)
+		return err
+	})
+	return letter, err
+}
+
+// DeleteManualItem removes a wine from a manual order.
+func (s *Service) DeleteManualItem(ctx context.Context, quotationID int64, option string) error {
+	if manual, err := s.IsManualOrder(ctx, quotationID); err != nil {
+		return err
+	} else if !manual {
+		return errors.New("si possono togliere vini solo dagli ordini manuali")
+	}
+	_, err := s.db().ExecContext(ctx, "DELETE FROM quotation_items WHERE quotation_id = ? AND UPPER(option) = UPPER(?)", quotationID, option)
+	return err
+}
+
 // SetItemConsegna saves the estimated delivery of one wine of a manual
 // order ("" clears it).
 func (s *Service) SetItemConsegna(ctx context.Context, quotationID int64, option, date string) error {
