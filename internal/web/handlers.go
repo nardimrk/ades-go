@@ -1,6 +1,7 @@
 package web
 
 import (
+	"context"
 	"encoding/json"
 	"errors"
 	"fmt"
@@ -10,6 +11,7 @@ import (
 	"strconv"
 	"strings"
 	"time"
+	"unicode"
 
 	"github.com/a-h/templ"
 
@@ -840,7 +842,13 @@ func (s *Server) preventivoView(w http.ResponseWriter, r *http.Request) {
 		s.fail(w, r, err)
 		return
 	}
-	render(w, r, views.PreventivoDetail(d, catalog))
+	// inserzioni published from 6 months before the order date, like "Collega"
+	camps, err := s.pickCamps(r.Context(), s.svc.LinkWindowStart(r.Context(), d.Quotation.ID))
+	if err != nil {
+		s.fail(w, r, err)
+		return
+	}
+	render(w, r, views.PreventivoDetail(d, catalog, camps))
 }
 
 // useSavedRows shows the saved order lines (not the live selections) once a
@@ -899,25 +907,33 @@ func (s *Server) preventivoSection(w http.ResponseWriter, r *http.Request) {
 		cliente = next
 		msg = "Cliente aggiornato: " + next
 	case op == "add":
-		// the wine must be one of the Prodotti (datalist labels may carry " — winery")
-		name, _, _ := strings.Cut(strings.TrimSpace(r.FormValue("new_vino")), " — ")
-		name = strings.TrimSpace(name)
+		// a product from Prodotti, or a wine of an inserzione (connected to it)
 		qty, _ := strconv.Atoi(r.FormValue("new_qta"))
 		priceStr := strings.ReplaceAll(strings.TrimSpace(r.FormValue("new_prezzo")), ",", ".")
 		price, perr := strconv.ParseFloat(priceStr, 64)
-		wine := ""
-		if catalog, err := s.svc.Catalog(ctx); err == nil {
-			for _, e := range catalog {
-				if strings.EqualFold(e.Description, name) {
-					wine = e.Description
-				}
+		catalog, err := s.svc.Catalog(ctx)
+		if err != nil {
+			s.fail(w, r, err)
+			return
+		}
+		src := r.FormValue("new_src")
+		var camps []views.PickCamp
+		if src == "i" {
+			if camps, err = s.pickCamps(ctx, s.svc.LinkWindowStart(ctx, q.ID)); err != nil {
+				s.fail(w, r, err)
+				return
 			}
 		}
+		pk, perrMsg := resolvePick(src, r.FormValue("new_vino"), r.FormValue("new_camp"), r.FormValue("new_opt"), catalog, camps)
 		switch {
-		case name == "":
+		case perrMsg != "":
+			rs := []rune(perrMsg)
+			rs[0] = unicode.ToUpper(rs[0])
+			errMsg = string(rs)
+		case pk.Wine == "" && src == "i":
+			errMsg = "Scegli un'inserzione e il suo vino."
+		case pk.Wine == "":
 			errMsg = "Scegli un vino: scrivi per cercarlo tra i Prodotti."
-		case wine == "":
-			errMsg = "“" + name + "” non è tra i Prodotti: aggiungilo prima nella pagina Prodotti."
 		case priceStr == "" || perr != nil || price < 0:
 			errMsg = "Inserisci un prezzo valido."
 		default:
@@ -925,11 +941,11 @@ func (s *Server) preventivoSection(w http.ResponseWriter, r *http.Request) {
 				qty = 1
 			}
 			if !manual {
-				rows = append(rows, service.OrderRow{Vino: wine, Qta: qty, Prezzo: price})
+				rows = append(rows, service.OrderRow{Vino: pk.Wine, Qta: qty, Prezzo: price})
 				break
 			}
 			// a manual order keeps its wines in the order itself: saved now
-			if _, err := s.svc.AddManualItem(ctx, q.ID, wine, qty, price); err != nil {
+			if _, err := s.svc.AddManualItem(ctx, q.ID, pk.Wine, qty, price, pk.LinkQ, pk.LinkOpt); err != nil {
 				s.fail(w, r, err)
 				return
 			}
@@ -937,7 +953,10 @@ func (s *Server) preventivoSection(w http.ResponseWriter, r *http.Request) {
 				s.fail(w, r, err)
 				return
 			}
-			msg = "Aggiunto e salvato: " + wine + "."
+			msg = "Aggiunto e salvato: " + pk.Wine + "."
+			if pk.LinkQ != 0 {
+				msg = "Aggiunto, salvato e collegato all'inserzione: " + pk.Wine + "."
+			}
 		}
 	case strings.HasPrefix(op, "del:"):
 		i, err := strconv.Atoi(strings.TrimPrefix(op, "del:"))
@@ -1027,6 +1046,71 @@ func parseOrderRows(r *http.Request) []service.OrderRow {
 	return rows
 }
 
+// pickCamps: the inserzioni (with an order) published since `since`, for
+// the wine pickers; labels are unique ("title · dd/mm/yy").
+func (s *Server) pickCamps(ctx context.Context, since string) ([]views.PickCamp, error) {
+	links, err := s.svc.LinkCampaigns(ctx, since)
+	if err != nil {
+		return nil, err
+	}
+	camps := make([]views.PickCamp, 0, len(links))
+	seen := map[string]int{}
+	for _, c := range links {
+		label := strings.TrimSpace(textutil.StripEmoji(c.Title))
+		if len(c.Published) >= 10 {
+			label += " · " + c.Published[8:10] + "/" + c.Published[5:7] + "/" + c.Published[2:4]
+		}
+		if seen[label]++; seen[label] > 1 {
+			label += " (" + strconv.Itoa(seen[label]) + ")"
+		}
+		camps = append(camps, views.PickCamp{Label: label, Chat: c.ChatName, Options: c.Options})
+	}
+	return camps, nil
+}
+
+// picked is what a wine picker chose: a product (Wine) or an inserzione's
+// wine (Wine + the option it is connected to). Typed keeps the product text.
+type picked struct {
+	Wine, Typed string
+	LinkQ       int64
+	LinkOpt     string
+}
+
+// resolvePick checks a wine picker's fields: a product must be in Prodotti,
+// an inserzione's wine one of its options. Nothing chosen → empty Wine, no
+// error; otherwise a message for the user.
+func resolvePick(src, vino, camp, opt string, catalog []service.CatalogEntry, camps []views.PickCamp) (picked, string) {
+	if src == "i" {
+		camp = strings.TrimSpace(camp)
+		if camp == "" {
+			return picked{}, ""
+		}
+		c := views.FindCamp(camps, camp)
+		if c == nil {
+			return picked{}, "inserzione «" + camp + "» non trovata. Sceglila dall'elenco."
+		}
+		qs, letter, _ := strings.Cut(strings.TrimSpace(opt), ":")
+		qid, _ := strconv.ParseInt(qs, 10, 64)
+		o := c.Option(qid, letter)
+		if o == nil {
+			return picked{}, "scegli il vino dell'inserzione."
+		}
+		return picked{Wine: o.Wine, LinkQ: qid, LinkOpt: letter}, ""
+	}
+	// datalist labels may carry " — winery"
+	name, _, _ := strings.Cut(strings.TrimSpace(vino), " — ")
+	name = strings.TrimSpace(name)
+	if name == "" {
+		return picked{}, ""
+	}
+	for _, e := range catalog {
+		if strings.EqualFold(e.Description, name) {
+			return picked{Wine: e.Description, Typed: e.Description}, ""
+		}
+	}
+	return picked{Typed: name}, "«" + name + "» non è nei Prodotti: sceglilo dall'elenco."
+}
+
 func (s *Server) nuovoData(r *http.Request) (views.NuovoPreventivoData, error) {
 	ctx := r.Context()
 	_, clients, err := s.svc.ClientOptions(ctx)
@@ -1037,22 +1121,9 @@ func (s *Server) nuovoData(r *http.Request) (views.NuovoPreventivoData, error) {
 	if err != nil {
 		return views.NuovoPreventivoData{}, err
 	}
-	// inserzioni with an order from the last 6 months, like "Collega"
-	links, err := s.svc.LinkCampaigns(ctx, time.Now().AddDate(0, -6, 0).Format("2006-01-02"))
+	camps, err := s.pickCamps(ctx, time.Now().AddDate(0, -6, 0).Format("2006-01-02"))
 	if err != nil {
 		return views.NuovoPreventivoData{}, err
-	}
-	camps := make([]views.NpCamp, 0, len(links))
-	seen := map[string]int{}
-	for _, c := range links {
-		label := strings.TrimSpace(textutil.StripEmoji(c.Title))
-		if len(c.Published) >= 10 {
-			label += " · " + c.Published[8:10] + "/" + c.Published[5:7] + "/" + c.Published[2:4]
-		}
-		if seen[label]++; seen[label] > 1 {
-			label += " (" + strconv.Itoa(seen[label]) + ")"
-		}
-		camps = append(camps, views.NpCamp{Label: label, Chat: c.ChatName, Options: c.Options})
 	}
 	return views.NuovoPreventivoData{
 		Number: s.svc.NextOrderNumber(ctx, time.Now().Format("2006-01-02")), Date: time.Now().Format("2006-01-02"),
@@ -1087,10 +1158,6 @@ func (s *Server) nuovoPreventivoSubmit(w http.ResponseWriter, r *http.Request) {
 		}
 		return ""
 	}
-	products := map[string]bool{}
-	for _, e := range d.Catalog {
-		products[strings.ToLower(e.Description)] = true
-	}
 	letters := "ABCDEFGHIJ"
 	d.Rows = nil
 	var valid []service.NewQuotationRow
@@ -1101,37 +1168,16 @@ func (s *Server) nuovoPreventivoSubmit(w http.ResponseWriter, r *http.Request) {
 			row.Quantity = v
 		}
 		row.Price, _ = strconv.ParseFloat(strings.ReplaceAll(at(prezzo, i), ",", "."), 64)
-		n := strconv.Itoa(i + 1)
-		if row.Source == "i" {
-			// "<quotation id>:<letter>" of an option of the chosen inserzione
-			qs, letter, _ := strings.Cut(at(opt, i), ":")
-			row.LinkQuotation, _ = strconv.ParseInt(qs, 10, 64)
-			row.LinkOption = letter
-			if c := d.Camp(row.Camp); c == nil {
-				if row.Camp != "" && rowErr == "" {
-					rowErr = "Riga " + n + ": inserzione «" + row.Camp + "» non trovata. Sceglila dall'elenco."
-				}
-			} else if o := c.Option(row.LinkQuotation, letter); o == nil {
-				if rowErr == "" {
-					rowErr = "Riga " + n + ": scegli il vino dell'inserzione."
-				}
-			} else {
-				row.WineName = o.Wine
-			}
-		} else {
-			row.Source = "p"
-			// catalog labels are "description — winery"
-			name, _, _ := strings.Cut(at(vino, i), " — ")
-			row.WineName = strings.TrimSpace(name)
-			if row.WineName != "" && !products[strings.ToLower(row.WineName)] && rowErr == "" {
-				rowErr = "Riga " + n + ": «" + row.WineName + "» non è nei Prodotti. Sceglilo dall'elenco o crealo con «+ Nuovo prodotto»."
-			}
+		pk, msg := resolvePick(row.Source, at(vino, i), row.Camp, at(opt, i), d.Catalog, d.Camps)
+		row.WineName, row.LinkQuotation, row.LinkOption = pk.Wine, pk.LinkQ, pk.LinkOpt
+		if row.Source != "i" {
+			row.Source, row.WineName = "p", pk.Typed
+		}
+		if msg != "" && rowErr == "" {
+			rowErr = "Riga " + strconv.Itoa(i+1) + ": " + msg
 		}
 		d.Rows = append(d.Rows, row)
-		if row.WineName != "" && row.Price > 0 {
-			if row.Source != "i" {
-				row.LinkQuotation, row.LinkOption = 0, ""
-			}
+		if pk.Wine != "" && msg == "" && row.Price > 0 {
 			valid = append(valid, row)
 		}
 	}

@@ -1875,7 +1875,8 @@ func (s *Service) ManualRows(ctx context.Context, quotationID int64) ([]OrderRow
 
 // AddManualItem saves a wine in a manual order under the next free letter
 // (so it gets its delivery date and can be connected to an inserzione).
-func (s *Service) AddManualItem(ctx context.Context, quotationID int64, wine string, qty int, price float64) (string, error) {
+// linkQ/linkOpt (0/"" for none) connect it to a listing's option.
+func (s *Service) AddManualItem(ctx context.Context, quotationID int64, wine string, qty int, price float64, linkQ int64, linkOpt string) (string, error) {
 	if manual, err := s.IsManualOrder(ctx, quotationID); err != nil {
 		return "", err
 	} else if !manual {
@@ -1906,8 +1907,12 @@ func (s *Service) AddManualItem(ctx context.Context, quotationID int64, wine str
 		if letter == "" {
 			return errors.New("l'ordine ha già 26 vini")
 		}
-		_, err = tx.ExecContext(ctx, "INSERT INTO quotation_items (quotation_id, option, wine_name, quantity, price) VALUES (?,?,?,?,?)",
-			quotationID, letter, wine, qty, price)
+		var lq, lo any
+		if linkQ != 0 {
+			lq, lo = linkQ, linkOpt
+		}
+		_, err = tx.ExecContext(ctx, "INSERT INTO quotation_items (quotation_id, option, wine_name, quantity, price, linked_quotation_id, linked_option) VALUES (?,?,?,?,?,?,?)",
+			quotationID, letter, wine, qty, price, lq, lo)
 		return err
 	})
 	return letter, err

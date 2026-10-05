@@ -298,6 +298,7 @@
 
   function init(root) {
     initCombos(root);
+    initPickers(root);
     labelTables();
     fitStickyTables();
     checkSelBar();
@@ -698,45 +699,126 @@
     if (max && n + 1 >= max) btn.disabled = true;
   });
 
-  // Nuovo ordine: each wine comes from Prodotti or from an inserzione (pick
-  // the inserzione, then its wine: the price is filled in).
+  // Wine picker (Nuovo ordine, "Aggiungi vino"): a wine from Prodotti or
+  // from an inserzione (pick the inserzione, then its wine: the price of the
+  // closest [data-pick-scope] is filled in).
+  var pickCamps = null;
+  function pickCampsData() {
+    if (!pickCamps) {
+      var el = document.getElementById("pick-camps-data");
+      try { pickCamps = el ? JSON.parse(el.textContent) : {}; } catch (err) { pickCamps = {}; }
+    }
+    return pickCamps;
+  }
+  function fillPickOpt(camp, selected) {
+    var sel = camp.closest(".wine-pick").querySelector(".pick-opt");
+    var name = camp.value.trim();
+    var opts = pickCampsData()[name] || [];
+    sel.innerHTML = "";
+    sel.add(new Option(!opts.length && name ? "Inserzione non trovata" : "Scegli il vino...", ""));
+    opts.forEach(function (o) {
+      var op = new Option(o.t, o.v, false, o.v === selected);
+      op.dataset.price = o.p;
+      op.dataset.letter = o.l;
+      op.dataset.wine = o.w;
+      sel.add(op);
+    });
+    return sel;
+  }
+  // the chosen wine (a product of the list, or an inserzione's wine) is
+  // shown framed instead of the fields; "Cambia" brings the fields back.
+  function showChosen(box) {
+    var main = "", sub = "", letter = "";
+    if (box.dataset.src === "i") {
+      var o = box.querySelector(".pick-opt").selectedOptions[0];
+      if (o && o.value) {
+        letter = o.dataset.letter || "";
+        main = o.dataset.wine || o.text;
+        if (Number(o.dataset.price) > 0) main += " · " + o.dataset.price.replace(".", ",") + " €";
+        sub = "Inserzione: " + box.querySelector(".pick-camp").value.trim();
+      }
+    } else {
+      var inp = box.querySelector(".pick-prod input");
+      var dl = document.getElementById(inp.dataset.combo || inp.getAttribute("list"));
+      var v = inp.value.trim();
+      var hit = dl && v && Array.prototype.find.call(dl.options, function (x) { return x.value === v; });
+      if (hit) {
+        main = v;
+        sub = "Prodotti" + (hit.textContent.trim() ? " · " + hit.textContent.trim() : "");
+      }
+    }
+    var on = !!main && box.dataset.editing !== "1";
+    box.classList.toggle("is-chosen", on);
+    if (!on) return false;
+    var m = box.querySelector(".pick-chosen-main");
+    m.textContent = "";
+    if (letter) {
+      var tag = document.createElement("span");
+      tag.className = "opt-tag";
+      tag.textContent = letter;
+      m.appendChild(tag);
+    }
+    m.appendChild(document.createTextNode(main));
+    box.querySelector(".pick-chosen-sub").textContent = sub;
+    return true;
+  }
+  // once per picker: init can run again on the same page (htmx:load)
+  function initPickers(root) {
+    root.querySelectorAll(".wine-pick:not([data-ready])").forEach(function (box) {
+      box.dataset.ready = "1";
+      var c = box.querySelector(".pick-camp");
+      if (c.value.trim()) fillPickOpt(c, box.querySelector(".pick-opt").dataset.selected);
+      showChosen(box);
+    });
+  }
+  // a choice made: on to the quantity (not on touch screens: no keyboard pop-up)
+  function pickDone(box) {
+    delete box.dataset.editing;
+    if (!showChosen(box) || matchMedia("(pointer: coarse)").matches) return;
+    var scope = box.closest("[data-pick-scope]");
+    var qty = scope && scope.querySelector("input[name$=qta]:not([type=hidden])");
+    if (qty) qty.focus();
+  }
   document.addEventListener("click", function (e) {
-    var b = e.target.closest(".np-src .seg-btn");
+    var b = e.target.closest(".pick-change");
     if (!b) return;
-    var tr = b.closest("tr");
-    tr.dataset.src = b.dataset.src;
-    tr.querySelector("input[name=src]").value = b.dataset.src;
-    tr.querySelectorAll(".np-src .seg-btn").forEach(function (x) {
+    var box = b.closest(".wine-pick");
+    box.dataset.editing = "1";
+    box.classList.remove("is-chosen");
+    var f = box.querySelector(box.dataset.src === "i" ? ".pick-camp" : ".pick-prod input");
+    if (f) { f.focus(); f.select && f.select(); }
+  });
+  document.addEventListener("click", function (e) {
+    var b = e.target.closest(".pick-src .seg-btn");
+    if (!b) return;
+    var box = b.closest(".wine-pick");
+    box.dataset.src = b.dataset.src;
+    box.querySelector("input[type=hidden][name$=src]").value = b.dataset.src;
+    box.querySelectorAll(".pick-src .seg-btn").forEach(function (x) {
       x.classList.toggle("active", x === b);
       x.setAttribute("aria-pressed", x === b ? "true" : "false");
     });
-    var f = tr.querySelector(b.dataset.src === "i" ? ".np-camp" : "input[name=vino]");
+    delete box.dataset.editing;
+    if (showChosen(box)) return;
+    var f = box.querySelector(b.dataset.src === "i" ? ".pick-camp" : ".pick-prod input");
     if (f && !f.value && !matchMedia("(pointer: coarse)").matches) f.focus();
   });
-  var npCamps = null;
   document.addEventListener("change", function (e) {
     var t = e.target;
-    var tr = t.closest && t.closest("#np-rows tr");
-    if (!tr) return;
-    if (t.classList.contains("np-camp")) {
-      if (!npCamps) {
-        var el = document.getElementById("np-camps-data");
-        try { npCamps = el ? JSON.parse(el.textContent) : {}; } catch (err) { npCamps = {}; }
-      }
-      var sel = tr.querySelector(".np-opt");
-      var opts = npCamps[t.value.trim()] || [];
-      sel.innerHTML = "";
-      sel.add(new Option(opts.length ? "Scegli il vino..." : t.value.trim() ? "Inserzione non trovata" : "Scegli il vino...", ""));
-      opts.forEach(function (o) {
-        var op = new Option(o.t, o.v);
-        op.dataset.price = o.p;
-        sel.add(op);
-      });
-      if (opts.length === 1) { sel.selectedIndex = 1; sel.dispatchEvent(new Event("change", { bubbles: true })); }
-      else if (opts.length && !matchMedia("(pointer: coarse)").matches) sel.focus();
-    } else if (t.classList.contains("np-opt")) {
+    if (!t.classList) return;
+    if (t.classList.contains("pick-camp")) {
+      var sel = fillPickOpt(t, "");
+      var n = sel.options.length - 1;
+      if (n === 1) { sel.selectedIndex = 1; sel.dispatchEvent(new Event("change", { bubbles: true })); }
+      else if (n > 1 && !matchMedia("(pointer: coarse)").matches) sel.focus();
+    } else if (t.classList.contains("pick-opt")) {
       var o = t.selectedOptions[0];
-      if (o && o.dataset.price && Number(o.dataset.price) > 0) tr.querySelector("input[name=prezzo]").value = o.dataset.price;
+      var scope = t.closest("[data-pick-scope]");
+      var price = scope && scope.querySelector("input[name$=prezzo]:not([type=hidden])");
+      if (price && o && o.dataset.price && Number(o.dataset.price) > 0) price.value = o.dataset.price;
+      pickDone(t.closest(".wine-pick"));
+    } else if (t.closest && t.closest(".pick-prod")) {
+      pickDone(t.closest(".wine-pick"));
     }
   });
 

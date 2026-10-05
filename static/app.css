@@ -241,16 +241,39 @@ code, .mono { font-family: ui-monospace, SFMono-Regular, Menlo, monospace; font-
 .grid3 { display: grid; grid-template-columns: repeat(3, 1fr); gap: 1rem; align-items: end; }
 .np-head { display: grid; grid-template-columns: auto minmax(0, 1fr) auto; gap: 1rem; align-items: end; }
 .np-number { white-space: nowrap; padding-bottom: .6rem; }
-/* Nuovo ordine: a wine from Prodotti or from an inserzione (+ its wine) */
+/* wine picker (Nuovo ordine, "Aggiungi vino"): from Prodotti or from an
+   inserzione (+ its wine) */
+.wine-pick { display: flex; flex-wrap: wrap; gap: .5rem; align-items: center; min-width: 0; }
+.pick-src { flex: none; }
+.pick-fields { display: flex; flex-wrap: wrap; gap: .5rem; flex: 1 1 22rem; min-width: 0; }
+.pick-field { position: relative; flex: 1 1 17rem; min-width: 0; }
+.pick-field > input, .pick-opt { width: 100%; min-width: 0; }
+.pick-opt { flex: 1 1 17rem; }
+.wine-pick[data-src="i"] .pick-prod, .wine-pick:not([data-src="i"]) .pick-ins { display: none; }
+/* the chosen wine, framed, in place of the search fields */
+.pick-chosen {
+  display: none; flex: 1 1 22rem; align-items: center; gap: .6rem; min-width: 0;
+  min-height: var(--ctl-h); padding: .4rem .5rem .4rem .65rem;
+  border: 1.5px solid var(--accent); border-radius: 6px; background: var(--accent-soft);
+}
+.wine-pick.is-chosen .pick-chosen { display: flex; }
+.wine-pick.is-chosen .pick-fields { display: none; }
+.pick-chosen-icon { display: inline-flex; color: var(--accent); flex: none; }
+.pick-chosen-text { display: flex; flex-direction: column; flex: 1; min-width: 0; overflow-wrap: anywhere; }
+.pick-chosen-main { font-weight: 600; color: var(--text); }
+.pick-chosen-main .opt-tag { margin-right: .35rem; background: var(--panel); }
+.pick-chosen-sub { font-size: .8rem; color: var(--muted); }
+.pick-change { flex: none; }
+/* in a modal: one field per line under the switch */
+.modal .wine-pick { align-items: stretch; }
+.modal .pick-src { display: flex; width: 100%; }
+.modal .pick-src .seg-btn { flex: 1; }
+.modal .pick-fields { flex-basis: 100%; flex-direction: column; }
+.modal .pick-field, .modal .pick-opt, .modal .pick-chosen { flex: none; width: 100%; }
+.add-wine { display: flex; flex-direction: column; gap: .25rem; }
+.add-wine-label { font-size: .9rem; color: var(--muted); }
 .np-rows td { vertical-align: top; }
 .np-rows td.np-n { padding-top: .9rem; }
-.np-pick { display: flex; flex-wrap: wrap; gap: .5rem; align-items: center; }
-.np-src { flex: none; }
-.np-fields { display: flex; flex-wrap: wrap; gap: .5rem; flex: 1 1 22rem; min-width: 0; }
-.np-field { position: relative; flex: 1 1 17rem; min-width: 0; }
-.np-field > input, .np-opt { width: 100%; min-width: 0; }
-.np-opt { flex: 1 1 17rem; }
-.np-rows tr[data-src="i"] .np-prod, .np-rows tr:not([data-src="i"]) .np-ins { display: none; }
 @media (min-width: 721px) {
   .np-rows th:nth-child(3), .np-rows th:nth-child(4) { width: 8.5rem; }
   .np-rows td > input { width: 100%; }
@@ -786,14 +809,15 @@ img { max-width: 100%; height: auto; }
   .grid3 { grid-template-columns: 1fr; }
   .np-head { grid-template-columns: 1fr; }
   .np-number { padding-bottom: 0; }
-  .np-rows td.np-pick { grid-column: 1 / -1; flex-direction: row; align-items: stretch; }
+  .np-rows td.np-pick { grid-column: 1 / -1; align-items: stretch; }
   .table.np-rows td.np-n { padding-top: 0; flex-direction: row; gap: .3rem; }
   .table.np-rows td.np-n::before { content: "Vino "; display: inline; color: inherit; font-size: inherit; }
   .table.np-rows td.np-pick::before { content: none; }
-  .np-src { display: flex; width: 100%; }
-  .np-src .seg-btn { flex: 1; }
-  .np-fields { flex-basis: 100%; flex-direction: column; }
-  .np-field, .np-opt { flex: none; width: 100%; }
+  .wine-pick { align-items: stretch; }
+  .pick-src { display: flex; width: 100%; }
+  .pick-src .seg-btn { flex: 1; }
+  .pick-fields { flex-basis: 100%; flex-direction: column; }
+  .pick-field, .pick-opt, .pick-chosen { flex: none; width: 100%; }
   .row.between > * { min-width: 0; }
   .card { padding: .8rem; }
   .add-row { grid-template-columns: 1fr 1fr; }

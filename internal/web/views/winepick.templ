@@ -1,0 +1,134 @@
+package views
+
+import (
+	"adesgo/internal/service"
+	"strings"
+)
+
+// PickCamp is an inserzione a wine can be taken from (with its wines).
+type PickCamp struct {
+	Label   string // unique: title · date
+	Chat    string
+	Options []service.LinkTarget
+}
+
+// FindCamp finds an inserzione by its label.
+func FindCamp(camps []PickCamp, label string) *PickCamp {
+	for i := range camps {
+		if camps[i].Label == label {
+			return &camps[i]
+		}
+	}
+	return nil
+}
+
+// Option finds one of the inserzione's wines.
+func (c *PickCamp) Option(qid int64, letter string) *service.LinkTarget {
+	for i := range c.Options {
+		if c.Options[i].QuotationID == qid && c.Options[i].Letter == letter {
+			return &c.Options[i]
+		}
+	}
+	return nil
+}
+
+// pickCampsJSON: label → wines, read by app.js to fill the wine select.
+func pickCampsJSON(camps []PickCamp) map[string][]map[string]any {
+	out := make(map[string][]map[string]any, len(camps))
+	for _, c := range camps {
+		for _, o := range c.Options {
+			out[c.Label] = append(out[c.Label], map[string]any{"v": i64(o.QuotationID) + ":" + o.Letter, "t": pickOptText(o), "p": money(o.Price), "l": o.Letter, "w": noEmoji(o.Wine)})
+		}
+	}
+	return out
+}
+
+func pickOptText(o service.LinkTarget) string {
+	t := o.Letter + " · " + noEmoji(o.Wine)
+	if o.Price > 0 {
+		t += " · " + strings.ReplaceAll(money(o.Price), ".", ",") + " €"
+	}
+	return t
+}
+
+// WinePick is the state of one wine picker. Its fields are named
+// Prefix+"src" / "vino" / "camp" / "opt"; the price field next to it (any
+// input named …prezzo inside the closest [data-pick-scope]) is filled from
+// the inserzione's wine.
+type WinePick struct {
+	Prefix     string
+	Src        string // "p" (Prodotti, default) or "i" (inserzione)
+	Vino       string
+	Camp       string
+	Opt        string // "<quotation id>:<letter>"
+	NewProduct string // id of the "Nuovo prodotto" modal, if any
+	Autofocus  bool
+}
+
+func (p WinePick) src() string {
+	if p.Src == "i" {
+		return "i"
+	}
+	return "p"
+}
+
+// PickData: the suggestions every WinePicker on the page reads (Prodotti,
+// inserzioni and their wines). Once per page.
+templ PickData(catalog []service.CatalogEntry, camps []PickCamp) {
+	@ProdottiDatalist(catalog)
+	<datalist id="pick-camps">
+		for _, c := range camps {
+			<option value={ c.Label }>{ c.Chat }</option>
+		}
+	</datalist>
+	@templ.JSONScript("pick-camps-data", pickCampsJSON(camps))
+}
+
+// WinePicker: a wine from Prodotti, or from an inserzione (the inserzione,
+// then one of its wines). The fields of both stay in the form so arrays of
+// rows line up; "src" says which one counts. Once a wine is chosen, app.js
+// shows it in a framed box (.pick-chosen) instead of the fields, with
+// "Cambia" to pick again.
+templ WinePicker(p WinePick) {
+	<div class="wine-pick" data-src={ p.src() }>
+		<input type="hidden" name={ p.Prefix + "src" } value={ p.src() }/>
+		<div class="seg pick-src" role="group" aria-label="Prendi il vino da">
+			<button type="button" class={ "seg-btn", templ.KV("active", p.src() == "p") } data-src="p" aria-pressed={ boolStr(p.src() == "p") }>Prodotti</button>
+			<button type="button" class={ "seg-btn", templ.KV("active", p.src() == "i") } data-src="i" aria-pressed={ boolStr(p.src() == "i") }>Inserzione</button>
+		</div>
+		<div class="pick-fields pick-prod">
+			<span class="pick-field">
+				<input
+					type="text"
+					name={ p.Prefix + "vino" }
+					list="prodotti-list"
+					value={ p.Vino }
+					placeholder="Cerca un prodotto..."
+					aria-label="Prodotto"
+					autocomplete="off"
+					if p.NewProduct != "" {
+						data-new-product={ p.NewProduct }
+					}
+					autofocus?={ p.Autofocus }
+				/>
+			</span>
+		</div>
+		<div class="pick-fields pick-ins">
+			<span class="pick-field">
+				<input type="text" name={ p.Prefix + "camp" } list="pick-camps" class="pick-camp" value={ p.Camp } placeholder="Cerca un'inserzione..." aria-label="Inserzione" autocomplete="off"/>
+			</span>
+			// filled by app.js from pick-camps-data (data-selected restores the choice)
+			<select name={ p.Prefix + "opt" } class="pick-opt" aria-label="Vino dell'inserzione" data-selected={ p.Opt }>
+				<option value="">Scegli il vino...</option>
+			</select>
+		</div>
+		<div class="pick-chosen" role="status">
+			<span class="pick-chosen-icon" aria-hidden="true">@IconCheck()</span>
+			<span class="pick-chosen-text">
+				<span class="pick-chosen-main"></span>
+				<span class="pick-chosen-sub"></span>
+			</span>
+			<button type="button" class="btn small pick-change">Cambia</button>
+		</div>
+	</div>
+}
