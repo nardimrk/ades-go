@@ -704,6 +704,7 @@ templ CustomerSection(qnum string, sec service.CustomerSection, msg, errMsg, cli
 		hx-post="/ordini/section"
 		hx-target="this"
 		hx-swap="outerHTML"
+		hx-disinherit="*"
 	>
 		<input type="hidden" name="n" value={ qnum }/>
 		<input type="hidden" name="utente" value={ sec.Utente }/>
