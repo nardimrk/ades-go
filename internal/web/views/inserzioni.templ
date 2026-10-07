@@ -281,7 +281,8 @@ templ Conversation(d InserzioniData) {
 				</form>
 				@deliveryField(d)
 				<div class="listing-box">
-					<strong>{ noEmoji(d.Selected.Venditore) }</strong> · { d.Selected.Data }
+					@IconWhatsApp()
+					<strong>{ noEmoji(d.Selected.Venditore) }</strong> <span class="listing-date">· { d.Selected.Data }</span>
 					<div class="listing-text">{ noEmoji(d.Selected.Testo) }</div>
 				</div>
 				@InitialStock(d)
@@ -421,7 +422,6 @@ templ InitialStock(d InserzioniData) {
 					/>
 				</label>
 			}
-			<p class="muted initial-note">Le modifiche di Ale durante la vendita non cambiano queste quantità. Si salvano da sole quando esci dal campo.</p>
 		</fieldset>
 	}
 }

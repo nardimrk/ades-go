@@ -16,6 +16,10 @@
   --danger-soft: #fee2e2;
   --danger-border: #fecaca;
   --listing-bg: #f0f0f0;
+  /* WhatsApp's own colours: chat bubble and its text */
+  --wa-bubble: #d9fdd3;
+  --wa-bubble-text: #111b21;
+  --wa-bubble-muted: #54656f;
   --toast-bg: #111827;
   --on-dark: #ffffff;
   --shadow: rgba(0,0,0,.15);
@@ -64,6 +68,9 @@
   --ok: #4ade80;
   --warn: #fbbf24;
   --listing-bg: #222630;
+  --wa-bubble: #005c4b;
+  --wa-bubble-text: #e9edef;
+  --wa-bubble-muted: #aebac1;
   --toast-bg: #2b303a;
   --shadow: rgba(0,0,0,.45);
   --info-bg: #14233d;    --info-border: #1e3a66;    --info-text: #bfdbfe;
@@ -488,9 +495,12 @@ button.icon { display: inline-flex; align-items: center; justify-content: center
 .delivery label { flex: 0 1 14rem; min-width: 0; }
 .delivery input[type=date] { background: var(--fill); width: 100%; }
 .listing-box {
-  background: var(--listing-bg); border-left: 4px solid var(--wa-dark); border-radius: 4px;
-  padding: 10px 14px; margin-bottom: 12px; font-size: 14px; line-height: 1.5;
+  position: relative; background: var(--wa-bubble); color: var(--wa-bubble-text);
+  border-radius: 8px;
+  padding: 10px 3rem 10px 14px; margin-bottom: 12px; font-size: 14px; line-height: 1.5;
 }
+.listing-box .listing-date { color: var(--wa-bubble-muted); }
+.listing-box .wa-logo { position: absolute; top: 10px; right: 12px; width: 26px; height: 26px; }
 .listing-text { white-space: pre-wrap; margin-top: .25rem; }
 /* replies: one plain panel, a thin line between messages, name and time on
    the same line as the delete button */
