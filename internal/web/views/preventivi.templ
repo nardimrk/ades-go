@@ -750,7 +750,7 @@ templ CustomerSection(qnum string, sec service.CustomerSection, msg, errMsg, cli
 				</span>
 			} else {
 				<span class="section-actions">
-					<button type="button" class="btn" data-modal-show={ sectionID(sec.Utente) + "-vino" }>＋ Aggiungi vino</button>
+					<button type="button" class="btn icon-btn" data-modal-show={ sectionID(sec.Utente) + "-vino" } aria-label="Aggiungi vino" title="Aggiungi vino">@IconPlus()</button>
 					<button type="submit" name="op" value="save" class="btn primary">Conferma ordine</button>
 				</span>
 			}
