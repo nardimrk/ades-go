@@ -1199,3 +1199,43 @@ body:has(.sel-bar:not(:empty)) .fab-menu { bottom: calc(max(.75rem, env(safe-are
 .year-head h3 { margin: 0; font-size: 1.05rem; }
 .year-group[open] > .year-head { margin-bottom: .75rem; }
 @media (prefers-reduced-motion: reduce) { .year-head::before { transition: none; } }
+
+/* Ordini: a timeline left of the customer cards, a dot at each order's
+   first reply with its time and day. The mark is the first item of the
+   card head, zero-width, so the flex row centres the time on the same line
+   as the customer name and the buttons; its text hangs left of the card. */
+.order-timeline { position: relative; padding-left: 5.5rem; }
+.order-timeline::before {
+  content: ""; position: absolute; left: 4.25rem; top: 1.5rem; bottom: 1.5rem;
+  width: 2px; background: var(--border-strong); transform: translateX(-50%);
+}
+/* from the card content edge: 1rem padding + 1px border, then the gap to the rail */
+.tl-mark {
+  position: relative; flex: 0 0 0; width: 0; height: 1.2em; margin-right: -1rem;
+  font-size: 1rem; line-height: 1.2; white-space: nowrap;
+}
+.tl-time, .tl-day { position: absolute; right: calc(2.9rem + 1px); }
+.tl-time { top: 0; font-weight: 600; font-variant-numeric: tabular-nums; }
+.tl-day { top: 1.25em; color: var(--muted); font-size: .85rem; }
+.tl-mark:not(:empty)::after {
+  content: ""; position: absolute; left: calc(-2.25rem - 1px - .4rem); top: calc(50% - .4rem);
+  width: .8rem; height: .8rem; border-radius: 50%; background: var(--accent);
+  box-shadow: 0 0 0 3px var(--bg);
+}
+/* the zero-width mark is a third flex item: keep the name left, the rest right */
+.order-timeline .card-head > .client-row { margin-right: auto; }
+/* manual orders: a hollow dot */
+.manual-card .tl-mark:not(:empty)::after { background: var(--bg); border: 2px solid var(--accent); box-sizing: border-box; }
+@media (max-width: 720px) {
+  /* no room for a rail on phones: the time sits on top of the card */
+  .order-timeline { padding-left: 0; }
+  .order-timeline::before { display: none; }
+  .tl-mark { flex: 0 0 100%; width: auto; height: auto; margin: 0; display: flex; align-items: center; gap: .4rem; }
+  .tl-mark:empty { display: none; }
+  .tl-time, .tl-day { position: static; }
+  .tl-mark:not(:empty)::before {
+    content: ""; order: -1; width: .6rem; height: .6rem; border-radius: 50%; background: var(--accent);
+  }
+  .tl-mark:not(:empty)::after { display: none; }
+  .manual-card .tl-mark:not(:empty)::before { background: transparent; border: 2px solid var(--accent); box-sizing: border-box; }
+}

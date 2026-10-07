@@ -247,10 +247,15 @@ templ PreventivoDetail(d *service.QuotationDetail, catalog []service.CatalogEntr
 				<span class="muted" data-filter-count=".cust-section" data-noun="clienti">{ itoa(n) } clienti</span>
 			</div>
 		}
-		for _, sec := range d.Sections {
-			@CustomerSection(d.Quotation.Number, sec, "", "", "")
-		}
-		@LinkedManualOrders(d.Linked)
+		<div class="order-timeline">
+			for _, e := range orderTimeline(d.Sections, d.Linked) {
+				if e.Sec != nil {
+					@CustomerSection(d.Quotation.Number, *e.Sec, "", "", "")
+				} else {
+					@linkedManualOrder(*e.Linked)
+				}
+			}
+		</div>
 	}
 }
 
@@ -267,52 +272,62 @@ templ optTag(opz string) {
 	}
 }
 
-// LinkedManualOrders: the manual orders with wines connected to this
-// order's options (already counted in "ordinate"), one light blue card per
-// order like the customers' cards; read-only, edited in their own order.
-templ LinkedManualOrders(lines []service.LinkedLine) {
-	for _, o := range service.GroupLinked(lines) {
-		<section class="card cust-section manual-card" data-name={ o.Cliente + " " + o.Order }>
-			<div class="card-head">
-				<span class="client-row">
-					<b class="client-name">{ o.Cliente }</b>
-					<span class="nowrap">€ { money(o.Totale()) }</span>
-				</span>
-				<a href={ templ.URL(previewURL(o.Order)) } class="manual-badge" title="Si modifica nel suo ordine">
-					@IconHand()
-					<span>Ordine manuale { o.Order }</span>
-				</a>
-			</div>
-			<table class="table">
-				<thead>
+// linkedManualOrder: a manual order with wines connected to this order's
+// options (already counted in "ordinate"), a light blue card like the
+// customers' cards, in the same timeline; read-only, edited in its own order.
+templ linkedManualOrder(o service.LinkedOrder) {
+	<section class="card cust-section manual-card" data-name={ o.Cliente + " " + o.Order }>
+		<div class="card-head">
+			@timelineMark(o.At)
+			<span class="client-row">
+				<b class="client-name">{ o.Cliente }</b>
+				<span class="nowrap">€ { money(o.Totale()) }</span>
+			</span>
+			<a href={ templ.URL(previewURL(o.Order)) } class="manual-badge" title="Si modifica nel suo ordine">
+				@IconHand()
+				<span>Ordine manuale { o.Order }</span>
+			</a>
+		</div>
+		<table class="table">
+			<thead>
+				<tr>
+					<th>Vino</th>
+					<th class="num">Qtà</th>
+					<th class="num">Prezzo (€)</th>
+					<th class="num">Totale (€)</th>
+					// empty, like the customers' delete column: the columns line up
+					<th class="num"></th>
+				</tr>
+			</thead>
+			<tbody>
+				for _, l := range o.Lines {
 					<tr>
-						<th>Vino</th>
-						<th class="num">Qtà</th>
-						<th class="num">Prezzo (€)</th>
-						<th class="num">Totale (€)</th>
-						// empty, like the customers' delete column: the columns line up
-						<th class="num"></th>
+						<td class="title-cell">
+							<span class="wine-cell">
+								@optTag(l.Opzione)
+								{ noEmoji(l.Vino) }
+							</span>
+						</td>
+						<td class="num">{ itoa(l.Qta) }</td>
+						<td class="num">{ money(l.Prezzo) }</td>
+						<td class="num">{ money(l.Totale()) }</td>
+						<td class="num"></td>
 					</tr>
-				</thead>
-				<tbody>
-					for _, l := range o.Lines {
-						<tr>
-							<td class="title-cell">
-								<span class="wine-cell">
-									@optTag(l.Opzione)
-									{ noEmoji(l.Vino) }
-								</span>
-							</td>
-							<td class="num">{ itoa(l.Qta) }</td>
-							<td class="num">{ money(l.Prezzo) }</td>
-							<td class="num">{ money(l.Totale()) }</td>
-							<td class="num"></td>
-						</tr>
-					}
-				</tbody>
-			</table>
-		</section>
-	}
+				}
+			</tbody>
+		</table>
+	</section>
+}
+
+// timelineMark: the time and day of a card in the order's timeline (the dot
+// comes from CSS); empty when the time is unknown.
+templ timelineMark(at int64) {
+	<span class="tl-mark">
+		if at > 0 {
+			<span class="tl-time">{ unixHourMin(at) }</span>
+			<span class="tl-day">{ unixDayMonth(at) }</span>
+		}
+	</span>
 }
 
 // ProdottiDatalist: the Prodotti suggested (and filtered as you type) by the
@@ -709,7 +724,9 @@ templ CustomerSection(qnum string, sec service.CustomerSection, msg, errMsg, cli
 		<input type="hidden" name="n" value={ qnum }/>
 		<input type="hidden" name="utente" value={ sec.Utente }/>
 		<input type="hidden" name="cliente" value={ sec.Cliente }/>
+		<input type="hidden" name="ordinato" value={ i64(sec.OrderedAt) }/>
 		<div class="card-head">
+			@timelineMark(sec.OrderedAt)
 			<span class="client-row">
 				<b class="client-name">{ sec.Cliente }</b>
 				if p := sec.Place(); p != "" {

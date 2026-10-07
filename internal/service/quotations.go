@@ -854,6 +854,8 @@ type CustomerSection struct {
 	// the customer's place in Clienti ("" = not set), shown and filtered on
 	Citta     string
 	Provincia string
+	// unix time of the customer's first reply read as an order (0 = unknown)
+	OrderedAt int64
 }
 
 // Place is "Arzignano (Vicenza)", "Arzignano", "Vicenza" or "".
@@ -1165,15 +1167,88 @@ func (s *Service) QuotationDetail(ctx context.Context, num string) (*QuotationDe
 	if d.Linked, err = s.linkedLines(ctx, q.ID); err != nil {
 		return nil, err
 	}
+	firstReply := map[string]int64{}
+	for _, x := range qsel {
+		if x.ReplyID > 0 && (firstReply[x.Utente] == 0 || x.ReplyID < firstReply[x.Utente]) {
+			firstReply[x.Utente] = x.ReplyID
+		}
+	}
+	replyTS, err := s.replyTimes(ctx, firstReply)
+	if err != nil {
+		return nil, err
+	}
 	d.Single = len(order) == 1
 	for _, utente := range order {
 		sec, err := s.BuildSection(ctx, q, utente, s.DefaultCliente(q, utente, d.Single), rowsBy[utente])
 		if err != nil {
 			return nil, err
 		}
+		sec.OrderedAt = replyTS[firstReply[utente]]
+		if sec.OrderedAt == 0 && utente == q.ManualClientName {
+			// an order entered by hand: no reply, the time it was created
+			created, err := s.quotationTimes(ctx, []int64{q.ID})
+			if err != nil {
+				return nil, err
+			}
+			sec.OrderedAt = created[q.ID]
+		}
 		d.Sections = append(d.Sections, sec)
 	}
 	return d, nil
+}
+
+// replyTimes returns the timestamp of the given replies, by reply id.
+func (s *Service) replyTimes(ctx context.Context, ids map[string]int64) (map[int64]int64, error) {
+	out := map[int64]int64{}
+	if len(ids) == 0 {
+		return out, nil
+	}
+	args := make([]any, 0, len(ids))
+	for _, id := range ids {
+		args = append(args, id)
+	}
+	rows, err := s.db().QueryContext(ctx, "SELECT id, COALESCE(timestamp,0) FROM replies WHERE id IN (?"+strings.Repeat(",?", len(args)-1)+")", args...)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+	for rows.Next() {
+		var id, t int64
+		if err := rows.Scan(&id, &t); err != nil {
+			return nil, err
+		}
+		out[id] = t
+	}
+	return out, rows.Err()
+}
+
+// quotationTimes returns when the given quotations were created (unix
+// time, by id); created_at is stored in UTC by SQLite.
+func (s *Service) quotationTimes(ctx context.Context, ids []int64) (map[int64]int64, error) {
+	out := map[int64]int64{}
+	if len(ids) == 0 {
+		return out, nil
+	}
+	args := make([]any, len(ids))
+	for i, id := range ids {
+		args[i] = id
+	}
+	rows, err := s.db().QueryContext(ctx, "SELECT id, COALESCE(created_at,'') FROM quotations WHERE id IN (?"+strings.Repeat(",?", len(args)-1)+")", args...)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+	for rows.Next() {
+		var id int64
+		var c string
+		if err := rows.Scan(&id, &c); err != nil {
+			return nil, err
+		}
+		if t, err := time.ParseInLocation("2006-01-02 15:04:05", c, time.UTC); err == nil {
+			out[id] = t.Unix()
+		}
+	}
+	return out, rows.Err()
 }
 
 // LinkedLine: a wine of a manual order connected to an option of a
@@ -1185,6 +1260,7 @@ type LinkedLine struct {
 	Vino    string
 	Qta     int
 	Prezzo  float64
+	At      int64 // unix time the manual order was created
 }
 
 func (l LinkedLine) Totale() float64 { return float64(l.Qta) * l.Prezzo }
@@ -1193,6 +1269,7 @@ func (l LinkedLine) Totale() float64 { return float64(l.Qta) * l.Prezzo }
 type LinkedOrder struct {
 	Order   string
 	Cliente string
+	At      int64 // unix time the manual order was created (0 = unknown)
 	Lines   []LinkedLine
 }
 
@@ -1213,7 +1290,7 @@ func GroupLinked(lines []LinkedLine) []LinkedOrder {
 		if !ok {
 			i = len(out)
 			idx[l.Order] = i
-			out = append(out, LinkedOrder{Order: l.Order, Cliente: l.Cliente})
+			out = append(out, LinkedOrder{Order: l.Order, Cliente: l.Cliente, At: l.At})
 		}
 		out[i].Lines = append(out[i].Lines, l)
 	}
@@ -1250,6 +1327,14 @@ func (s *Service) linkedLines(ctx context.Context, quotationID int64) ([]LinkedL
 	if err != nil {
 		return nil, err
 	}
+	qids := make([]int64, 0, len(linkedOpt))
+	for k := range linkedOpt {
+		qids = append(qids, k.q)
+	}
+	created, err := s.quotationTimes(ctx, qids)
+	if err != nil {
+		return nil, err
+	}
 	var out []LinkedLine
 	for _, x := range all {
 		lopt, ok := linkedOpt[itemKey{x.QuotationID, strings.ToUpper(x.Opzione)}]
@@ -1257,7 +1342,7 @@ func (s *Service) linkedLines(ctx context.Context, quotationID int64) ([]LinkedL
 			continue
 		}
 		out = append(out, LinkedLine{Order: x.Preventivo, Cliente: x.Utente, Opzione: lopt,
-			Vino: wineWithVintage(x.Vino, x.Vintage), Qta: x.Qta, Prezzo: x.Prezzo})
+			Vino: wineWithVintage(x.Vino, x.Vintage), Qta: x.Qta, Prezzo: x.Prezzo, At: created[x.QuotationID]})
 	}
 	sort.SliceStable(out, func(i, j int) bool {
 		if out[i].Opzione != out[j].Opzione {

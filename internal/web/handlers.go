@@ -1008,6 +1008,7 @@ func (s *Server) preventivoSection(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	s.useSavedRows(r, num, &sec)
+	sec.OrderedAt, _ = strconv.ParseInt(r.FormValue("ordinato"), 10, 64)
 	render(w, r, views.CustomerSection(num, sec, msg, errMsg, clientErr))
 }
 

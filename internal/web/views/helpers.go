@@ -7,6 +7,7 @@ import (
 	"adesgo/internal/service"
 	"adesgo/internal/textutil"
 	"net/url"
+	"sort"
 	"strings"
 	"time"
 )
@@ -59,6 +60,42 @@ func dayMonthShort(data string) string {
 		return data[8:10]
 	}
 	return data[8:10] + " " + strings.ToLower(itMonths[m][:3])
+}
+
+// unixDayMonth: "2 ott" for a unix time; unixHourMin: "14:32".
+func unixDayMonth(ts int64) string {
+	t := time.Unix(ts, 0)
+	return fmt.Sprintf("%d %s", t.Day(), strings.ToLower(itMonths[t.Month()][:3]))
+}
+
+func unixHourMin(ts int64) string { return time.Unix(ts, 0).Format("15:04") }
+
+// timelineEntry: one card of an order's timeline, a customer section or a
+// manual order connected to it.
+type timelineEntry struct {
+	Sec    *service.CustomerSection
+	Linked *service.LinkedOrder
+	At     int64
+}
+
+// orderTimeline puts the customers and the connected manual orders in time
+// order; cards without a time keep their place at the end.
+func orderTimeline(secs []service.CustomerSection, linked []service.LinkedLine) []timelineEntry {
+	var out []timelineEntry
+	for i := range secs {
+		out = append(out, timelineEntry{Sec: &secs[i], At: secs[i].OrderedAt})
+	}
+	for _, o := range service.GroupLinked(linked) {
+		out = append(out, timelineEntry{Linked: &o, At: o.At})
+	}
+	sort.SliceStable(out, func(i, j int) bool {
+		a, b := out[i].At, out[j].At
+		if a == 0 || b == 0 {
+			return a != 0 && b == 0
+		}
+		return a < b
+	})
+	return out
 }
 
 // noEmoji strips emoji from WhatsApp text at display time (stored data keeps them).
