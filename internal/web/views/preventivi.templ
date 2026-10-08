@@ -33,7 +33,8 @@ templ PreventiviPage(search, flash string, list templ.Component) {
 			type="search"
 			name="q"
 			value={ search }
-			placeholder="Filtra Ordini…"
+			placeholder="Cerca per cliente, vino, ordine, città o provincia"
+			aria-label="Cerca per cliente, vino, ordine, città o provincia"
 			class="list-filter"
 			hx-get="/ordini/list"
 			hx-trigger="input changed delay:300ms, search"
@@ -161,7 +162,12 @@ templ PreventiviSearch(rows []service.Selection) {
 			<tbody>
 				for _, r := range rows {
 					<tr data-href={ previewURL(r.Preventivo) }>
-						<td class="title-cell">{ r.Utente }</td>
+						<td class="title-cell">
+							{ r.Utente }
+							if p := r.Place(); p != "" {
+								<span class="muted client-place">{ p }</span>
+							}
+						</td>
 						<td>{ noEmoji(r.Vino) }</td>
 						<td class="num">{ itoa(r.Qta) }</td>
 						<td class="num">{ money(r.Prezzo) }</td>

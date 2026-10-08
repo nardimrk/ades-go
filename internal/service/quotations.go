@@ -12,6 +12,11 @@ import (
 	"strconv"
 	"strings"
 	"time"
+	"unicode"
+
+	"golang.org/x/text/runes"
+	"golang.org/x/text/transform"
+	"golang.org/x/text/unicode/norm"
 
 	"adesgo/internal/db"
 	"adesgo/internal/textutil"
@@ -31,6 +36,13 @@ type Selection struct {
 	Qta         int
 	Prezzo      float64
 	ReplyID     int64 // the reply the selection was read from
+	// the customer's place in Clienti, filled only for the Ordini search
+	Citta, Provincia string
+}
+
+// Place is "Arzignano (Vicenza)", "Arzignano", "Vicenza" or "".
+func (x Selection) Place() string {
+	return CustomerSection{Citta: x.Citta, Provincia: x.Provincia}.Place()
 }
 
 // Bottles: Qta, times the case size for a case of known size.
@@ -742,7 +754,28 @@ func (s *Service) SearchableSelections(ctx context.Context) ([]Selection, error)
 				AuthorID: q.ManualClientID, Opzione: it.Option, Vino: it.WineName, Vintage: it.Vintage, Qta: it.Quantity, Prezzo: it.Price})
 		}
 	}
-	return s.withSavedOrders(ctx, sel, quots)
+	if sel, err = s.withSavedOrders(ctx, sel, quots); err != nil {
+		return nil, err
+	}
+	// cancelled lines ("0A") are not shown on the order's page either
+	out := sel[:0]
+	for _, x := range sel {
+		if x.Qta > 0 && strings.TrimSpace(x.Utente) != "" {
+			out = append(out, x)
+		}
+	}
+	locs, err := s.customerLocations(ctx)
+	if err != nil {
+		return nil, err
+	}
+	for i, x := range out {
+		loc, ok := locs.byID[x.AuthorID]
+		if !ok {
+			loc = locs.byName[x.Utente]
+		}
+		out[i].Citta, out[i].Provincia = loc.citta, loc.provincia
+	}
+	return out, nil
 }
 
 // withSavedOrders swaps each confirmed customer's lines for the saved ones
@@ -819,14 +852,18 @@ func (s *Service) withSavedOrders(ctx context.Context, sel []Selection, quots []
 	return out, nil
 }
 
-// SearchSelections filters selections by customer or wine, newest first.
-// A query that is exactly a customer's name (e.g. "Ale", from the most
-// active customers) keeps only that customer, not "Alessio" or wines.
+// SearchSelections filters selections by customer, wine, order number,
+// city or province, newest first. Every word of the query must appear, in
+// any order, ignoring case, accents and apostrophes ("chateau" finds
+// "Château", "presle prelat" finds "Prelat Presle"). A query that is
+// exactly a customer's name (e.g. "Ale", from the most active customers)
+// keeps only that customer, not "Alessio" or wines.
 func SearchSelections(sel []Selection, q string) []Selection {
-	q = strings.ToLower(strings.TrimSpace(q))
+	fq := searchFold(q)
+	words := strings.Fields(fq)
 	exact := false
 	for _, x := range sel {
-		if strings.EqualFold(strings.TrimSpace(x.Utente), q) {
+		if searchFold(x.Utente) == fq {
 			exact = true
 			break
 		}
@@ -834,15 +871,40 @@ func SearchSelections(sel []Selection, q string) []Selection {
 	var out []Selection
 	for _, x := range sel {
 		if exact {
-			if strings.EqualFold(strings.TrimSpace(x.Utente), q) {
+			if searchFold(x.Utente) == fq {
 				out = append(out, x)
 			}
-		} else if strings.Contains(strings.ToLower(x.Utente), q) || strings.Contains(strings.ToLower(x.Vino), q) {
+			continue
+		}
+		hay := searchFold(strings.Join([]string{x.Utente, x.Vino, x.Preventivo, x.Citta, x.Provincia}, " "))
+		ok := true
+		for _, w := range words {
+			if !strings.Contains(hay, w) {
+				ok = false
+				break
+			}
+		}
+		if ok {
 			out = append(out, x)
 		}
 	}
 	sort.SliceStable(out, func(i, j int) bool { return out[i].DataPrev > out[j].DataPrev })
 	return out
+}
+
+// searchFold: lower case, without accents, every non letter/digit (curly
+// or straight apostrophes, dashes, dots) a single space.
+func searchFold(s string) string {
+	t := transform.Chain(norm.NFD, runes.Remove(runes.In(unicode.Mn)), norm.NFC)
+	s, _, _ = transform.String(t, strings.ToLower(s))
+	s = strings.NewReplacer("œ", "oe", "æ", "ae", "ß", "ss").Replace(s)
+	s = strings.Map(func(r rune) rune {
+		if unicode.IsLetter(r) || unicode.IsDigit(r) {
+			return r
+		}
+		return ' '
+	}, s)
+	return strings.Join(strings.Fields(s), " ")
 }
 
 // YearTotal: what one customer ordered in a year.

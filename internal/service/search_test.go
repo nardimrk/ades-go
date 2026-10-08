@@ -92,3 +92,34 @@ func TestSearchSelectionsExactCustomer(t *testing.T) {
 		t.Fatalf("several customers: got %q, want none", name)
 	}
 }
+
+func TestSearchSelectionsMatching(t *testing.T) {
+	sel := []Selection{
+		{Preventivo: "ORD260121", DataPrev: "2026-10-05", Utente: "Mazzucato Tommaso", Vino: "Champagne Julien Prelat - Presle", Qta: 12, Citta: "Treviso", Provincia: "Treviso"},
+		{Preventivo: "ORD260114", DataPrev: "2026-10-02", Utente: "A.P.", Vino: "Château Langoa Barton 2022", Qta: 4, Citta: "Arzignano", Provincia: "Vicenza"},
+		{Preventivo: "ORD260127", DataPrev: "2026-10-07", Utente: "Matteo", Vino: "L’Imprudence", Qta: 1},
+		{Preventivo: "ORD260090", DataPrev: "2026-09-01", Utente: "Moët Fan", Vino: "Côte de Beaune", Qta: 2},
+	}
+	for q, want := range map[string]string{
+		"chateau langoa":   "ORD260114",
+		"CHÂTEAU":          "ORD260114",
+		"presle prelat":    "ORD260121",
+		"  presle  ":       "ORD260121",
+		"l'imprudence":     "ORD260127",
+		"ord260121":        "ORD260121",
+		"260127":           "ORD260127",
+		"treviso":          "ORD260121",
+		"vicenza":          "ORD260114",
+		"arzignano barton": "ORD260114",
+		"cote beaune":      "ORD260090",
+		"moet":             "ORD260090",
+	} {
+		got := SearchSelections(sel, q)
+		if len(got) != 1 || got[0].Preventivo != want {
+			t.Errorf("SearchSelections(%q) = %d rows %+v; want %s", q, len(got), got, want)
+		}
+	}
+	if got := SearchSelections(sel, "presle vicenza"); len(got) != 0 {
+		t.Errorf("every word must match: got %+v", got)
+	}
+}
