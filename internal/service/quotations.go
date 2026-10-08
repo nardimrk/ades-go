@@ -707,6 +707,8 @@ func QuotationMonths(rows []QuotationSummary) []QuotationMonth {
 // SearchableSelections: the chat selections plus the lines of manual orders
 // (customer set by hand, wines in quotation_items), as QuotationDetail shows
 // them, so Ordini search finds orders created without a WhatsApp reply.
+// A customer's confirmed order ("Conferma ordine") replaces both, as on the
+// order's page: wines added or changed before confirming are found too.
 func (s *Service) SearchableSelections(ctx context.Context) ([]Selection, error) {
 	sel, err := s.ComputeSelections(ctx)
 	if err != nil {
@@ -740,7 +742,81 @@ func (s *Service) SearchableSelections(ctx context.Context) ([]Selection, error)
 				AuthorID: q.ManualClientID, Opzione: it.Option, Vino: it.WineName, Vintage: it.Vintage, Qta: it.Quantity, Prezzo: it.Price})
 		}
 	}
-	return sel, nil
+	return s.withSavedOrders(ctx, sel, quots)
+}
+
+// withSavedOrders swaps each confirmed customer's lines for the saved ones
+// (the first order per quotation and customer, like SavedOrderRows).
+func (s *Service) withSavedOrders(ctx context.Context, sel []Selection, quots []Quotation) ([]Selection, error) {
+	rows, err := s.db().QueryContext(ctx, `SELECT o.id, COALESCE(o.quotation_number,''), COALESCE(o.user_name,''), COALESCE(o.user_id,''),
+		COALESCE(i.option,''), COALESCE(i.wine_name,''), COALESCE(i.quantity,0), COALESCE(i.price,0)
+		FROM orders o JOIN order_items i ON i.order_id = o.id ORDER BY o.id, i.id`)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+	type saved struct {
+		num, name, uid string
+		lines          []Selection
+	}
+	var orders []*saved
+	byID := map[int64]*saved{}
+	first := map[string]bool{} // quotation|customer already taken
+	for rows.Next() {
+		var id int64
+		var o saved
+		var x Selection
+		if err := rows.Scan(&id, &o.num, &o.name, &o.uid, &x.Opzione, &x.Vino, &x.Qta, &x.Prezzo); err != nil {
+			return nil, err
+		}
+		cur, ok := byID[id]
+		if !ok {
+			k := o.num + "|" + o.uid + "|" + o.name
+			if first[k] {
+				continue
+			}
+			first[k] = true
+			cur = &o
+			byID[id] = cur
+			orders = append(orders, cur)
+		}
+		cur.lines = append(cur.lines, x)
+	}
+	if err := rows.Err(); err != nil {
+		return nil, err
+	}
+	if len(orders) == 0 {
+		return sel, nil
+	}
+	quotBy := map[string]Quotation{}
+	for _, q := range quots {
+		quotBy[q.Number] = q
+	}
+	replaced := func(x Selection) bool {
+		for _, o := range orders {
+			if x.Preventivo == o.num && ((o.uid != "" && x.AuthorID == o.uid) || x.Utente == o.name) {
+				return true
+			}
+		}
+		return false
+	}
+	out := sel[:0:0]
+	for _, x := range sel {
+		if !replaced(x) {
+			out = append(out, x)
+		}
+	}
+	for _, o := range orders {
+		q, ok := quotBy[o.num]
+		if !ok {
+			continue
+		}
+		for _, x := range o.lines {
+			x.Preventivo, x.QuotationID, x.DataPrev, x.Utente, x.AuthorID = q.Number, q.ID, q.Date, o.name, o.uid
+			out = append(out, x)
+		}
+	}
+	return out, nil
 }
 
 // SearchSelections filters selections by customer or wine, newest first.

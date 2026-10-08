@@ -36,6 +36,40 @@ func TestSearchFindsManualOrders(t *testing.T) {
 	}
 }
 
+func TestSearchUsesConfirmedOrders(t *testing.T) {
+	ctx := context.Background()
+	store, err := db.Open(filepath.Join(t.TempDir(), "wine.db"))
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer store.Close()
+	svc := New(store, &config.Config{}, nil)
+
+	num, err := svc.CreateQuotation(ctx, "2026-10-05", "Mazzucato", []NewQuotationRow{
+		{Option: "A", WineName: "Langoa Barton 2022", Quantity: 6, Price: 45},
+	})
+	if err != nil {
+		t.Fatal(err)
+	}
+	// confirmed with a wine added on the order's page and a new quantity
+	if err := svc.SaveOrder(ctx, num, "Mazzucato", []OrderRow{
+		{Vino: "Champagne Julien Prelat Presle", Qta: 12, Prezzo: 39.95},
+		{Vino: "Langoa Barton 2022", Qta: 12, Prezzo: 45},
+	}); err != nil {
+		t.Fatal(err)
+	}
+	sel, err := svc.SearchableSelections(ctx)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if got := SearchSelections(sel, "presle"); len(got) != 1 || got[0].Preventivo != num || got[0].Utente != "Mazzucato" || got[0].Qta != 12 {
+		t.Errorf("presle: %+v; want the confirmed line of %s", got, num)
+	}
+	if got := SearchSelections(sel, "mazzucato"); len(got) != 2 || got[0].DataPrev != "2026-10-05" {
+		t.Errorf("mazzucato: %+v; want the 2 confirmed lines, not the draft ones", got)
+	}
+}
+
 func TestSearchSelectionsExactCustomer(t *testing.T) {
 	sel := []Selection{
 		{Preventivo: "P1", DataPrev: "2026-03-01", Utente: "Ale", Vino: "Barolo", Qta: 2, Prezzo: 10},
