@@ -74,6 +74,7 @@ func main() {
 	titles := service.NewTitleJob(svc, llmClient)
 	go titles.Loop(ctx, 30*time.Minute) // new listings get an LLM title too
 	reviews := service.NewReviewJob(svc, llmClient)
+	go reviews.AutoLoop(ctx) // replies quiet for 15 minutes: "Controlla risposte" by itself
 	srv := web.New(cfg, store, svc, waMgr, mailer, llmClient, titles, reviews)
 	go srv.CleanupLoop(ctx)
 

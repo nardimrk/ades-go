@@ -464,6 +464,11 @@ type ReviewJob struct {
 
 	mu     sync.Mutex
 	status ReviewStatus
+	// automatic checks (AutoLoop): no new run before pauseUntil (daily
+	// quota used up), and the last reply time already tried per campaign,
+	// so a failed run isn't retried every minute
+	pauseUntil time.Time
+	tried      map[string]int64
 }
 
 type ReviewStatus struct {
@@ -518,6 +523,9 @@ const (
 )
 
 func (j *ReviewJob) run(ctx context.Context, chatID, key string) {
+	// the run covers the replies received before it started: one arriving
+	// while it runs triggers the next automatic check
+	start := time.Now()
 	finish := func(msg string, isErr bool) {
 		j.set(func(s *ReviewStatus) { s.Running, s.Message, s.Error = false, msg, isErr })
 	}
@@ -578,8 +586,9 @@ func (j *ReviewJob) run(ctx context.Context, chatID, key string) {
 		text, err := j.llm.Complete(ctx, prompt, 3000)
 		if errors.Is(err, llm.ErrDailyCap) {
 			if b > 0 {
-				j.saveRun(ctx, camp)
+				j.saveRun(ctx, camp, start)
 			}
+			j.set(func(*ReviewStatus) { j.pauseUntil = time.Now().Add(time.Hour) })
 			finish(fmt.Sprintf("Quota giornaliera OpenRouter esaurita dopo %d di %d blocchi: riprova dopo il reset.", b, total), true)
 			return
 		}
@@ -600,7 +609,7 @@ func (j *ReviewJob) run(ctx context.Context, chatID, key string) {
 		}
 		j.set(func(s *ReviewStatus) { s.Done++; s.Flagged += n })
 	}
-	j.saveRun(ctx, camp)
+	j.saveRun(ctx, camp, start)
 	st := j.Status()
 	var msg string
 	switch {
@@ -619,8 +628,127 @@ func (j *ReviewJob) run(ctx context.Context, chatID, key string) {
 	log.Printf("[review] %q: %d flagged, %d/%d batches failed", key, st.Flagged, failed, total)
 }
 
-func (j *ReviewJob) saveRun(ctx context.Context, camp *Campaign) {
-	_ = j.svc.Store.SetMeta(ctx, reviewMetaKey(camp.ChatID, camp.Key), strconv.FormatInt(time.Now().Unix(), 10))
+func (j *ReviewJob) saveRun(ctx context.Context, camp *Campaign, start time.Time) {
+	_ = j.svc.Store.SetMeta(ctx, reviewMetaKey(camp.ChatID, camp.Key), strconv.FormatInt(start.Unix(), 10))
+}
+
+// Automatic checks: when a listing's replies have been quiet for
+// reviewQuiet, the listing is checked like "Controlla risposte" would, once
+// per burst of replies. Only replies of the last reviewAutoDays count, so
+// old listings (or old chats imported later) are never checked by
+// themselves; the button still checks any listing.
+const (
+	reviewQuiet    = 15 * time.Minute
+	reviewAutoDays = 7
+)
+
+// AutoLoop starts the automatic checks, one at a time, looking every minute.
+func (j *ReviewJob) AutoLoop(ctx context.Context) {
+	t := time.NewTicker(time.Minute)
+	defer t.Stop()
+	for {
+		select {
+		case <-ctx.Done():
+			return
+		case <-t.C:
+			j.autoStep(ctx)
+		}
+	}
+}
+
+func (j *ReviewJob) autoStep(ctx context.Context) {
+	if !j.llm.Enabled() {
+		return
+	}
+	j.mu.Lock()
+	busy := j.status.Running || time.Now().Before(j.pauseUntil)
+	j.mu.Unlock()
+	if busy {
+		return
+	}
+	due, err := j.svc.campaignsToReview(ctx, time.Now())
+	if err != nil {
+		log.Printf("[review] auto: %v", err)
+		return
+	}
+	for _, c := range due {
+		id := c.ChatID + "|" + c.Key
+		j.mu.Lock()
+		if j.tried == nil {
+			j.tried = map[string]int64{}
+		}
+		seen := j.tried[id] >= c.LastReply
+		j.mu.Unlock()
+		if seen {
+			continue
+		}
+		if j.Start(ctx, c.ChatID, c.Key) {
+			j.mu.Lock()
+			j.tried[id] = c.LastReply
+			j.mu.Unlock()
+			log.Printf("[review] auto: checking %q (last reply %s)", c.Key, time.Unix(c.LastReply, 0).Format("2006-01-02 15:04"))
+		}
+		return
+	}
+}
+
+// dueReview: a campaign whose replies went quiet after its last check.
+type dueReview struct {
+	ChatID, Key string
+	LastReply   int64 // unix time of its latest reply
+}
+
+// campaignsToReview lists the campaigns with replies of the last
+// reviewAutoDays, none in the last reviewQuiet, and one at least received
+// since the last check; the longest waiting first.
+func (s *Service) campaignsToReview(ctx context.Context, now time.Time) ([]dueReview, error) {
+	rows, err := s.db().QueryContext(ctx, `SELECT listing_msg_id, MAX(timestamp) FROM replies
+		WHERE timestamp >= ? AND listing_msg_id IS NOT NULL GROUP BY listing_msg_id`,
+		now.AddDate(0, 0, -reviewAutoDays).Unix())
+	if err != nil {
+		return nil, err
+	}
+	last := map[string]int64{}
+	for rows.Next() {
+		var id string
+		var ts int64
+		if err := rows.Scan(&id, &ts); err != nil {
+			rows.Close()
+			return nil, err
+		}
+		last[id] = ts
+	}
+	rows.Close()
+	if err := rows.Err(); err != nil || len(last) == 0 {
+		return nil, err
+	}
+	listings, err := s.ListingRows(ctx)
+	if err != nil {
+		return nil, err
+	}
+	byChat := map[string][]ListingRow{}
+	for _, r := range listings {
+		byChat[r.ChatID] = append(byChat[r.ChatID], r)
+	}
+	var out []dueReview
+	for _, chatRows := range byChat {
+		for _, c := range GroupCampaigns(chatRows) {
+			var lr int64
+			for _, m := range c.MsgIDs {
+				lr = max(lr, last[m])
+			}
+			if lr == 0 || now.Sub(time.Unix(lr, 0)) < reviewQuiet {
+				continue
+			}
+			run, _ := strconv.ParseInt(s.Store.Meta(ctx, reviewMetaKey(c.ChatID, c.Key)), 10, 64)
+			if run >= lr {
+				continue
+			}
+			out = append(out, dueReview{ChatID: c.ChatID, Key: c.Key, LastReply: lr})
+		}
+	}
+	sort.Slice(out, func(i, k int) bool { return out[i].LastReply < out[k].LastReply })
+	return out, nil
 }
 
 func plural(n int, one, many string) string {
