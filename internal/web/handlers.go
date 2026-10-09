@@ -724,6 +724,9 @@ func (s *Server) preventivi(w http.ResponseWriter, r *http.Request) {
 	} else if created > 0 {
 		flash = fmt.Sprintf("Importazione automatica: creati %d ordini", created)
 	}
+	if n := r.URL.Query().Get("eliminato"); n != "" {
+		flash = strings.TrimSpace(flash + " Ordine " + n + " eliminato.")
+	}
 	q := r.URL.Query().Get("q")
 	list, err := s.preventiviListComponent(r, q)
 	if err != nil {
@@ -731,6 +734,17 @@ func (s *Server) preventivi(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	render(w, r, views.PreventiviPage(q, flash, list))
+}
+
+// deleteOrder deletes a manual order (after the confirmation modal) and
+// goes back to the list.
+func (s *Server) deleteOrder(w http.ResponseWriter, r *http.Request) {
+	num := r.FormValue("n")
+	if err := s.svc.DeleteManualOrder(r.Context(), num); err != nil {
+		s.fail(w, r, err)
+		return
+	}
+	w.Header().Set("HX-Redirect", "/ordini?"+url.Values{"eliminato": {num}}.Encode())
 }
 
 func (s *Server) preventiviListComponent(r *http.Request, q string) (templ.Component, error) {

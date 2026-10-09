@@ -123,3 +123,37 @@ func TestSearchSelectionsMatching(t *testing.T) {
 		t.Errorf("every word must match: got %+v", got)
 	}
 }
+
+func TestDeleteManualOrder(t *testing.T) {
+	ctx := context.Background()
+	store, err := db.Open(filepath.Join(t.TempDir(), "wine.db"))
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer store.Close()
+	svc := New(store, &config.Config{}, nil)
+	num, err := svc.CreateQuotation(ctx, "2026-10-05", "De Toni Laura", []NewQuotationRow{
+		{Option: "A", WineName: "Presle", Quantity: 6, Price: 37.95},
+	})
+	if err != nil {
+		t.Fatal(err)
+	}
+	if err := svc.SaveOrder(ctx, num, "De Toni Laura", []OrderRow{{Vino: "Presle", Qta: 6, Prezzo: 37.95}}); err != nil {
+		t.Fatal(err)
+	}
+	if err := svc.DeleteManualOrder(ctx, num); err != nil {
+		t.Fatal(err)
+	}
+	for table, where := range map[string]string{
+		"quotations": "quotation_number = '" + num + "'", "quotation_items": "1=1",
+		"orders": "1=1", "order_items": "1=1",
+	} {
+		var n int
+		if err := store.DB.QueryRow("SELECT COUNT(*) FROM " + table + " WHERE " + where).Scan(&n); err != nil || n != 0 {
+			t.Errorf("%s: %d rows left (%v)", table, n, err)
+		}
+	}
+	if err := svc.DeleteManualOrder(ctx, num); err == nil {
+		t.Error("deleting it again: want an error")
+	}
+}

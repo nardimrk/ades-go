@@ -233,6 +233,16 @@ templ PreventivoDetail(d *service.QuotationDetail, catalog []service.CatalogEntr
 						hx-swap="innerHTML"
 					>@IconMove()</button>
 				}
+				// only orders made by hand: one from a listing would be imported again
+				if d.ListingURL == "" {
+					<button
+						type="button"
+						class="btn icon-btn danger"
+						title="Elimina l'ordine"
+						aria-label="Elimina l'ordine"
+						data-modal-show="del-order"
+					>@IconTrash()</button>
+				}
 				<nav class="prev-next" aria-label="Altri ordini">
 					@orderNeighborLink(d.Prev, "Ordine precedente", true)
 					@orderNeighborLink(d.Next, "Ordine successivo", false)
@@ -240,6 +250,9 @@ templ PreventivoDetail(d *service.QuotationDetail, catalog []service.CatalogEntr
 			</div>
 		</div>
 		<hr/>
+		if d.ListingURL == "" {
+			@deleteOrderModal(d)
+		}
 		if len(d.Sections) == 0 && len(d.Linked) == 0 {
 			@Alert("info", "Nessun cliente ha ancora selezionato vini per questo ordine.")
 		}
@@ -669,6 +682,33 @@ templ StockSummary(qnum string, stock []service.OptionStock) {
 			}
 		}
 	}
+}
+
+// deleteOrderModal asks to confirm deleting a manual order, saying what goes
+// with it.
+templ deleteOrderModal(d *service.QuotationDetail) {
+	<dialog id="del-order" class="modal modal-address" data-modal-keep aria-labelledby="del-order-title">
+		<form class="modal-form" hx-post="/ordini/elimina" hx-swap="none">
+			<input type="hidden" name="n" value={ d.Quotation.Number }/>
+			<div class="modal-head">
+				<div class="modal-title">
+					<h3 id="del-order-title">Eliminare l'ordine { d.Quotation.Number }?</h3>
+					if d.Quotation.ManualClientName != "" {
+						<span class="muted">{ d.Quotation.ManualClientName }</span>
+					}
+				</div>
+				<button type="button" class="icon" data-modal-close aria-label="Chiudi">@IconX()</button>
+			</div>
+			<div class="modal-body">
+				<p class="modal-note">{ deleteOrderSummary(d) }</p>
+				<p class="modal-note muted">L'operazione non si può annullare.</p>
+			</div>
+			<div class="modal-foot">
+				<button type="button" class="btn" data-modal-close>Annulla</button>
+				<button type="submit" class="btn primary btn-danger-fill">Elimina ordine</button>
+			</div>
+		</form>
+	</dialog>
 }
 
 // optionCaseModal: how option o is sold. Bottles per case 0 = by the bottle

@@ -312,6 +312,8 @@ label input, label select, label textarea { font-size: 1rem; }
 .btn.primary { background: var(--accent); border-color: var(--accent); color: #fff; }
 .btn.primary:hover { filter: brightness(1.1); }
 .btn.danger { color: var(--danger); border-color: var(--danger-border); }
+/* the confirming button of a deletion */
+.btn.btn-danger-fill { background: var(--danger); border-color: var(--danger); }
 /* icon-only button (e.g. Excel download): square, the label is in aria-label */
 .btn.icon-btn { padding: 0; width: var(--ctl-h); height: var(--ctl-h); }
 .icon-excel { color: var(--excel); }

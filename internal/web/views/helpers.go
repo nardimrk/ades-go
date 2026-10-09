@@ -70,6 +70,26 @@ func unixDayMonth(ts int64) string {
 
 func unixHourMin(ts int64) string { return time.Unix(ts, 0).Format("15:04") }
 
+// deleteOrderSummary: what deleting the order removes, "Vengono eliminati
+// 3 vini e 1 ordine confermato."
+func deleteOrderSummary(d *service.QuotationDetail) string {
+	wines, confirmed := 0, 0
+	for _, sec := range d.Sections {
+		wines += len(sec.Rows)
+		if sec.SavedOn != "" {
+			confirmed++
+		}
+	}
+	if wines == 0 && confirmed == 0 {
+		return "L'ordine non contiene vini."
+	}
+	msg := "Vengono eliminati " + plural(wines, "vino", "vini")
+	if confirmed > 0 {
+		msg += " e " + plural(confirmed, "ordine confermato", "ordini confermati")
+	}
+	return msg + "."
+}
+
 // timelineEntry: one card of an order's timeline, a customer section or a
 // manual order connected to it.
 type timelineEntry struct {

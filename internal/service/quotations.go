@@ -2083,6 +2083,42 @@ func (s *Service) IsManualOrder(ctx context.Context, quotationID int64) (bool, e
 	return manual, err
 }
 
+// ErrNotManualOrder: orders made from a listing can't be deleted, the
+// automatic import would create them again.
+var ErrNotManualOrder = errors.New("solo gli ordini creati a mano si possono eliminare: questo viene da un'inserzione")
+
+// DeleteManualOrder removes an order created by hand with everything that
+// belongs to it: its wines, the confirmed orders of its customers and their
+// lines. Wines of other orders connected to it are disconnected, not deleted.
+func (s *Service) DeleteManualOrder(ctx context.Context, num string) error {
+	q, err := s.QuotationByNumber(ctx, num)
+	if err != nil {
+		return err
+	}
+	if q == nil {
+		return fmt.Errorf("ordine %q non trovato", num)
+	}
+	if manual, err := s.IsManualOrder(ctx, q.ID); err != nil {
+		return err
+	} else if !manual {
+		return ErrNotManualOrder
+	}
+	return s.inTx(ctx, func(tx *sql.Tx) error {
+		for _, stmt := range []string{
+			"DELETE FROM order_items WHERE order_id IN (SELECT id FROM orders WHERE quotation_number = ?2)",
+			"DELETE FROM orders WHERE quotation_number = ?2",
+			"UPDATE quotation_items SET linked_quotation_id = NULL, linked_option = NULL WHERE linked_quotation_id = ?1",
+			"DELETE FROM quotation_items WHERE quotation_id = ?1",
+			"DELETE FROM quotations WHERE id = ?1",
+		} {
+			if _, err := tx.ExecContext(ctx, stmt, q.ID, q.Number); err != nil {
+				return err
+			}
+		}
+		return nil
+	})
+}
+
 // ManualRows returns the wines of a manual order, as stored.
 func (s *Service) ManualRows(ctx context.Context, quotationID int64) ([]OrderRow, error) {
 	items, err := s.quotationItems(ctx, "WHERE quotation_id = ?", quotationID)
