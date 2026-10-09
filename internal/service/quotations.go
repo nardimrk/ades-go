@@ -857,13 +857,15 @@ func (s *Service) withSavedOrders(ctx context.Context, sel []Selection, quots []
 // any order, ignoring case, accents and apostrophes ("chateau" finds
 // "Château", "presle prelat" finds "Prelat Presle"). A query that is
 // exactly a customer's name (e.g. "Ale", from the most active customers)
-// keeps only that customer, not "Alessio" or wines.
+// keeps only that customer, not "Alessio" or wines; the words may be in any
+// order ("laura de toni" also keeps "De Toni Laura").
 func SearchSelections(sel []Selection, q string) []Selection {
 	fq := searchFold(q)
 	words := strings.Fields(fq)
+	nk := customerKey(q)
 	exact := false
 	for _, x := range sel {
-		if searchFold(x.Utente) == fq {
+		if customerKey(x.Utente) == nk {
 			exact = true
 			break
 		}
@@ -871,7 +873,7 @@ func SearchSelections(sel []Selection, q string) []Selection {
 	var out []Selection
 	for _, x := range sel {
 		if exact {
-			if searchFold(x.Utente) == fq {
+			if customerKey(x.Utente) == nk {
 				out = append(out, x)
 			}
 			continue
@@ -907,6 +909,14 @@ func searchFold(s string) string {
 	return strings.Join(strings.Fields(s), " ")
 }
 
+// customerKey: a customer's name folded like searchFold, words sorted, so
+// "De Toni Laura" and "Laura De Toni" are the same customer.
+func customerKey(s string) string {
+	w := strings.Fields(searchFold(s))
+	sort.Strings(w)
+	return strings.Join(w, " ")
+}
+
 // YearTotal: what one customer ordered in a year.
 type YearTotal struct {
 	Year      string
@@ -917,13 +927,14 @@ type YearTotal struct {
 
 // CustomerYearTotals: when the search results all belong to one customer,
 // their name and their orders summed by year (newest first) plus the overall
-// total; "" when the results name several customers (or none).
+// total; "" when the results name several customers (or none). The same
+// name with its words in another order counts as the same customer.
 func CustomerYearTotals(rows []Selection) (string, []YearTotal, YearTotal) {
 	name := ""
 	for _, x := range rows {
 		if name == "" {
 			name = x.Utente
-		} else if !strings.EqualFold(name, x.Utente) {
+		} else if customerKey(name) != customerKey(x.Utente) {
 			return "", nil, YearTotal{}
 		}
 	}

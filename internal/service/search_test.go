@@ -93,6 +93,21 @@ func TestSearchSelectionsExactCustomer(t *testing.T) {
 	}
 }
 
+func TestSearchSelectionsExactCustomerWordOrder(t *testing.T) {
+	sel := []Selection{
+		{Preventivo: "P1", DataPrev: "2026-09-23", Utente: "Laura De Toni", Vino: "Roederer", Qta: 1, Prezzo: 250},
+		{Preventivo: "P2", DataPrev: "2026-10-06", Utente: "De Toni Laura", Vino: "Chablis", Qta: 6, Prezzo: 10},
+		{Preventivo: "P3", DataPrev: "2026-10-01", Utente: "Laura", Vino: "Toni De Rosso", Qta: 1, Prezzo: 9},
+	}
+	got := SearchSelections(sel, "laura de toni")
+	if len(got) != 2 || got[0].Preventivo != "P2" || got[1].Preventivo != "P1" {
+		t.Fatalf("word order: got %+v", got)
+	}
+	if name, _, all := CustomerYearTotals(got); name == "" || all.Ordini != 2 || all.Totale != 310 {
+		t.Fatalf("totals: %q %+v", name, all)
+	}
+}
+
 func TestSearchSelectionsMatching(t *testing.T) {
 	sel := []Selection{
 		{Preventivo: "ORD260121", DataPrev: "2026-10-05", Utente: "Mazzucato Tommaso", Vino: "Champagne Julien Prelat - Presle", Qta: 12, Citta: "Treviso", Provincia: "Treviso"},
